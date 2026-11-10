@@ -28,14 +28,15 @@ window.ResultUI = (() => {
     article.dataset.notice=note.id;
     article.classList.toggle('unread',!note.read);
     const isMail=['Gmail','Outlook'].includes(note.source);
-    const isFeed=isMail||note.source==='GitHub Actions';
+    const isReminder=note.source==='Reminders';
+    const isFeed=isMail||isReminder||note.source==='GitHub Actions';
     const preview=!!options.preview;
     const top=element(preview?'span':'div','result-meta');
     const state=info.status==='attention'?'Needs attention':'Turn finished';
     // Build titles in stored receipts may still carry an older localized conclusion.
     const failedBuild = /[·•]\s*(?:failure|failed|timed out|timeout|action required|needs attention|startup failure|failed to start|\u5931\u8d25|\u8d85\u65f6|\u9700\u8981\u5904\u7406|\u542f\u52a8\u5931\u8d25)$/i;
     const needsAttention=isFeed&&!isMail?failedBuild.test(note.title):!isFeed&&info.status==='attention';
-    top.append(element('span','result-state '+(needsAttention?'attention':isMail?'mail':''),isMail?'New mail':isFeed?'Build result':state));
+    top.append(element('span','result-state '+(needsAttention?'attention':isMail?'mail':''),isReminder?'Due':isMail?'New mail':isFeed?'Build result':state));
     top.append(element('span','result-source',sourceName(note)));
     const date=new Date(note.time*1000);
     const time=element('time','',new Intl.DateTimeFormat('en-US',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(date));

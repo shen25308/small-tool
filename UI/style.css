@@ -87,84 +87,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .close-icon { --glyph: var(--sf-xmark) }
 .lock { --glyph: var(--sf-lock) }
 
-#shell { display: flex; overflow: hidden }
-aside {
-  width: 182px; flex: none; display: flex; flex-direction: column;
-  padding: 19px 10px 12px; overflow: auto; background: var(--panel);
-  border-right: 1px solid var(--line);
-}
-.brand { display: flex; align-items: center; gap: 8px; padding: 0 7px; margin-bottom: 21px }
-.brand img { display: block }
-.brand b { font-size: 17px; font-weight: 650; letter-spacing: .02em }
-nav { display: grid; grid-template-columns: minmax(0,1fr); gap: 2px }
-nav button {
-  display: flex; align-items: center; gap: 10px; text-align: left; min-height: 33px; min-width: 0;
-  padding: 5px 9px; color: var(--secondary); font-size: 13px;
-}
-nav button.active,nav button.active:hover { background: var(--selection); color: var(--selected-ink); font-weight: 600 }
-nav button .symbol { width: 19px; height: 19px; color: var(--blue) }
-nav .symbol.all-tasks { color: var(--violet) }
-nav .symbol.completed { color: var(--success) }
-.prname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.num { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums }
-nav .active .num { color: var(--selected-ink) }
-.side-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 10px; margin: 22px 0 4px; color: var(--muted); font-size: 11px; font-weight: 600 }
-.side-heading button { display: grid; place-items: center; width: 24px; height: 24px }
-.side-heading .symbol { width: 13px; height: 13px }
-.project-0 { --project: var(--violet) }
-.project-1 { --project: var(--teal) }
-.project-2 { --project: var(--orange) }
-.project-3 { --project: var(--rose) }
-.project-4 { --project: var(--blue) }
-.project-dot { display: inline-block; width: 9px; height: 9px; flex: none; background: var(--project); border-radius: 50% }
-nav .project-dot { margin: 0 5px }
-.side-bottom { margin-top: auto; padding: 26px 3px 0; text-align: center }
-.side-bottom small { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; color: var(--muted); font-size: 10px }
-.side-bottom .lock { width: 12px; height: 12px }
-.capture,.primary,.add-task {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  background: var(--action); color: #fff; font-size: 13px; font-weight: 550;
-}
-.capture { width: 100%; min-height: 32px; padding: 5px; border-radius: 8px }
-.capture .symbol { width: 16px; height: 16px }
-.capture:not(:disabled):hover,.primary:not(:disabled):hover,.add-task:not(:disabled):hover { background: color-mix(in srgb,var(--action) 87%,#142b4d) }
-
-main { display: flex; flex-direction: column; min-width: 0; flex: 1 }
-.toolbar {
-  height: 43px; flex: none; display: flex; align-items: center; justify-content: space-between;
-  gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--hairline); color: var(--secondary);
-}
-.location,.head-actions,.toolbar button { display: flex; align-items: center }
-.location { min-width: 0 }
-#breadcrumb { color: var(--muted); font-size: 12px }
-#crumbView { display: none }
-.toolbar button { white-space: nowrap; justify-content: center; gap: 4px; min-height: 28px; padding: 2px 6px; font-size: 12px }
-.head-actions { gap: 3px; flex: none }
-.toolbar-divider { height: 15px; width: 1px; background: var(--line); margin: 0 4px }
-.toolbar button[aria-pressed="true"] { background: var(--tint); color: var(--blue) }
-.toolbar #workspaceReturn { color: var(--blue); margin: 0 }
-#workspaceReturn:not([hidden])~#breadcrumb { display: none }
-#inboxBadge { min-width: 15px; padding: 1px 4px; border-radius: 10px; background: var(--action); color: white; font: 600 10px/13px var(--sans); font-variant-numeric: tabular-nums }
-
-.content { flex: 1; overflow: auto; padding: 0 26px 32px; scrollbar-width: thin }
-.banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 20px }
-.hero { display: flex; align-items: center; gap: 12px; min-width: 0 }
-#viewIcon {
-  --project: var(--blue); display: grid; place-items: center; flex: none; width: 47px; height: 47px;
-  border-radius: 13px; background: color-mix(in srgb,var(--project) 12%,var(--paper)); color: var(--project);
-}
-#viewIcon.all { --project: var(--violet) }
-#viewIcon.done { --project: var(--success) }
-#viewIcon.project-0 { --project: var(--violet) } #viewIcon.project-1 { --project: var(--teal) }
-#viewIcon.project-2 { --project: var(--orange) } #viewIcon.project-3 { --project: var(--rose) }
-#viewIcon.project-4 { --project: var(--blue) }
-#viewIcon .symbol { width: 31px; height: 31px }
-.hero-text { min-width: 0 }
-.hero h1 { margin: 0; font-size: 29px; font-weight: 700; line-height: 1.2; letter-spacing: -.045em; overflow-wrap: anywhere }
-#dateline { margin-top: 3px; font-size: 12px; color: var(--muted) }
-.add-task { padding: 5px 10px; min-height: 29px; flex: none; font-size: 12px; color: var(--blue); background: var(--tint); border-radius: 7px }
-.add-task:not(:disabled):hover { background: color-mix(in srgb,var(--blue) 18%,var(--paper)) }
-.add-task .symbol { width: 14px; height: 14px }
+.primary { display: inline-flex; align-items:center; justify-content:center; background:var(--action); color:white; font-size:13px; font-weight:550 }
+.primary:not(:disabled):hover { background: color-mix(in srgb,var(--action) 87%,#142b4d) }
 .listhead,.listhead>div,.subhead,.group { display: flex; align-items: center; gap: 7px }
 .listhead,.subhead { justify-content: space-between }
 .listhead { padding-bottom: 7px; border-bottom: 1px solid var(--hairline) }
@@ -267,31 +191,6 @@ details { margin: 10px 0 2px }
 .provider-row::before { --glyph: var(--sf-envelope); width: 21px; height: 21px; color: var(--blue) }
 .provider-row[data-provider="github"]::before { --glyph: var(--sf-hammer); color: var(--violet) }
 .toggle-label { display: flex; align-items: center; gap: 6px; font-weight: 400 }
-@media (max-width: 730px) {
-  aside { width: 162px }
-  .head-actions .tool-label { display: none }
-  .head-actions button { min-width: 28px }
-  .content { padding-inline: 20px }
-}
-body.compact aside,body.compact #pool,body.compact .rowAction,body.compact #manual,body.compact #viewIcon,body.compact #edgeToggle,body.compact .toolbar-divider { display: none }
-body.compact .toolbar { padding: 0 8px; height: 32px }
-body.compact .toolbar #breadcrumb { display: none }
-body.compact .head-actions { gap: 3px; margin-left: auto }
-body.compact .head-actions .tool-label { display: inline }
-body.compact .head-actions button { font-size: 11px; min-height: 24px; padding: 1px 5px }
-body.compact .head-actions .symbol { width: 15px; height: 15px }
-body.compact .content { padding: 4px 12px 12px }
-body.compact .banner { margin: 4px 0 8px }
-body.compact .hero-text { display: flex; align-items: baseline; gap: 8px }
-body.compact .hero h1 { margin: 0; font-size: 19px; letter-spacing: -.02em }
-body.compact #dateline { margin: 0; font-size: 10px }
-body.compact .listhead { padding-bottom: 3px }
-body.compact .listhead h2 { font-size: 13px }
-body.compact .row { min-height: 39px; gap: 8px }
-body.compact .row::after { left: 25px }
-body.compact .check { width: 16px; height: 16px }
-body.compact .title { font-size: 13px }
-body.compact .meta { font-size: 10px }
 @media (max-width: 420px) {
   dialog { width: calc(100vw - 12px); max-height: calc(100vh - 10px); border-radius: 11px }
   #dialogBody { padding: 0 12px 12px }

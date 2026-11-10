@@ -1,22 +1,30 @@
 # Shishi
 
-Shishi is a local Mac workspace for tasks and a quiet inbox for AI results. Leave the small window beside your editor. When a task finishes, it shows the source, the time, and a one-line result. Click to read the summary, the files mentioned, and the saved reply without switching to the AI app. New receipts leave your keyboard focus where it is.
+Shishi keeps a narrow Today list beside your editor. Expand it to see the workspace, with projects and tags in the sidebar and a mountain cover over the task list. Drag tasks from a project into Today. AI replies arrive separately in a quiet inbox, so you can finish typing before reading them.
 
-[Download the English macOS preview](https://github.com/shen25308/small-tool/releases/tag/v1.5.0) · [Data and permissions](Release/data-and-permissions.md)
+[Download the English macOS preview](https://github.com/shen25308/small-tool/releases/tag/v1.6.0) · [Data and permissions](Release/data-and-permissions.md)
 
-![Shishi workspace with sample tasks and a completed Codex file edit](Previews/workspace.png)
+![Shishi workspace showing Today and project lists with sample tasks](Previews/workspace.png)
 
-[Small result panel](Previews/result-panel.png) · [Expanded result](Previews/result-expanded.png) · [Dark inbox](Previews/inbox-dark.png)
+[Floating Today list](Previews/today.png) · [Tag picker](Previews/tags.png) · [Deadline editor](Previews/deadline.png) · [Small result panel](Previews/result-panel.png) · [Expanded result](Previews/result-expanded.png) · [Dark inbox](Previews/inbox-dark.png)
 
 ## Run on a Mac
 
-Version 1.5 requires an Apple Silicon Mac running macOS 26 or later. Download the ZIP from the release, extract it, and open **Shishi.app**. The preview uses local ad-hoc signing and has not been notarized by Apple. The ZIP includes the offline model, inference engine, Python runtime, and third-party notices.
+Version 1.6 requires an Apple Silicon Mac running macOS 26 or later. Download the ZIP from the release, extract it, and open **Shishi.app**. The preview uses local ad-hoc signing and has not been notarized by Apple. The ZIP includes the offline model, inference engine, Python runtime, and third-party notices.
 
 If you are upgrading, Shishi keeps the same local workspace, inbox, and connection preferences. If an MCP client or Grok task was configured with the previous app’s absolute path, copy its configuration again after opening Shishi.app.
 
+The design reference for the Today board is [Youniverse’s work task list demo](https://v.douyin.com/qhlq-TKt314/). The English previews above show sample tasks in the running Mac app.
+
+## Plan your day
+
+Use the window title bar to switch between the floating Today list and the full workspace, or pin the small list. Both views show Today followed by collapsible project groups. The square checkbox completes or reopens a task. Click a priority or tag to change it in place. Click the deadline control on a task to set a local date and optional time. A due, unfinished task creates one quiet inbox reminder when Shishi is running or reopens. Scheduling a task for Today and setting its deadline are independent.
+
+Choose a project or tag in the sidebar to filter tasks. Use the magnifying glass to search task titles, project names, or tags. **Wrap up** shows what you finished and what is still open today.
+
 ## Read a result beside your editor
 
-Open the floating results window from the workspace toolbar and drag it beside your document. The workspace, the small window, and the inbox start with a collapsed preview. Click the preview or focus it and press Space to expand it. Shishi selects sentences from the saved reply, including changes, checks, unresolved work, and file names. Use the original-reply control to read the stored text.
+Choose **More (…) → Show result panel** in the mountain cover and drag it beside your document. The result panel and inbox start with collapsed previews. **More → Latest result** opens the latest receipt inside the workspace. Click the preview or focus it and press Space to expand it. Shishi selects sentences from the saved reply, including changes, checks, unresolved work, and file names. Use the original-reply control to read the stored text.
 
 If a new result arrives while you are reading, a control offers to show the latest result. You can finish reading first. Use the back control to return to the summary, the workspace, or your editor. Escape goes up one level in settings. Some replies saved by earlier versions of Shishi contain only the first 4,000 characters. The interface follows the Mac's light or dark appearance. Personal tasks, project names, emails, and AI replies keep their original language.
 
@@ -32,7 +40,7 @@ Open **Inbox** and choose **Manage connectors**.
 
 ## Turn messages into tasks
 
-Paste a chat or meeting note into the task capture window. The bundled Qwen model extracts candidate tasks locally. Compare each suggestion with its source, edit its title, tag, or project, and choose which tasks to add. Drag a task into **Today** or use its Today action. The compact workspace can keep today's list above other windows.
+Choose **More (…) → Capture tasks from a message**, then paste a chat or meeting note. The bundled Qwen model extracts candidate tasks locally. Compare each suggestion with its source, edit its title, tag, or project, and choose which tasks to add. Drag a task into **Today** or use its Today action. The floating Today list can stay above other windows.
 
 ## Build from source
 

@@ -1,9 +1,43 @@
 import AppKit
+import CryptoKit
 import WebKit
 
 struct Entry: Codable {
     let id, title, project, tag, priority, planned, source, quote: String
     let done: Bool
+    let dueDate, dueTime: String?
+}
+struct DeadlineReminder: Equatable {
+    let id, title, summary, date: String
+    private static let clock: DateFormatter = {
+        let clock = DateFormatter()
+        clock.locale = Locale(identifier:"en_US_POSIX")
+        clock.calendar = Calendar(identifier:.gregorian)
+        clock.timeZone = .autoupdatingCurrent
+        clock.dateFormat = "yyyy-MM-dd HH:mm"
+        clock.isLenient = false
+        return clock
+    }()
+    private static let parser: DateFormatter = {
+        let formatter = clock.copy() as! DateFormatter
+        formatter.timeZone = TimeZone(secondsFromGMT:0)
+        return formatter
+    }()
+
+    init?(_ task:Entry) {
+        guard !task.done,let day=task.dueDate, !day.isEmpty else {return nil}
+        let time=task.dueTime ?? ""
+        date=day+" "+(time.isEmpty ? "00:00" : time)
+        // Compare local calendar minutes. This also catches a deadline after sleep or a relaunch.
+        guard let parsed=Self.parser.date(from:date), Self.parser.string(from:parsed)==date else {return nil}
+        let key=task.id+"\0"+day+"\0"+time
+        id=SHA256.hash(data:Data(key.utf8)).map{String(format:"%02x",$0)}.joined()
+        var clean=task.title.components(separatedBy:.controlCharacters).joined(separator:" ").trimmingCharacters(in:.whitespacesAndNewlines)
+        while clean.utf8.count>640 {clean.removeLast()}
+        title=clean.isEmpty ? "Task deadline" : clean
+        summary="Due on "+day+(time.isEmpty ? "." : " at "+time+" (local time).")
+    }
+    static func localMinute(_ now:Date) -> String {clock.string(from:now)}
 }
 struct Workspace: Codable {
     let version: Int
@@ -17,6 +51,13 @@ struct Workspace: Codable {
         }
     }
 }
+private final class WindowTitleStrip: NSView {
+    // Let the system title bar handle dragging and double-clicks outside the buttons.
+    override func hitTest(_ point:NSPoint) -> NSView? {
+        let view = super.hitTest(point)
+        return view === self || view is NSTextField || view is NSStackView ? nil : view
+    }
+}
 final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
     private var window: NSWindow!
     private var web: WKWebView!
@@ -24,6 +65,19 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var smallWorkspaceFrame: NSRect?
     private var expandedFrame: NSRect?
     private var compact = false
+    private var placingWindow = false
+    private var restoreTodayOnReturn = false
+    private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? true
+    private let modeButton = NSButton()
+    private let pinButton = NSButton()
+    private let titleStrip = WindowTitleStrip()
+    private let caption = NSTextField(labelWithString:"My Notes")
+    private var captionPosition: NSLayoutConstraint!
+    private var startsWithToday: Bool {
+        let args = CommandLine.arguments
+        if args.contains("--edge-results") || args.contains("--open-inbox") || args.contains("--workspace") {return false}
+        return args.contains("--compact-workspace") || (UserDefaults.standard.object(forKey:"ShiShiTodayMode") as? Bool ?? true)
+    }
     private var ready = false
     private var pendingSource: String?
     private var processing = false
@@ -37,18 +91,42 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var didSendPausedSnapshot=false
     private var lastExternalRows: [[String:Any]] = []
     private var lastInboxErrors: [String:String] = [:]
+    private var reminders: [DeadlineReminder] = []
+    private var deliveredReminders: Set<String> = []
     private lazy var inbox = CodexInbox(
         root: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"),
         store: file.deletingLastPathComponent().appendingPathComponent("CodexInbox.json")
     )
     private lazy var externalInbox = ConnectorInbox(directory: file.deletingLastPathComponent().appendingPathComponent("Incoming", isDirectory:true))
+    private func updateReminders(_ workspace:Workspace) {
+        let checkNow = ready
+        inboxQueue.async {
+            let updated = workspace.tasks.compactMap(DeadlineReminder.init)
+            guard self.reminders != updated else {return}
+            self.reminders = updated
+            self.deliveredReminders.formIntersection(self.reminders.map(\.id))
+            if checkNow {self.scanInboxes()}
+        }
+    }
+    private func postDueReminders() -> String? {
+        let now = DeadlineReminder.localMinute(Date())
+        var problem: String?
+        for task in reminders where task.date <= now && !deliveredReminders.contains(task.id) {
+            do {
+                try externalInbox.receive(source:"Reminders",title:task.title,summary:task.summary,eventID:task.id)
+                deliveredReminders.insert(task.id)
+            } catch { problem = error.localizedDescription }
+        }
+        return problem
+    }
     // These readers keep separate cursors and error states. A missing provider cannot block another.
-    private func pushInbox(_ channel:String, scan:() throws -> (items:[[String:Any]],changed:Bool)) {
+    private func pushInbox(_ channel:String, warning:String? = nil, scan:() throws -> (items:[[String:Any]],changed:Bool)) {
         do {
             let update=try scan()
-            let recovered=lastInboxErrors.removeValue(forKey:channel) != nil
-            if update.changed || recovered {
-                DispatchQueue.main.async {self.tell("setInbox",["channel":channel,"items":update.items,"error":""])}
+            let errorChanged = lastInboxErrors[channel] != warning
+            lastInboxErrors[channel] = warning
+            if update.changed || errorChanged {
+                DispatchQueue.main.async {self.tell("setInbox",["channel":channel,"items":update.items,"error":warning ?? ""])}
             }
         } catch {
             let message=error.localizedDescription
@@ -69,7 +147,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             let send=force || update.changed || lastInboxErrors["codex"] != nil
             return (send ? CodexInbox.wire(update.notices) : [],send)
         }
-        pushInbox("external") {
+        pushInbox("external",warning:postDueReminders()) {
             let update=try externalInbox.scan()
             let send=force || update.changed || lastInboxErrors["external"] != nil
             if send {lastExternalRows=ConnectorInbox.wire(update.notices)}
@@ -86,6 +164,12 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         timer.setEventHandler { [weak self] in self?.scanInboxes() }
         inboxTimer=timer
         timer.resume()
+    }
+    private func showEdge(_ visible:Bool) {
+        if visible && compact,let screen=window.screen?.visibleFrame {
+            edge.avoidCovering(window.frame,on:screen)
+        }
+        edge.setVisible(visible)
     }
     private let file: URL
     private lazy var edge: EdgeResultsPanel = {
@@ -115,26 +199,30 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.underPageBackgroundColor = .windowBackgroundColor
-        window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 870,height: 620),styleMask: [.titled,.closable,.miniaturizable,.resizable],backing: .buffered,defer: false)
-        window.title = "Shishi"
+        let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable]
+        let display = NSScreen.main?.visibleFrame.size ?? NSSize(width:760,height:800)
+        let frame=NSRect(x:0,y:0,width:min(760,display.width),height:min(800,display.height))
+        window = NSWindow(contentRect:NSWindow.contentRect(forFrameRect:frame,styleMask:style),styleMask:style,backing:.buffered,defer:false)
+        window.title = "My Notes"
         window.backgroundColor = .windowBackgroundColor
         window.titlebarSeparatorStyle = .none
         window.minSize = NSSize(width: 635,height: 420)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentView = web
+        addWindowControls()
         window.center()
-        window.setFrameAutosaveName("ShiShiMainWindow")
+        window.setFrameAutosaveName("ShiShiTallWorkspace")
         NSApplication.shared.servicesProvider = self
         makeMenu()
         let ui = resources.appendingPathComponent("UI",isDirectory:true)
         web.loadFileURL(ui.appendingPathComponent("index.html"),allowingReadAccessTo: ui)
         if CommandLine.arguments.contains("--edge-results") {
-            edge.setVisible(true)
-        } else if !CommandLine.arguments.contains("--compact-workspace") {
+            showEdge(true)
+        } else if !startsWithToday {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            if UserDefaults.standard.object(forKey:"ShiShiShowsResults") as? Bool ?? true {edge.setVisible(true)}
+            if UserDefaults.standard.object(forKey:"ShiShiShowsResults") as? Bool ?? true {showEdge(true)}
         }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {
@@ -142,9 +230,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     }
     private func openWorkspace(inbox:Bool,fromEdge:Bool=false) {
         if fromEdge {
+            restoreTodayOnReturn = restoreTodayOnReturn || (compact && window.isVisible)
             let front=NSWorkspace.shared.frontmostApplication
             if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier {editorApp=front}
         }
+        if compact {setCompact(false)}
         tell("setWorkspaceReturn",fromEdge)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps:true)
@@ -174,11 +264,75 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         let work=NSMenu(title:"Workspace")
         let capture=work.addItem(withTitle:"Extract Tasks from a Message",action:#selector(captureMenu),keyEquivalent:"k")
         capture.target=self
-        let pin=work.addItem(withTitle:"Toggle Desktop Note",action:#selector(toggleCompact),keyEquivalent:"p")
-        pin.target=self
+        let mode=work.addItem(withTitle:"Switch Between Today and Workspace",action:#selector(toggleCompact),keyEquivalent:"p")
+        mode.target=self
         bar.addItem(workItem)
         workItem.submenu=work
         NSApp.mainMenu=bar
+    }
+    private func addWindowControls() {
+        window.titleVisibility = .hidden
+        caption.font = .systemFont(ofSize:12,weight:.semibold)
+        caption.textColor = .secondaryLabelColor
+        caption.translatesAutoresizingMaskIntoConstraints = false
+        caption.setAccessibilityElement(false)
+        titleStrip.addSubview(caption)
+        let strip = NSStackView(views:[modeButton,pinButton])
+        strip.orientation = .horizontal
+        strip.alignment = .centerY
+        strip.spacing = 5
+        strip.edgeInsets = NSEdgeInsets(top:0,left:2,bottom:0,right:8)
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        titleStrip.addSubview(strip)
+        for button in [modeButton,pinButton] {
+            button.controlSize = .small
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.font = .systemFont(ofSize:11, weight:.medium)
+            button.target = self
+        }
+        modeButton.imagePosition = .imageOnly
+        modeButton.action = #selector(toggleCompact)
+        pinButton.imagePosition = .imageLeading
+        pinButton.action = #selector(togglePinned)
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        accessory.view = titleStrip
+        captionPosition = caption.centerXAnchor.constraint(equalTo:titleStrip.leadingAnchor)
+        NSLayoutConstraint.activate([
+            captionPosition,
+            caption.centerYAnchor.constraint(equalTo:titleStrip.centerYAnchor),
+            strip.trailingAnchor.constraint(equalTo:titleStrip.trailingAnchor),
+            strip.centerYAnchor.constraint(equalTo:titleStrip.centerYAnchor)
+        ])
+        layoutWindowTitle()
+        window.addTitlebarAccessoryViewController(accessory)
+        updateWindowControls()
+    }
+    private func layoutWindowTitle() {
+        guard captionPosition != nil else {return}
+        let width = window.frame.width
+        let leading:CGFloat = 82
+        titleStrip.setFrameSize(NSSize(width:max(1,width-leading),height:24))
+        captionPosition.constant = width/2-leading
+    }
+    func windowDidResize(_ notification:Notification) {layoutWindowTitle()}
+    private func updateWindowControls() {
+        let small = NSImage.SymbolConfiguration(pointSize:11,weight:.medium)
+        modeButton.image = NSImage(systemSymbolName:compact ? "sidebar.leading" : "rectangle.portrait",accessibilityDescription:nil)?.withSymbolConfiguration(small)
+        modeButton.toolTip = compact ? "Open full workspace" : "Show floating Today list"
+        modeButton.setAccessibilityLabel(modeButton.toolTip)
+        pinButton.title = pinned ? "Pinned" : "Pin"
+        pinButton.image = NSImage(systemSymbolName:pinned ? "pin.fill" : "pin",accessibilityDescription:nil)?.withSymbolConfiguration(small)
+        pinButton.toolTip = pinned ? "Turn off always on top" : "Keep Today above other windows"
+        pinButton.setAccessibilityLabel(pinButton.toolTip)
+        pinButton.isHidden = !compact
+    }
+    @objc private func togglePinned() {
+        pinned.toggle()
+        UserDefaults.standard.set(pinned,forKey:"ShiShiTodayPinned")
+        window.level = compact && pinned ? .floating : .normal
+        updateWindowControls()
     }
     private func tell(_ function: String, _ arg: Any) {
         if function=="setInbox", let state=arg as? [String:Any],let rows=state["items"] as? [[String:Any]],let channel=state["channel"] as? String {
@@ -189,29 +343,46 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     @objc private func toggleCompact() { setCompact(!compact) }
     private func setCompact(_ enabled: Bool) {
         guard compact != enabled else { return }
+        placingWindow = true
+        defer {placingWindow = false}
         compact = enabled
-        window.title = enabled ? "Shishi · Desktop Note" : "Shishi"
+        UserDefaults.standard.set(enabled,forKey:"ShiShiTodayMode")
+        updateWindowControls()
         smallWorkspaceFrame=nil
         if enabled {
             expandedFrame=window.frame
             // Keep the expanded window's saved geometry independent from the floating view.
             window.setFrameAutosaveName("")
-            window.minSize=NSSize(width:300,height:230)
+            window.minSize=NSSize(width:300,height:320)
             let screen=window.screen?.visibleFrame ?? window.frame
-            let width=min(324,screen.width), height=min(242,screen.height)
-            let rect=NSRect(x:screen.maxX-width-16,y:screen.maxY-height-16,width:width,height:height)
+            let width=min(356,screen.width), height=min(484,screen.height)
+            var rect=NSRect(x:screen.maxX-width-16,y:screen.maxY-height-16,width:width,height:height)
+            if let saved=UserDefaults.standard.string(forKey:"ShiShiTodayFrame") {
+                let frame=NSRectFromString(saved)
+                if frame.width>=300,frame.height>=320,let display=NSScreen.screens.first(where:{$0.visibleFrame.contains(frame)}) {
+                    rect=frame.intersection(display.visibleFrame)
+                }
+            }
             window.setFrame(rect,display:true)
-            window.level = .floating
+            window.level = pinned ? .floating : .normal
             window.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary]
+            if edge.panel.isVisible {edge.avoidCovering(window.frame,on:screen)}
         } else {
             window.level = .normal
             window.collectionBehavior = []
             window.minSize = NSSize(width:635,height:420)
             if let frame=expandedFrame {window.setFrame(frame,display:true)}
-            window.setFrameAutosaveName("ShiShiMainWindow")
+            window.setFrameAutosaveName("ShiShiTallWorkspace")
         }
         tell("setCompact",enabled)
     }
+    private func rememberTodayFrame() {
+        if compact && !placingWindow && smallWorkspaceFrame == nil && window.isVisible {
+            UserDefaults.standard.set(NSStringFromRect(window.frame),forKey:"ShiShiTodayFrame")
+        }
+    }
+    func windowDidMove(_ notification:Notification) {rememberTodayFrame()}
+    func windowDidEndLiveResize(_ notification:Notification) {rememberTodayFrame()}
     private func sizeLatestResult(expanded:Bool) {
         guard compact, let screen=window.screen?.visibleFrame else {return}
         let current=window.frame
@@ -282,22 +453,27 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 if FileManager.default.fileExists(atPath:file.path) {
                     do{
                         let bytes=try Data(contentsOf:file)
-                        try JSONDecoder().decode(Workspace.self,from:bytes).validate()
+                        let state=try JSONDecoder().decode(Workspace.self,from:bytes)
+                        try state.validate()
+                        updateReminders(state)
                         reply(id,true,try JSONSerialization.jsonObject(with:bytes))
                     }catch{storeUnreadable=true;throw error}
                 }else{reply(id,true,NSNull())}
             case "save":
                 guard !storeUnreadable,let state=body["state"] else{throw AppIssue("The task list could not be saved.")}
                 let bytes=try JSONSerialization.data(withJSONObject:state,options:[.sortedKeys])
-                try JSONDecoder().decode(Workspace.self,from:bytes).validate()
+                let workspace=try JSONDecoder().decode(Workspace.self,from:bytes)
+                try workspace.validate()
                 try FileManager.default.createDirectory(at:file.deletingLastPathComponent(),withIntermediateDirectories:true)
                 try bytes.write(to:file,options:.atomic)
+                updateReminders(workspace)
                 reply(id,true,true)
             case "ready":
                 ready=true
-                if CommandLine.arguments.contains("--compact-workspace") {
+                if startsWithToday {
                     setCompact(true)
                     window.orderFrontRegardless()
+                    if UserDefaults.standard.bool(forKey:"ShiShiShowsResults") {showEdge(true)}
                 }
                 startInbox()
                 providers.startPolling { [weak self] in
@@ -354,14 +530,18 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 }
                 reply(id,true,edge.showsMail)
             case "returnToEdge":
-                window.orderOut(nil)
-                edge.setVisible(true)
+                if restoreTodayOnReturn {
+                    setCompact(true)
+                    window.orderFrontRegardless()
+                } else {window.orderOut(nil)}
+                restoreTodayOnReturn=false
+                showEdge(true)
                 if let editor=editorApp,!editor.isTerminated {editor.activate(options:[])} else {NSApp.deactivate()}
                 editorApp=nil
                 tell("setWorkspaceReturn",false)
                 reply(id,true,true)
             case "edgeVisibility":
-                edge.setVisible(body["value"] as? Bool == true)
+                showEdge(body["value"] as? Bool == true)
                 reply(id,true,edge.panel.isVisible)
             case "openConnectorLink":
                 guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}

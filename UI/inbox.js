@@ -26,6 +26,7 @@ window.setEdgeVisible=value=>{
   button.setAttribute('aria-pressed',String(edgeShown));
   button.title=edgeShown?'Hide result panel':'Show result panel';
   button.setAttribute('aria-label',button.title);
+  button.lastElementChild.textContent=button.title;
 };
 $('edgeToggle').onclick=()=>action(native('edgeVisibility',{value:!edgeShown}));
 const cardOptions={
@@ -130,7 +131,11 @@ function returnToEdge(){
 }
 window.setWorkspaceReturn=visible=>{$('workspaceReturn').hidden=!visible};
 $('workspaceReturn').onclick=returnToEdge;
-window.openInbox=origin=>{inboxFromEdge=origin==='edge';listNotices()};
+window.openInbox=origin=>{
+  if (origin==='edge' && $('dialog').open && $('dialogBody').querySelector('form,input:not([type=checkbox]),textarea,select')) return;
+  inboxFromEdge=origin==='edge';
+  listNotices();
+};
 window.setInbox=state=>{
   const channel=state.channel||'codex';
   if(Array.isArray(state.items))updateItems(channel,state.items);

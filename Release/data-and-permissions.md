@@ -4,6 +4,7 @@ Shishi stores your task lists and inbox on this Mac. A result card summarizes th
 
 | Enabled source | What Shishi reads or receives | Your controls |
 | --- | --- | --- |
+| Task deadlines | The deadline and title of an unfinished task in your own workspace | On the due date or time, Shishi saves a quiet local reminder. Edit or clear a deadline on the task. |
 | Local Codex | Turn-completion events, final replies, and the conversation title or working-directory name in local session records | Connect to save newly completed turns. Disconnect to stop reading. Previously saved cards remain accessible. |
 | Gmail | Inbox changes, subjects, senders, arrival times, and message IDs for the authorized account | Authorize on Google's page and choose one sender or all new mail. |
 | Outlook | Basic account details and basic properties of new inbox messages | Authorize on Microsoft's page and choose one sender or all new mail. |

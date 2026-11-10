@@ -39,54 +39,227 @@ function change(fn){
 }
 function action(p){p.catch(e=>toast(e.message))}
 function go(v){view=v;tag='';render()}
-const listIcons={today:'calendar',all:'all-tasks',done:'completed'};
+const listIcons={today:'day-star',all:'project-list',done:'completed'};
 const projectTone=name=>'project-'+Math.max(0,data.projects.indexOf(name))%5;
 function symbol(name){return '<span class="symbol '+name+'" aria-hidden="true"></span>'}
 function navButton(id,label,count){
   const project=id.startsWith('p:'), drop=project||id==='today';
-  const icon=project?'<span class="project-dot '+projectTone(label)+'" aria-hidden="true"></span>':symbol(listIcons[id]);
+  const icon=symbol(project?'folder-icon':listIcons[id]);
   return '<button data-view="'+esc(id)+'" '+(view===id?'class="active" aria-current="page" ':'')+
     (drop?'data-target="'+esc(id)+'" ':'')+'>'+icon+'<span class="prname">'+esc(project?projectLabel(label):label)+'</span><span class="num">'+(count||'')+'</span></button>';
 }
-function row(t){
-  const showToday=!t.done&&!isToday(t);
-  return '<article class="row '+(t.done?'done':'')+'" draggable="'+(!t.done)+'" data-id="'+esc(t.id)+'"><button class="check" data-act="toggle" aria-label="'+(t.done?'Reopen':'Complete')+' '+esc(t.title)+'">'+(t.done?'✓':'')+'</button><button class="task-body" data-act="edit"><span class="title">'+esc(t.title)+'</span><span class="meta"><span class="priority '+esc(t.priority).toLowerCase()+'">'+esc(t.priority)+'</span><span>'+esc(projectLabel(t.project))+'</span>'+(t.tag?'<span>· '+esc(t.tag)+'</span>':'')+(t.planned&&t.planned<day()&&!t.done?'<span>· Scheduled for '+esc(plannedDateLabel(t.planned))+'</span>':'')+'</span></button>'+(showToday?'<button class="rowAction" data-act="today" title="Add to Today">+ Today</button>':'')+'</article>';
+const collapsedProjects = new Set();
+const suggestedTags = {'Leadership':0, 'Urgent':1, 'This week':2, 'Product insights':3, 'Feedback':4, 'Later':5, 'Today':6, 'Long-term':4, 'Leader follow-up':1};
+
+function availableTaskTags() {
+  return [...new Set([...data.tasks.map(item => item.tag).filter(Boolean), ...(data.labels || []), ...Object.keys(suggestedTags)])];
+}
+
+function taskTagColor(name) {
+  if (Object.hasOwn(suggestedTags, name)) return 'tag-tone-' + suggestedTags[name];
+  let value = 0;
+  for (const char of name) value = (value * 31 + char.codePointAt(0)) >>> 0;
+  return 'tag-tone-' + value % 7;
+}
+
+function row(t) {
+  const title = esc(t.title);
+  const addToday = !t.done && !isToday(t);
+  const priority = ['P0', 'P1', 'P2'].includes(t.priority) ? t.priority.toLowerCase() : '';
+  const tagLabel = t.tag || '+ Tag';
+  const planned = t.planned && !t.done && t.planned !== day() ?
+    '<time class="planned-day" datetime="' + esc(t.planned) + '" title="Scheduled for ' + esc(plannedDateLabel(t.planned)) + '">' + esc(plannedDateLabel(t.planned)) + '</time>' : '';
+  return '<article class="row' + (t.done ? ' done' : '') + '" draggable="' + !t.done + '" data-id="' + esc(t.id) + '">' +
+    '<button class="check" data-act="toggle" aria-pressed="' + !!t.done + '" aria-label="' + (t.done ? 'Reopen ' : 'Complete ') + title + '">' + (t.done ? '✓' : '') + '</button>' +
+    '<button class="priority ' + priority + '" data-act="priority" aria-haspopup="dialog" aria-label="Edit priority for ' + title + '">' + esc(t.priority || 'Priority') + '</button>' +
+    '<button class="task-body" data-act="edit" title="' + title + '"><span class="title">' + title + '</span></button>' +
+    '<button class="task-tag ' + (t.tag ? taskTagColor(t.tag) : 'no-tag') + '" data-act="tag" aria-haspopup="dialog" aria-label="Edit tag for ' + title + '" title="' + esc(tagLabel) + '">' + esc(tagLabel) + '</button>' +
+    planned +
+    '<button class="task-deadline' + (t.dueDate ? ' has-deadline' : ' no-deadline') + '" data-act="deadline" aria-haspopup="dialog" aria-label="Edit deadline for ' + title + '" title="' + esc(deadlineLabel(t)) + '">' +
+    (t.dueDate ? esc(deadlineLabel(t)) : '<span class="clock-mark" aria-hidden="true"></span>') + '</button>' +
+    (addToday ? '<button class="rowAction" data-act="today" title="Add to Today" aria-label="Add ' + title + ' to Today">+ Today</button>' : '') +
+    '</article>';
+}
+
+function addTaskButton(project) {
+  const target = project == null ? 'data-add-current' : 'data-add-project="' + esc(project) + '"';
+  return '<button type="button" class="inline-add" ' + target + '><span aria-hidden="true">+</span>Add task</button>';
+}
+
+function projectGroup(project, tasks, index) {
+  const isOpen = !collapsedProjects.has(project);
+  const groupId = 'project-group-' + index;
+  return '<section class="task-group" data-target="' + esc('p:' + project) + '">' +
+    '<button type="button" class="group-toggle" data-group="' + esc(project) + '" aria-expanded="' + isOpen + '" aria-controls="' + groupId + '">' +
+    '<span class="disclosure" aria-hidden="true"></span>' + symbol('project-list') +
+    '<span class="group-name">' + esc(projectLabel(project)) + '</span><span class="group-count">' + tasks.length + '</span></button>' +
+    '<div id="' + groupId + '"' + (isOpen ? '' : ' hidden') + '>' +
+    sortVisibleTasks(tasks).map(row).join('') + addTaskButton(project) + '</div></section>';
+}
+
+function deadlineLabel(task) {
+  if (!task.dueDate) return 'Set deadline';
+  const date = plannedDateLabel(task.dueDate);
+  if (!task.dueTime) return date;
+  const time = new Date(task.dueDate + 'T' + task.dueTime);
+  return Number.isNaN(time.getTime()) ? date : date + ' ' + time.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+}
+
+function placeTaskPicker(picker, anchor) {
+  document.querySelector('.task-picker')?.remove();
+  picker.setAttribute('popover', 'auto');
+  picker.setAttribute('role', 'dialog');
+  picker.addEventListener('toggle', event => {
+    if (event.newState !== 'closed') return;
+    picker.remove();
+    if (anchor.isConnected && document.activeElement === document.body) anchor.focus();
+  });
+  document.body.append(picker);
+  picker.showPopover();
+  const pos = anchor.getBoundingClientRect();
+  const rect = picker.getBoundingClientRect();
+  picker.style.left = Math.max(6, Math.min(pos.left, innerWidth - rect.width - 6)) + 'px';
+  picker.style.top = Math.max(6, Math.min(pos.bottom + 4, innerHeight - rect.height - 6)) + 'px';
+}
+
+function editDeadline(anchor, task) {
+  const picker = document.createElement('div');
+  picker.className = 'task-picker deadline-picker';
+  picker.setAttribute('aria-label', 'Deadline');
+  picker.innerHTML = '<form><h3>Deadline</h3><label>Due date<input type="date" name="date" required></label>' +
+    '<label>Time (optional)<input type="time" name="time"></label><div class="deadline-actions">' +
+    (task.dueDate ? '<button type="button" class="mini-link" data-clear-deadline>Clear deadline</button>' : '') +
+    '<button type="button" class="secondary" data-cancel-deadline>Cancel</button><button class="primary" type="submit">Save</button></div></form>';
+  const form = picker.querySelector('form');
+  form.elements.date.value = task.dueDate || day();
+  form.elements.time.value = task.dueTime || '';
+  function save(date, time) {
+    const buttons = [...form.querySelectorAll('button')];
+    buttons.forEach(button => {button.disabled = true});
+    action(change(state => {
+      const current = state.tasks.find(item => item.id === task.id);
+      if (!current) return;
+      if (date) {
+        current.dueDate = date;
+        if (time) current.dueTime = time;
+        else delete current.dueTime;
+      } else {
+        delete current.dueDate;
+        delete current.dueTime;
+      }
+    }).then(() => {
+      picker.hidePopover();
+      document.querySelector('.row[data-id="' + CSS.escape(task.id) + '"] [data-act="deadline"]')?.focus();
+    }).finally(() => buttons.forEach(button => {button.disabled = false})));
+  }
+  form.onsubmit = event => {event.preventDefault(); save(form.elements.date.value, form.elements.time.value)};
+  picker.querySelector('[data-cancel-deadline]').onclick = () => picker.hidePopover();
+  const clear = picker.querySelector('[data-clear-deadline]');
+  if (clear) clear.onclick = () => save('', '');
+  placeTaskPicker(picker, anchor);
+  form.elements.date.focus();
+}
+
+function showTaskPicker(anchor, task, field) {
+  const isTag = field === 'tag';
+  const picker = document.createElement('div');
+  picker.className = 'task-picker';
+  picker.setAttribute('aria-label', isTag ? 'Choose a tag' : 'Choose a priority');
+  const choices = isTag
+    ? availableTaskTags()
+    : ['P0', 'P1', 'P2'];
+  picker.innerHTML = (isTag ? '<form><input aria-label="Find or create a tag" placeholder="Find or create a tag…" maxlength="30" autocomplete="off"></form>' : '') +
+    '<div class="picker-options"></div>';
+  const choicesBox = picker.querySelector('.picker-options');
+  const input = picker.querySelector('input');
+  function showChoices() {
+    const search = input?.value.trim() ?? '';
+    const filtered = choices.filter(value => value.toLowerCase().includes(search.toLowerCase()));
+    const current = task[field];
+    choicesBox.innerHTML = filtered.map(value => '<button type="button" data-choice="' + esc(value) + '" aria-pressed="' + (current === value) + '">' +
+      '<span class="' + (isTag ? 'task-tag ' + taskTagColor(value) : 'priority ' + value.toLowerCase()) + '">' + esc(value) + '</span>' +
+      (value === current ? '<span class="chosen" aria-hidden="true">✓</span>' : '') + '</button>').join('') +
+      (search && !choices.includes(search) ? '<button type="button" data-choice="' + esc(search) + '">Create “' + esc(search) + '”</button>' : '') +
+      (isTag && current ? '<button type="button" class="clear-tag" data-choice="">Remove tag</button>' : '');
+  }
+  let picked = false;
+  function select(value) {
+    if (picked) return;
+    picked = true;
+    const save = change(state => {
+      const current = state.tasks.find(item => item.id === task.id);
+      if (current) current[field] = value;
+    });
+    action(save.then(() => {
+      picker.hidePopover();
+      document.querySelector('.row[data-id="' + CSS.escape(task.id) + '"] [data-act="' + field + '"]')?.focus();
+    }).catch(error => { picked = false; throw error }));
+  }
+  if (input) {
+    input.oninput = showChoices;
+    picker.querySelector('form').onsubmit = event => {
+      event.preventDefault();
+      if (input.value.trim()) select(input.value.trim());
+    };
+  }
+  picker.onclick = event => {
+    const button = event.target.closest('[data-choice]');
+    if (button) select(button.dataset.choice);
+  };
+  picker.onkeydown = event => {
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+    const buttons = [...choicesBox.querySelectorAll('button')];
+    if (!buttons.length) return;
+    event.preventDefault();
+    const i = buttons.indexOf(document.activeElement);
+    const next = event.key === 'ArrowDown' ? i + 1 : (i < 0 ? buttons.length - 1 : i - 1);
+    buttons[(next + buttons.length) % buttons.length].focus();
+  };
+  showChoices();
+  placeTaskPicker(picker, anchor);
+  (input ?? choicesBox.querySelector('button[aria-pressed=true],button'))?.focus();
 }
 function render(){
   const tasks=data.tasks,open=tasks.filter(t=>!t.done),today=tasks.filter(isToday),project=projectOfView();
   $('nav').innerHTML=navButton('today','Today',today.filter(t=>!t.done).length)+navButton('all','All tasks',open.length)+navButton('done','Completed',tasks.length-open.length);
   $('projects').innerHTML=data.projects.map(p=>navButton('p:'+p,p,open.filter(t=>t.project===p).length)).join('');
   $('viewIcon').className=project?projectTone(project):view;
-  $('viewIcon').innerHTML=symbol(project?'project-list':listIcons[view]);
+  $('viewIcon').innerHTML=symbol(project?'folder-icon':listIcons[view]);
   $('dateline').textContent=new Intl.DateTimeFormat('en-US',{month:'long',day:'numeric',weekday:'long'}).format(new Date());
-  $('pageTitle').textContent=$('crumbView').textContent=currentTitle();
+  $('pageTitle').textContent=tag || currentTitle();
+  $('wrapUp').hidden=view!=='today';
+  renderBoardTags();
   const pin=$('pin');
   pin.innerHTML=symbol(compact?'expand':'pin')+'<span class="tool-label">'+(compact?'Expand workspace':'Compact view')+'</span>';
   pin.title=compact?'Expand workspace':'Switch to compact view';
   pin.setAttribute('aria-label',pin.title);
   pin.setAttribute('aria-pressed',String(compact));
   $('manual').hidden=view==='done';
-  let list=view==='today'?today:view==='done'?tasks.filter(t=>t.done):project?tasks.filter(t=>t.project===project&&!t.done):open;
-  const tags=[...new Set(list.map(t=>t.tag).filter(Boolean))];
-  const filterable=view!=='today'&&view!=='done';
-  if(!filterable||!tags.includes(tag))tag='';
-  const filters=filterable&&tags.length?'<div class="tags"><button class="'+(!tag?'active':'')+'" data-tag="">All tags</button>'+tags.map(v=>'<button class="'+(v===tag?'active':'')+'" data-tag="'+esc(v)+'">'+esc(v)+'</button>').join('')+'</div>':'';
-  if(tag)list=list.filter(t=>t.tag===tag);
-  $('sectionTitle').textContent=({today:'Scheduled',all:'Open tasks',done:'Completed tasks'})[view]||'Project tasks';
-  $('count').textContent=list.length+(list.length===1?' task':' tasks');
-  const active=list.filter(t=>!t.done),finished=list.filter(t=>t.done);
-  const emptyText=view==='today'?'Drag a task here or click + Today next to a project task.':view==='done'?'Tasks appear here when you mark them complete.':'Add a task or capture one from a message.';
-  $('tasks').innerHTML=filters+'<div '+(view==='today'?'class="drop" data-target="today"':'')+'>'+(active.map(t=>row(t)).join('')+(finished.length&&view==='today'?'<div class="completed-heading">Completed · '+finished.length+'</div>':'')+finished.map(t=>row(t)).join('')||'<div class="empty">'+emptyText+'</div>')+'</div>';
-  let pool='';
-  if(view==='today'&&!compact){
-    const waiting=open.filter(t=>!isToday(t));
-    if(waiting.length)pool='<div class="subhead"><h3>From your projects</h3><small>Drag to Today</small></div>'+data.projects.map(p=>{
-      const items=waiting.filter(t=>t.project===p);
-      return items.length?'<div class="group"><span class="project-dot '+projectTone(p)+'" aria-hidden="true"></span>'+esc(projectLabel(p))+'</div>'+items.map(t=>row(t)).join(''):'';
-    }).join('');
-    else if(!tasks.length)pool='<div class="samplebox">New here? <button class="sample" data-demo>Try a sample conversation</button></div>';
+  let list = view === 'today' ? today : view === 'done' ? tasks.filter(t => t.done)
+    : project ? tasks.filter(t => t.project === project) : open;
+  const tags = [...new Set(list.map(t => t.tag).filter(Boolean))];
+  const filterable = view !== 'today' && view !== 'done';
+  if (!filterable || !(view === 'all' ? availableTaskTags() : tags).includes(tag)) tag = '';
+  const filters = filterable && tags.length ? '<div class="tags task-filters"><button data-tag="" class="' + (!tag ? 'active' : '') + '">All tags</button>' +
+    tags.map(value => '<button data-tag="' + esc(value) + '" class="' + (value === tag ? 'active' : '') + '">' + esc(value) + '</button>').join('') + '</div>' : '';
+  if (tag) list = list.filter(t => t.tag === tag);
+  $('sectionTitle').textContent = ({today:'Today', all:'Open tasks', done:'Completed tasks'})[view] || 'Project tasks';
+  $('count').textContent = list.length + (list.length === 1 ? ' task' : ' tasks');
+  const empty = tag ? 'No tasks with this tag.' : view === 'today' ? 'Drop tasks here to plan your day.' :
+    view === 'done' ? 'Completed tasks appear here.' : 'No tasks in this list.';
+  const add = view !== 'done' ? addTaskButton(project) : '';
+  const listAttrs = view === 'today' ? 'class="task-list drop" data-target="today"' : 'class="task-list"';
+  $('tasks').innerHTML = filters + '<div ' + listAttrs + '>' +
+    (sortVisibleTasks(list).map(row).join('') || '<div class="empty task-empty">' + empty + '</div>') + add + '</div>';
+
+  let groups = '';
+  if (view === 'today') {
+    const waiting = tasks.filter(t => !isToday(t));
+    groups = data.projects.map((name, index) => projectGroup(name, waiting.filter(t => t.project === name), index)).join('') +
+      '<button type="button" class="inline-add new-group" data-new-group><span aria-hidden="true">+</span>New project</button>';
   }
-  $('pool').innerHTML=pool;
+  $('pool').innerHTML = groups;
+
 }
 let dialogBack=closeDialog;
 function dialog(title,body,navigation={}) {
@@ -101,10 +274,10 @@ function dialog(title,body,navigation={}) {
 function closeDialog(){if($('dialog').open)$('dialog').close()}
 $('dialog').addEventListener('cancel',event=>{event.preventDefault();dialogBack()});
 const options=(list,sel,label=String)=>list.map(v=>'<option value="'+esc(v)+'" '+(v===sel?'selected':'')+'>'+esc(label(v))+'</option>').join('');
-function taskForm(t){
+function taskForm(t, context = {}){
   const isNew=!t;
   const exists=t&&data.tasks.some(x=>x.id===t.id);
-  t=t||{id:uuid(),title:'',project:projectOfView()||data.projects[0],tag:'',priority:'P2',planned:view==='today'?day():'',done:false,source:'',quote:''};
+  t=t||{id:uuid(),title:'',project:context.project ?? projectOfView() ?? data.projects[0],tag:'',priority:'P2',planned:context.project ? '' : view==='today'?day():'',done:false,source:'',quote:''};
   dialog(isNew?'New task':'Task details','<form id="taskForm"><label>Task<input id="fieldTitle" required maxlength="240" value="'+esc(t.title)+'"></label><div class="formgrid"><label>Project<select id="fieldProject">'+options(data.projects,t.project,projectLabel)+'</select></label><label>Priority<select id="fieldPriority">'+options(['P0','P1','P2'],t.priority)+'</select></label></div><div class="formgrid"><label>Tag<input id="fieldTag" maxlength="30" value="'+esc(t.tag)+'" placeholder="e.g. Design"></label><label>Scheduled date<input id="fieldPlanned" type="date" value="'+esc(t.planned)+'"></label></div>'+(t.source?'<details><summary class="mini-link">Show source message</summary><blockquote>'+esc(t.source)+'</blockquote></details>':'')+'<div class="actions">'+(exists?'<button type="button" class="mini-link" id="removeTask">Remove task</button>':'')+'<button type="button" data-close class="secondary">Cancel</button><button class="primary">Save</button></div></form>');
   $('fieldTitle').focus();
   if(exists)$('removeTask').onclick=async()=>{
@@ -153,10 +326,17 @@ function manualFromText(text){
 }
 function review(source,items){
   const root=$('candidates');
-  root.innerHTML='<div class="subhead"><h3>Review suggestions · '+items.length+'</h3><small>Source messages included</small></div>'+items.map((t,i)=>'<div class="candidate" data-index="'+i+'"><div class="ctop"><input type="checkbox" checked aria-label="Select task '+(i+1)+'"><input class="candidate-title" aria-label="Task title" maxlength="240" value="'+esc(t.title)+'"></div><blockquote>'+esc(t.quote)+'</blockquote><div class="formgrid"><label>Project<select class="cproject">'+options(data.projects,projectOfView()||data.projects[0],projectLabel)+'</select></label><label>Tag<input class="ctag" maxlength="30" value="'+esc(t.tag)+'"></label></div></div>').join('')+'<div class="actions"><button class="primary" id="confirm">Add selected tasks</button></div>';
+  root.innerHTML='<div class="subhead"><h3>Review '+items.length+(items.length===1?' task':' tasks')+'</h3></div>'+
+    '<datalist id="captureTags">'+availableTaskTags().map(name=>'<option value="'+esc(name)+'">').join('')+'</datalist>'+
+    items.map((t,i)=>'<article class="candidate" data-index="'+i+'"><div class="ctop"><input type="checkbox" checked aria-label="Select task '+(i+1)+'"><input class="candidate-title" aria-label="Task title" maxlength="240" value="'+esc(t.title)+'"></div>'+
+      '<div class="formgrid"><label>Project<select class="cproject">'+options(data.projects,projectOfView()||data.projects[0],projectLabel)+'</select></label>'+
+      '<label>Tag<input class="ctag" list="captureTags" maxlength="30" value="'+esc(t.tag)+'"></label>'+
+      '<label>Priority<select class="cpriority">'+options(['P0','P1','P2'],['P0','P1','P2'].includes(t.priority)?t.priority:'P2')+'</select></label></div>'+
+      '<details class="candidate-source"><summary>Source message</summary><blockquote>'+esc(t.quote)+'</blockquote></details></article>').join('')+
+    '<div class="actions"><button class="primary" id="confirm">'+(items.length===1?'Add task':'Add selected tasks')+'</button></div>';
   $('confirm').onclick=async()=>{
     const button=$('confirm');button.disabled=true;
-    const chosen=[...root.querySelectorAll('.candidate')].filter(el=>el.querySelector('[type=checkbox]').checked).map(el=>{const item=items[Number(el.dataset.index)];return {id:uuid(),title:el.querySelector('.candidate-title').value.trim(),project:el.querySelector('.cproject').value,tag:el.querySelector('.ctag').value.trim(),priority:'P2',planned:'',done:false,source,quote:item.quote}});
+    const chosen=[...root.querySelectorAll('.candidate')].filter(el=>el.querySelector('[type=checkbox]').checked).map(el=>{const item=items[Number(el.dataset.index)];return {id:uuid(),title:el.querySelector('.candidate-title').value.trim(),project:el.querySelector('.cproject').value,tag:el.querySelector('.ctag').value.trim(),priority:el.querySelector('.cpriority').value,planned:'',done:false,source,quote:item.quote}});
     try{
       if(!chosen.length||chosen.some(t=>!t.title))throw Error('Select at least one task and give each selected task a title.');
       let added=0;await change(s=>{for(const t of chosen){if(!s.tasks.some(x=>x.source===t.source&&x.quote===t.quote&&x.title===t.title&&x.project===t.project)){s.tasks.push(t);added++}}});
@@ -173,11 +353,24 @@ function schedule(id,target,before=''){
 document.addEventListener('click',e=>{
   if(e.target.closest('[data-close]')){closeDialog();return}
   const b=e.target.closest('[data-view]');if(b){go(b.dataset.view);return}
+  const group=e.target.closest('[data-group]');
+  if(group){
+    const opening=group.getAttribute('aria-expanded')==='false';
+    if(opening)collapsedProjects.delete(group.dataset.group);else collapsedProjects.add(group.dataset.group);
+    group.setAttribute('aria-expanded',String(opening));
+    $(group.getAttribute('aria-controls')).hidden=!opening;
+    return;
+  }
+  const add=e.target.closest('[data-add-project],[data-add-current]');
+  if(add){taskForm(null,add.hasAttribute('data-add-project')?{project:add.dataset.addProject}:{});return}
+  if(e.target.closest('[data-new-group]')){projectForm();return}
   const f=e.target.closest('[data-tag]');if(f){tag=f.dataset.tag;render();return}
   if(e.target.closest('[data-demo]')){capture(example);return}
   const a=e.target.closest('[data-act]');if(!a)return;
   const t=data.tasks.find(x=>x.id===a.closest('.row').dataset.id);if(!t)return;
   if(a.dataset.act==='edit')taskForm(t);
+  if(a.dataset.act==='deadline')editDeadline(a,t);
+  if(a.dataset.act==='tag'||a.dataset.act==='priority')showTaskPicker(a,t,a.dataset.act);
   if(a.dataset.act==='toggle')action(change(s=>{const x=s.tasks.find(v=>v.id===t.id);x.done=!x.done}));
   if(a.dataset.act==='today')action(schedule(t.id,'today').then(()=>toast('Added to Today')));
 });

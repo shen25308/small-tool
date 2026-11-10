@@ -8,40 +8,53 @@
   <link rel="stylesheet" href="symbols.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="results.css">
-  <title>Shishi</title>
+  <link rel="stylesheet" href="board.css">
+  <link rel="stylesheet" href="task-list.css">
+  <title>My Notes · Shishi</title>
 </head>
 <body>
   <div id="shell">
     <aside aria-label="Sidebar">
-      <div class="brand"><img src="icons/shishi.png" alt="" width="30" height="30"><b>Shishi</b></div>
+      <h2 class="side-title">My notes</h2>
       <nav id="nav" aria-label="Lists"></nav>
-      <div class="side-heading"><span>Projects</span><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
+      <div class="side-heading"><h2>Projects</h2><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
       <nav id="projects" aria-label="Projects"></nav>
-      <div class="side-bottom">
-        <button class="capture" id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture tasks</button>
-        <small><span class="symbol lock" aria-hidden="true"></span>Saved on this Mac</small>
-      </div>
+      <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
+      <nav id="labels" aria-label="Tags"></nav>
     </aside>
     <main>
-      <header class="toolbar">
-        <div class="location"><button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button><span id="breadcrumb">Workspace</span><b id="crumbView">Today</b></div>
-        <div class="head-actions">
-          <button id="inboxButton" title="Open inbox"><span class="symbol inbox" aria-hidden="true"></span><span>Inbox</span><span id="inboxBadge" hidden>0</span></button>
-          <div class="toolbar-divider" aria-hidden="true"></div>
-          <button id="edgeToggle" title="Show result panel" aria-label="Show result panel" aria-pressed="false"><span class="symbol edge" aria-hidden="true"></span><span class="tool-label">Result panel</span></button>
-          <button id="pin" title="Switch to compact view" aria-label="Switch to compact view"><span class="symbol pin" aria-hidden="true"></span><span class="tool-label">Compact view</span></button>
-        </div>
-      </header>
       <div class="content">
-        <section class="banner"><div class="hero"><span id="viewIcon" aria-hidden="true"><span class="symbol calendar"></span></span><div class="hero-text"><h1 id="pageTitle">Today</h1><div id="dateline"></div></div></div><button id="manual" class="add-task" title="Add a task (⌘N)"><span class="symbol plus" aria-hidden="true"></span><span>Add task</span></button></section>
-        <section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2></div><div id="latestCard"></div></section>
-        <div class="listhead"><div><h2 id="sectionTitle"></h2><span id="count"></span></div></div>
-        <div id="tasks"></div><div id="pool"></div>
+        <header class="mountain-cover">
+          <div class="mountain-art" aria-hidden="true"><i class="back-range"></i><i class="middle-range"></i><i class="front-hills"></i></div>
+          <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button>
+          <div class="cover-tools">
+            <button id="inboxButton" title="Open inbox"><span>Inbox</span><span id="inboxBadge" hidden></span></button>
+            <button id="searchTasks" aria-label="Search tasks" title="Search tasks (⌘F)"><span class="search-icon" aria-hidden="true"></span></button>
+            <button id="boardMore" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span aria-hidden="true">•••</span></button>
+          </div>
+        </header>
+        <div class="board-content">
+          <section class="page-heading">
+            <div class="heading-line"><span id="viewIcon" aria-hidden="true"></span><h1 id="pageTitle">Today</h1></div>
+            <div id="dateline"></div>
+            <button id="wrapUp" title="Review today's tasks">Wrap up</button>
+          </section>
+          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result">×</button></div><div id="latestCard"></div></section></div>
+          <div class="listhead"><div class="reader-only"><h2 id="sectionTitle"></h2><span id="count"></span></div><label class="sort-menu"><span aria-hidden="true">⇅</span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual order</option><option value="priority">Priority</option><option value="deadline">Deadline</option></select></label></div>
+          <div id="tasks"></div><div id="pool"></div>
+        </div>
       </div>
     </main>
   </div>
+  <div id="boardMenu" popover="auto" aria-label="Workspace options">
+    <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture tasks from a message</button>
+    <button id="manual"><span class="symbol plus" aria-hidden="true"></span>Add task</button>
+    <button id="peekLatest"><span class="symbol inbox" aria-hidden="true"></span>Latest result</button>
+    <button id="edgeToggle" aria-pressed="false"><span class="symbol edge" aria-hidden="true"></span><span>Show result panel</span></button>
+    <button id="pin" aria-label="Switch to compact view">Compact view</button>
+  </div>
   <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script>
+  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script>
 </body>
 </html>

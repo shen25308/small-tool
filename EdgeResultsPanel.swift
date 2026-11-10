@@ -71,6 +71,25 @@ final class EdgeResultsPanel: NSObject, WKScriptMessageHandler, WKNavigationDele
         if visible {panel.orderFrontRegardless()} else {panel.orderOut(nil)}
         onVisibility?(visible)
     }
+    // Run only when the user shows a window. Incoming results never move either surface.
+    func avoidCovering(_ note:NSRect, on screen:NSRect) {
+        let frame=panel.frame
+        guard frame.intersects(note) else {return}
+        let positions=[
+            NSPoint(x:note.maxX-frame.width,y:note.minY-frame.height-8),
+            NSPoint(x:note.minX-frame.width-8,y:note.maxY-frame.height),
+            NSPoint(x:note.maxX+8,y:note.maxY-frame.height)
+        ]
+        for position in positions {
+            let candidate=NSRect(origin:position,size:frame.size)
+            if screen.contains(candidate) {
+                panel.setFrameOrigin(position)
+                anchor=panel.frame
+                placedFrame=panel.frame
+                return
+            }
+        }
+    }
     func windowWillClose(_ notification:Notification){onVisibility?(false)}
     func windowDidMove(_ notification:Notification) {
         if panel.isVisible {UserDefaults.standard.set(NSStringFromRect(panel.frame),forKey:frameName)}
