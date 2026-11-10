@@ -1,0 +1,4 @@
+root ::= "[" ws (item (ws "," ws item)*)? ws "]"
+item ::= "{" ws "\"i\"" ws ":" ws [1-9] [0-9]? ws "," ws "\"title\"" ws ":" ws string ws "," ws "\"tag\"" ws ":" ws string ws "}"
+string ::= "\"" [^"\\\n\r]{1,100} "\""
+ws ::= [ \t\n]{0,3}

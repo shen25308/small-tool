@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>local.shishi.workdesk</string>
+	<key>CFBundleName</key>
+	<string>Shishi</string>
+	<key>CFBundleDisplayName</key>
+	<string>Shishi</string>
+	<key>CFBundleExecutable</key>
+	<string>ShiShi</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>9</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.5</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Shishi: Create Tasks from Selection</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>captureWork</string>
+			<key>NSPortName</key>
+			<string>Shishi</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+				<string>NSStringPboardType</string>
+			</array>
+			<key>NSRequiredContext</key>
+			<dict/>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Shishi: Save Selected AI Reply</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>collectAIResult</string>
+			<key>NSPortName</key>
+			<string>Shishi</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+				<string>NSStringPboardType</string>
+			</array>
+			<key>NSRequiredContext</key>
+			<dict/>
+		</dict>
+	</array>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+	</array>
+</dict>
+</plist>

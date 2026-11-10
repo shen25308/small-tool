@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'">
+  <link rel="stylesheet" href="symbols.css">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="results.css">
+  <title>Shishi</title>
+</head>
+<body>
+  <div id="shell">
+    <aside aria-label="Sidebar">
+      <div class="brand"><img src="icons/shishi.png" alt="" width="30" height="30"><b>Shishi</b></div>
+      <nav id="nav" aria-label="Lists"></nav>
+      <div class="side-heading"><span>Projects</span><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
+      <nav id="projects" aria-label="Projects"></nav>
+      <div class="side-bottom">
+        <button class="capture" id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture tasks</button>
+        <small><span class="symbol lock" aria-hidden="true"></span>Saved on this Mac</small>
+      </div>
+    </aside>
+    <main>
+      <header class="toolbar">
+        <div class="location"><button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button><span id="breadcrumb">Workspace</span><b id="crumbView">Today</b></div>
+        <div class="head-actions">
+          <button id="inboxButton" title="Open inbox"><span class="symbol inbox" aria-hidden="true"></span><span>Inbox</span><span id="inboxBadge" hidden>0</span></button>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <button id="edgeToggle" title="Show result panel" aria-label="Show result panel" aria-pressed="false"><span class="symbol edge" aria-hidden="true"></span><span class="tool-label">Result panel</span></button>
+          <button id="pin" title="Switch to compact view" aria-label="Switch to compact view"><span class="symbol pin" aria-hidden="true"></span><span class="tool-label">Compact view</span></button>
+        </div>
+      </header>
+      <div class="content">
+        <section class="banner"><div class="hero"><span id="viewIcon" aria-hidden="true"><span class="symbol calendar"></span></span><div class="hero-text"><h1 id="pageTitle">Today</h1><div id="dateline"></div></div></div><button id="manual" class="add-task" title="Add a task (⌘N)"><span class="symbol plus" aria-hidden="true"></span><span>Add task</span></button></section>
+        <section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2></div><div id="latestCard"></div></section>
+        <div class="listhead"><div><h2 id="sectionTitle"></h2><span id="count"></span></div></div>
+        <div id="tasks"></div><div id="pool"></div>
+      </div>
+    </main>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script>
+</body>
+</html>

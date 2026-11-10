@@ -1,0 +1,179 @@
+{
+  "checked_at_utc": "2026-11-10T05:40:53+00:00",
+  "app": "outputs/\u62fe\u4e8b.app",
+  "bundle_id": "local.shishi.workdesk",
+  "version": "1.3",
+  "minimum_macos": "26.0",
+  "main_architectures": [
+    "arm64"
+  ],
+  "website_distribution": "local_checks_failed",
+  "failed_local_checks": [
+    "developer_id_components"
+  ],
+  "checks": {
+    "bundle_signature_integrity": true,
+    "developer_id_components": false,
+    "includes_arm64_main": true,
+    "bundled_inference_executable": true,
+    "model_sha256_matches_pinned_weights": true,
+    "bundled_model_license_texts": true,
+    "bundled_python_launcher": true,
+    "bundled_python_executable": true,
+    "bundled_python_stdlib": true,
+    "bundled_python_notices": true,
+    "mail_and_github_helpers": true,
+    "absence_of_public_vault_cli": true
+  },
+  "model_sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+  "python_licenses": {
+    "cpython": true,
+    "openssl": true,
+    "upstream_licenses_found": 19,
+    "missing": [],
+    "archive_hash_documented": true
+  },
+  "licenses": {
+    "Qwen.txt": true,
+    "llama.cpp.txt": true,
+    "Components.txt": true
+  },
+  "signed_code": [
+    {
+      "path": ".",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true,
+        "hardened_runtime": false
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libggml-base.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libggml-blas.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libggml-cpu.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libggml-metal.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libggml-rpc.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libggml.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libllama-common.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libllama-completion-impl.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/libllama.0.dylib",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Frameworks/Inference/llama-completion",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true,
+        "hardened_runtime": false
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/Helpers/python3.12",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true,
+        "hardened_runtime": false
+      },
+      "pass": false
+    },
+    {
+      "path": "Contents/MacOS/shishi-python",
+      "checks": {
+        "developer_id_application_requirement": false,
+        "secure_timestamp": false,
+        "debug_entitlement_disabled": true,
+        "hardened_runtime": false
+      },
+      "pass": false
+    }
+  ],
+  "ticket_on_app": {
+    "status": "not_checked"
+  },
+  "distribution_file": {
+    "status": "not_supplied"
+  },
+  "external_evidence": {
+    "apple_notarization_submission": "not_queried",
+    "quarantined_install_on_clean_mac": "not_tested",
+    "google_production_registration_and_review": "not_inspected",
+    "microsoft_registration_and_target_tenant_consent": "not_inspected",
+    "private_keychain_channel_and_caller_boundary": "requires_separate_integration_test",
+    "real_mail_authorization_refresh_disconnect_erase": "not_tested",
+    "public_download_privacy_page_and_support": "not_inspected"
+  }
+}
