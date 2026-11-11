@@ -89,6 +89,10 @@ window.ResultUI = (() => {
       const open=element('button','mini-link',isMail?'Open email':isFeed?'View build':'Open conversation');
       open.type='button';open.onclick=()=>options.open(note);original.append(open);
     }
+    if(options.task) {
+      const follow=element('button','mini-link','Add Follow-up Task');
+      follow.type='button';follow.onclick=()=>options.task(note);original.append(follow);
+    }
     function expand(value) {
       button.setAttribute('aria-expanded',String(value));
       button.textContent=value?'Hide':isFeed?'Show record':'Show reply';

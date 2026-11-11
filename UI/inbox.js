@@ -31,8 +31,31 @@ window.setEdgeVisible=value=>{
 $('edgeToggle').onclick=()=>action(native('edgeVisibility',{value:!edgeShown}));
 const cardOptions={
   read:note=>action(native('readNotice',{key:note.id,channel:note.channel})),
-  open:note=>action(note.thread?native('openCodex',{thread:note.thread}):native('openConnectorLink',{key:note.id}))
+  open:note=>action(note.thread?native('openCodex',{thread:note.thread}):native('openConnectorLink',{key:note.id})),
+  // A finished result often leaves something to check. Keep it as a task for today.
+  task:note=>{
+    const title=ResultUI.digest(note).headline||note.title;
+    const follow=newTask({title:('Follow up: '+title).slice(0,240),planned:day(),source:(note.summary||'').slice(0,2400),quote:sourceName(note)+' · '+note.title});
+    action(change(state=>{follow.project=state.projects.includes(follow.project)?follow.project:state.projects[0];state.tasks.push(follow)}).then(()=>toast('Added to Today')));
+  }
 };
+function markAllRead() {
+  const unread=allNotices().filter(note=>!note.read);
+  action(unread.reduce((chain,note)=>chain.then(()=>native('readNotice',{key:note.id,channel:note.channel})),Promise.resolve()));
+}
+// Opens the inbox on one result, for example from the Agents list.
+function openNotice(id) {
+  selectedInboxSource='';
+  const position=allNotices().findIndex(note=>note.id===id);
+  if(position>=resultLimit)resultLimit=position+1;
+  inboxFromEdge=false;
+  listNotices();
+  const card=[...document.querySelectorAll('#inboxCards .result-card')].find(node=>node.dataset.notice===id);
+  if(!card)return;
+  const preview=card.querySelector('.result-preview');
+  if(preview?.getAttribute('aria-expanded')==='false')preview.click();
+  card.scrollIntoView({block:'start'});
+}
 function latestResult() {
   const latest=allNotices()[0];
   const slot=$('latestCard');
@@ -50,8 +73,9 @@ function latestResult() {
 }
 function listNotices() {
   if(!$('dialog').open || !$('inboxList')){
-    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="syncInbox" class="mini-link">Sync now</button><button id="connectors" class="secondary">Manage connectors</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',inboxFromEdge?{label:'Back to panel',back:returnToEdge}:{label:'Back to workspace',back:closeDialog});
+    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link">Mark All Read</button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Connections…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',inboxFromEdge?{label:'Panel',back:returnToEdge}:{});
     $('connectors').onclick=showConnectors;
+    $('readAll').onclick=markAllRead;
     $('olderResults').onclick=()=>{resultLimit+=30;listNotices()};
     $('syncInbox').onclick=()=>action(native('syncInboxes').then(()=>{
       lastManualScan=new Intl.DateTimeFormat('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
@@ -63,6 +87,7 @@ function listNotices() {
   if(!sources.includes(selectedInboxSource))selectedInboxSource='';
   const filtered=selectedInboxSource?all.filter(n=>sourceName(n)===selectedInboxSource):all;
   $('inboxCount').textContent=all.filter(n=>!n.read).length+' unread'+(lastManualScan?' · Synced at '+lastManualScan:'');
+  $('readAll').hidden=!all.some(n=>!n.read);
   const filters=$('sourceFilters');
   const filterKey=JSON.stringify([sources,selectedInboxSource]);
   if(filters.dataset.key!==filterKey){
@@ -95,31 +120,76 @@ function updateItems(channel,items) {
   ResultUI.retain(new Set(allNotices().map(note=>note.id)));
   inboxBadge();
   latestResult();
+  window.renderAgents?.();
+}
+function connectorRow(id,badge,icon,title,detail,extra='') {
+  return '<div class="group-row" id="'+id+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(icon)+'</span><span class="row-text"><b>'+title+'</b><small data-state>'+detail+'</small></span>'+extra+'</div>';
 }
 function showConnectors() {
   const fromGrok=allNotices().filter(n=>sourceName(n)==='Grok Bot');
-  const receipt=fromGrok.length?'Last received '+inboxDate(fromGrok[0].time):'Awaiting first result';
-  const status=inboxErrors.get('codex')?'Temporarily unavailable':'Checking…';
-  dialog('Connectors','<div class="connector-list"><section><h3>Mail and build updates</h3><div id="providerRows">Checking connections…</div><label class="toggle-label"><input type="checkbox" id="showEdgeMail" disabled>Show new mail in the result panel</label></section><section><h3>Codex <small id="codexState">'+status+'</small></h3><p>Shishi reads Codex sessions on this Mac and saves the final reply from each new turn. Your inbox keeps those replies after you disconnect.</p><button id="codexConnection" class="secondary" disabled>Check connection</button></section><section><h3>Grok Bot <small>'+esc(receipt)+'</small></h3><p>Copy the instructions into Grok Bot on your Mac. It can then run a local command to send a summary when a task finishes.</p><button id="copyGrok" class="secondary">Copy Grok Bot instructions</button></section><section><h3>Other AI apps (MCP)</h3><p>Add Shishi to an app that supports local MCP servers, then ask it to send the result when its task finishes.</p><button id="copyMCP" class="secondary">Copy MCP configuration</button></section></div>',{label:'Back to inbox',back:listNotices});
+  const receipt=fromGrok.length?'Last received '+inboxDate(fromGrok[0].time):'Sends a summary when a task finishes';
+  dialog('Connections','<div class="connector-list">'+
+    '<h3>Coding agents</h3><div class="group-box">'+
+    connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>')+
+    connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>')+
+    connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>')+
+    connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>')+
+    '</div><p>Claude Code and Codex show up under Agents while they work. Each finished turn leaves its reply in the inbox, without a notification.</p>'+
+    '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
+    '<h3>Mail and builds</h3><div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div>'+
+    '<h3>Shishi</h3><div class="group-box">'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Show status in the menu bar</b><small>Agent progress and unread results stay visible after the window closes.</small></span><input type="checkbox" id="menuBarChoice" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Show new mail in the result panel</b></span><input type="checkbox" id="showEdgeMail" disabled></label>'+
+    '</div></div>',{label:'Inbox',back:listNotices});
   ProviderUI.rows();
-  const mailChoice=$('showEdgeMail');
-  action(native('edgeMailPreference').then(value=>{
-    if(!mailChoice.isConnected)return;
-    mailChoice.checked=value;mailChoice.disabled=false;
-    mailChoice.onchange=()=>action(native('edgeMailPreference',{value:mailChoice.checked}).catch(error=>{mailChoice.checked=!mailChoice.checked;throw error}));
-  }));
-  const connectButton=$('codexConnection'), badge=$('codexState');
+  const bind=(box,op)=>{
+    action(native(op).then(value=>{
+      if(!box.isConnected)return;
+      box.checked=!!value;box.disabled=false;
+      box.onchange=()=>action(native(op,{value:box.checked}).catch(error=>{box.checked=!box.checked;throw error}));
+    }));
+  };
+  bind($('showEdgeMail'),'edgeMailPreference');
+  bind($('menuBarChoice'),'menuBar');
+
+  const connectButton=$('codexConnection'), badge=$('codexRow').querySelector('[data-state]');
   function setCodex(enabled) {
     if(!connectButton.isConnected)return;
-    badge.textContent=enabled?(inboxErrors.get('codex')?'Temporarily unavailable':'Enabled'):'Not connected';
+    badge.textContent=enabled?(inboxErrors.get('codex')?'Temporarily unavailable':'Connected · reads finished turns from sessions on this Mac'):'Not connected';
     connectButton.disabled=false;
-    connectButton.textContent=enabled?'Disconnect Codex':'Connect local Codex';
+    connectButton.textContent=enabled?'Disconnect':'Connect';
     connectButton.onclick=()=>{
       connectButton.disabled=true;
       action(native('codexConnection',{enabled:!enabled}).then(setCodex).finally(()=>{connectButton.disabled=false}));
     };
   }
   action(native('codexConnection').then(setCodex));
+
+  const claudeButton=$('claudeConnection'), claudeState=$('claudeRow').querySelector('[data-state]');
+  function setClaude(state) {
+    if(!claudeButton.isConnected)return;
+    claudeState.textContent=state.problem||(state.installed?'Connected · live status and finished replies':state.cli?'Not connected':'Not connected · the claude command was not found');
+    claudeButton.disabled=false;
+    const repair=state.installed&&!state.working;
+    claudeButton.textContent=repair?'Repair':state.installed?'Disconnect':'Connect';
+    claudeButton.onclick=()=>{
+      claudeButton.disabled=true;
+      action(native('claudeCode',{action:state.installed&&!repair?'remove':'install'}).then(next=>{
+        setClaude(next);
+        if(next.working&&!state.installed)toast('Claude Code is connected. Finish a turn to see it here.');
+      }).finally(()=>{claudeButton.disabled=false}));
+    };
+  }
+  action(native('claudeCode',{action:'status'}).then(setClaude).catch(error=>{
+    if(claudeState.isConnected)claudeState.textContent=error.message;
+    throw error;
+  }));
+
+  $('notionRow').onclick=()=>showNotion();
+  action(native('notion',{action:'status'}).then(state=>{
+    const label=$('notionRow')?.querySelector('[data-state]');
+    if(label)label.textContent=state.connected&&data.notion?'Syncing “'+data.notion.title+'” with the list “'+projectLabel(data.notion.project)+'”':'Sync a list with a Notion database';
+  }));
 
   const configure=(button,kind)=>{button.onclick=()=>action(native('copyConnectorSetup',{kind}).then(()=>{button.textContent='Copied'}))};
   configure($('copyGrok'),'grokBot');

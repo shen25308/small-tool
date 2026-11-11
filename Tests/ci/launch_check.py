@@ -40,8 +40,37 @@ def hook(**event):
                    text=True, check=True, timeout=30)
 
 
-def shot(name):
-    subprocess.run(["screencapture", "-x", str(shots / name)], check=False, timeout=30)
+FIND_WINDOW = """
+import CoreGraphics
+let pid = Int32(CommandLine.arguments[1])!
+let info = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+var best = (id: 0, area: 0.0)
+for window in info where (window[kCGWindowOwnerPID as String] as? Int32) == pid {
+    guard let bounds = window[kCGWindowBounds as String] as? [String: Double],
+          let id = window[kCGWindowNumber as String] as? Int else { continue }
+    let area = (bounds["Width"] ?? 0) * (bounds["Height"] ?? 0)
+    if area > best.area { best = (id, area) }
+}
+print(best.id)
+"""
+
+
+def window_id(process):
+    script = FIND_WINDOW.replace("CommandLine.arguments[1]", '"' + str(process.pid) + '"')
+    try:
+        out = subprocess.run(["xcrun", "swift", "-"], input=script, capture_output=True, text=True, timeout=120)
+        return int(out.stdout.strip() or 0)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return 0
+
+
+def shot(name, process=None):
+    """Capture the app window alone when possible, otherwise the whole screen."""
+    wid = window_id(process) if process else 0
+    command = ["screencapture", "-x", "-o", "-l", str(wid)] if wid else ["screencapture", "-x"]
+    result = subprocess.run(command + [str(shots / name)], check=False, timeout=30)
+    if result.returncode and wid:
+        subprocess.run(["screencapture", "-x", str(shots / name)], check=False, timeout=30)
 
 
 def launch(*flags):
@@ -66,22 +95,22 @@ hook(hook_event_name="Stop", session_id="ci-finished", prompt_id="p1",
      last_assistant_message="Updated `billing.py` and added 12 tests. All checks pass.")
 
 workspace = launch("--workspace")
-shot("workspace.png")
+shot("workspace.png", workspace)
 # A new state while the app runs must be picked up from the watched folder.
 hook(hook_event_name="Notification", notification_type="permission_prompt",
      message="Claude needs your permission to use Bash")
 time.sleep(3)
-shot("workspace-needs-you.png")
+shot("workspace-needs-you.png", workspace)
 if workspace.poll() is not None:
     raise SystemExit("Shishi exited while receiving an agent update.")
 stop(workspace)
 
 today = launch("--compact-workspace")
-shot("today.png")
+shot("today.png", today)
 stop(today)
 
 inbox = launch("--workspace", "--open-inbox")
-shot("inbox.png")
+shot("inbox.png", inbox)
 stop(inbox)
 
 status = subprocess.run([str(python), "-B", str(resources / "ClaudeCode/install.py"), "install", "--json",

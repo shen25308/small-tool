@@ -10,51 +10,67 @@
   <link rel="stylesheet" href="results.css">
   <link rel="stylesheet" href="board.css">
   <link rel="stylesheet" href="task-list.css">
-  <title>My Notes · Shishi</title>
+  <title>Shishi</title>
 </head>
 <body>
   <div id="shell">
     <aside aria-label="Sidebar">
-      <h2 class="side-title">My notes</h2>
-      <nav id="nav" aria-label="Lists"></nav>
-      <div class="side-heading"><h2>Projects</h2><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
-      <nav id="projects" aria-label="Projects"></nav>
-      <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
-      <nav id="labels" aria-label="Tags"></nav>
+      <div class="side-scroll">
+        <button id="sideSearch" class="side-search" title="Search and commands (⌘K)"><span class="symbol i-search" aria-hidden="true"></span>Search<kbd>⌘K</kbd></button>
+        <nav id="nav" class="smart-grid" aria-label="Lists"></nav>
+        <div class="side-heading"><h2>My Lists</h2><button id="newProject" title="New list" aria-label="New list"><span class="symbol plus" aria-hidden="true"></span></button></div>
+        <nav id="projects" aria-label="My lists"></nav>
+        <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
+        <nav id="labels" aria-label="Tags"></nav>
+      </div>
+      <section id="agentDock" class="agent-dock" aria-label="Agents">
+        <h2>Agents</h2>
+        <div id="agentList"></div>
+      </section>
     </aside>
     <main>
+      <header class="toolbar">
+        <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button>
+        <div class="toolbar-tools">
+          <button id="focusButton" class="tool" title="Focus timer" aria-label="Focus timer" aria-haspopup="dialog"><span class="symbol i-timer" aria-hidden="true"></span><span id="focusTime" hidden></span></button>
+          <button id="inboxButton" class="tool" title="Inbox" aria-label="Inbox"><span class="symbol inbox" aria-hidden="true"></span><span id="inboxBadge" hidden></span></button>
+          <button id="searchTasks" class="tool" aria-label="Search and commands" title="Search and commands (⌘K)"><span class="symbol i-search" aria-hidden="true"></span></button>
+          <button id="boardMore" class="tool" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span class="symbol i-ellipsis" aria-hidden="true"></span></button>
+        </div>
+      </header>
       <div class="content">
-        <header class="mountain-cover">
-          <div class="mountain-art" aria-hidden="true"><i class="back-range"></i><i class="middle-range"></i><i class="front-hills"></i></div>
-          <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button>
-          <div class="cover-tools">
-            <button id="inboxButton" title="Open inbox"><span>Inbox</span><span id="inboxBadge" hidden></span></button>
-            <button id="searchTasks" aria-label="Search tasks" title="Search tasks (⌘F)"><span class="search-icon" aria-hidden="true"></span></button>
-            <button id="boardMore" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span aria-hidden="true">•••</span></button>
-          </div>
-        </header>
-        <div class="board-content">
+        <div class="board-content" id="board">
           <section class="page-heading">
-            <div class="heading-line"><span id="viewIcon" aria-hidden="true"></span><h1 id="pageTitle">Today</h1></div>
+            <div class="heading-line"><h1 id="pageTitle">Today</h1><span id="pageCount"></span></div>
             <div id="dateline"></div>
-            <button id="wrapUp" title="Review today's tasks">Wrap up</button>
+            <button id="wrapUp" class="secondary" title="Review today's tasks">Wrap Up</button>
           </section>
-          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result">×</button></div><div id="latestCard"></div></section></div>
-          <div class="listhead"><div class="reader-only"><h2 id="sectionTitle"></h2><span id="count"></span></div><label class="sort-menu"><span aria-hidden="true">⇅</span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual order</option><option value="priority">Priority</option><option value="deadline">Deadline</option></select></label></div>
+          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result"><span class="symbol close-icon" aria-hidden="true"></span></button></div><div id="latestCard"></div></section></div>
+          <div class="listhead"><label class="sort-menu"><span class="symbol i-sort" aria-hidden="true"></span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual</option><option value="priority">Priority</option><option value="deadline">Deadline</option><option value="title">Title</option></select></label></div>
           <div id="tasks"></div><div id="pool"></div>
         </div>
       </div>
+      <footer id="agentBar" aria-label="Agents"></footer>
     </main>
   </div>
   <div id="boardMenu" popover="auto" aria-label="Workspace options">
-    <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture tasks from a message</button>
-    <button id="manual"><span class="symbol plus" aria-hidden="true"></span>Add task</button>
-    <button id="peekLatest"><span class="symbol inbox" aria-hidden="true"></span>Latest result</button>
+    <button id="manual"><span class="symbol plus" aria-hidden="true"></span>New Task<span class="shortcut">⌘N</span></button>
+    <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture Tasks from a Message</button>
+    <div class="menu-divider"></div>
+    <button id="peekLatest"><span class="symbol i-bolt" aria-hidden="true"></span>Latest Result</button>
     <button id="edgeToggle" aria-pressed="false"><span class="symbol edge" aria-hidden="true"></span><span>Show result panel</span></button>
+    <button id="openConnectors"><span class="symbol i-link" aria-hidden="true"></span>Connections…</button>
+    <div class="menu-divider"></div>
+    <button id="exportTasks"><span class="symbol i-copy" aria-hidden="true"></span>Copy Tasks as Markdown</button>
     <button id="pin" aria-label="Switch to compact view">Compact view</button>
   </div>
   <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
+  <dialog id="palette" aria-label="Search and commands">
+    <div class="palette-field"><span class="symbol i-search" aria-hidden="true"></span><input id="paletteInput" type="text" placeholder="Search tasks, lists and commands" autocomplete="off" spellcheck="false" aria-controls="paletteList"></div>
+    <div id="paletteList" role="listbox"></div>
+  </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script>
+  <script src="task-logic.js"></script><script src="notion-sync.js"></script>
+  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="notion-ui.js"></script>
 </body>
 </html>

@@ -1,195 +1,132 @@
-/* Task rows, chips and their contextual editors share the same colors. */
-:root {
-  --check-green: #399177;
-  --priority-red: #aa465a;
-  --priority-gold: #926120;
-  --priority-slate: #677584;
-  --tone-0: #936246;
-  --tone-1: #a44866;
-  --tone-2: #466d92;
-  --tone-3: #896720;
-  --tone-4: #70628d;
-  --tone-5: #3c796c;
-  --tone-6: #8c5769;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --check-green: #367d69;
-    --priority-red: #ae465a;
-    --priority-gold: #94611d;
-    --priority-slate: #626f7c;
-    --tone-0: #ecba9d;
-    --tone-1: #eea2b4;
-    --tone-2: #a4cdec;
-    --tone-3: #efcc86;
-    --tone-4: #cfc2f0;
-    --tone-5: #99d4c2;
-    --tone-6: #e8aac4;
-  }
-}
-
-.tag-tone-0 { --tag-color: var(--tone-0) }
-.tag-tone-1 { --tag-color: var(--tone-1) }
-.tag-tone-2 { --tag-color: var(--tone-2) }
-.tag-tone-3 { --tag-color: var(--tone-3) }
-.tag-tone-4 { --tag-color: var(--tone-4) }
-.tag-tone-5 { --tag-color: var(--tone-5) }
-.tag-tone-6 { --tag-color: var(--tone-6) }
-
-.task-list, .task-group { min-width: 0 }
-.task-list.drop { padding: 2px 0 3px; min-height: 42px; border-radius: 4px }
-.task-empty.empty { margin: 0; padding: 7px 3px 4px; background: none; color: var(--muted); font: 12px/1.55 var(--sans) }
-.row, body.compact .row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 31px;
-  padding: 3px 2px;
-  border-radius: 4px;
-}
-.row::after { display: none }
+/* Task rows */
+.task-list { min-height: 30px }
+.row { position: relative; display: flex; align-items: flex-start; gap: 9px; padding: 6px 4px 6px 2px; border-radius: 7px }
+.row::after { content: ""; position: absolute; left: 30px; right: 0; bottom: 0; height: .5px; background: var(--hairline); pointer-events: none }
 .row:hover { background: var(--hover) }
-.row .task-body {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  padding: 2px 0;
-  margin: 0;
-  text-align: left;
+.row:hover::after, .row:has(+ .row:hover)::after { opacity: 0 }
+.row.dragging { opacity: .45 }
+.row.over { box-shadow: inset 0 2px 0 var(--action) }
+.check {
+  position: relative; flex: none; width: 19px; height: 19px; margin-top: 1px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--faint); color: transparent;
 }
-.row .task-body:hover { background: none }
-.row .title { font: 500 13px/1.4 var(--sans); overflow-wrap: anywhere }
-.row.done .title { text-decoration: line-through; color: var(--muted) }
-.row .check, body.compact .row .check {
-  width: 14px;
-  height: 14px;
-  border: 1px solid color-mix(in srgb,var(--muted) 62%,var(--paper));
-  border-radius: 3px;
-  background: transparent;
-  font: 700 11px/1 var(--sans);
+.check:hover { box-shadow: inset 0 0 0 1.5px var(--view-color, var(--action)) }
+.check:focus-visible { box-shadow: inset 0 0 0 1.5px var(--action), var(--focus) }
+.done .check { box-shadow: inset 0 0 0 1.5px var(--view-color, var(--action)) }
+.done .check::after { content: ""; position: absolute; inset: 3.5px; border-radius: 50%; background: var(--view-color, var(--action)) }
+.priority {
+  flex: none; margin-top: 2px; padding: 0 5px; border-radius: 4px; background: var(--control); color: var(--muted);
+  font: 600 10.5px/17px var(--sans); font-variant-numeric: tabular-nums;
 }
-.row.done .check, .row.done .check:hover, body.compact .row.done .check {
-  border-color: var(--check-green);
-  background: var(--check-green);
-  color: white;
+.priority.p0 { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--danger) }
+.priority.p1 { background: color-mix(in srgb, var(--orange) 18%, transparent); color: var(--warning) }
+.priority.p2 { display: none }
+.row:hover .priority.p2, .row:focus-within .priority.p2, .picker-options .priority.p2 { display: inline-block }
+.task-body { flex: 1; min-width: 0; padding: 0; border-radius: 4px; text-align: left }
+.title { display: block; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere }
+.row.done .title { color: var(--muted) }
+.row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; margin-top: 1px; color: var(--muted); font-size: 11.5px; line-height: 1.4 }
+.row-meta span { display: inline-flex; align-items: center; gap: 3px; min-width: 0 }
+.row-meta .symbol { width: 11px; height: 11px }
+.row-meta .meta-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100% }
+.row-trail { display: flex; flex: none; align-items: center; gap: 5px; max-width: 58%; margin-top: 1px }
+.task-tag, .task-deadline, .planned-day {
+  flex: none; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 7px; border-radius: 999px; font-size: 11.5px; line-height: 18px;
 }
-.row .check:focus-visible, .inline-add:focus-visible, .group-toggle:focus-visible, .task-picker button:focus-visible { outline: 2px solid var(--blue) }
-.row .priority, .task-picker .priority {
-  flex: none;
-  border: 0;
-  border-radius: 3px;
-  padding: 1px 4px;
-  color: white;
-  background: var(--priority-slate);
-  font: 600 10px/14px var(--sans);
-  letter-spacing: .015em;
-}
-.row .priority.p0, .task-picker .priority.p0 { background: var(--priority-red); color: white }
-.row .priority.p1, .task-picker .priority.p1 { background: var(--priority-gold); color: white }
-.row.done .priority { opacity: .75 }
-.task-tag {
-  display: inline-block;
-  flex: 0 0 auto;
-  max-width: min(126px,24%);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 1px 5px;
-  border: 0;
-  border-radius: 3px;
-  color: var(--tag-color,var(--muted));
-  background: color-mix(in srgb,var(--tag-color,var(--muted)) 14%,var(--paper));
-  font: 500 11px/15px var(--sans);
-  text-align: left;
-}
-.task-tag.no-tag, .row .rowAction, .task-deadline.no-deadline {
-  color: var(--muted);
-  background: none;
-  opacity: 0;
-}
-.row:hover :is(.no-tag,.rowAction,.no-deadline),
-.row:focus-within :is(.no-tag,.rowAction,.no-deadline) { opacity: 1 }
-.row .rowAction { margin-left: auto; padding: 2px 3px; font-size: 11px; white-space: nowrap }
-.row .planned-day, .task-deadline { flex: none; font: 500 10px/15px var(--sans); color: var(--muted) }
-.task-deadline {
-  padding: 1px 4px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-.task-deadline.has-deadline { color: var(--tone-0); background: color-mix(in srgb,var(--tone-0) 9%,var(--paper)) }
-.clock-mark { display: block; width: 12px; height: 12px; border: 1px solid currentColor; border-radius: 50% }
-.clock-mark::before { content: ""; display: block; margin: 2px 0 0 4px; width: 3px; height: 4px; border: solid currentColor; border-width: 0 0 1px 1px }
+.task-tag { background: color-mix(in srgb, var(--tag-color, var(--gray)) 14%, transparent); color: color-mix(in srgb, var(--tag-color, var(--gray)) 72%, var(--ink)) }
+.task-deadline.has-deadline { display: inline-flex; align-items: center; gap: 3px; background: var(--control); color: var(--secondary); font-variant-numeric: tabular-nums }
+.task-deadline.overdue { background: color-mix(in srgb, var(--red) 13%, transparent); color: var(--danger) }
+.task-deadline .symbol { width: 11px; height: 11px }
+.planned-day { padding: 0 2px; color: var(--muted) }
+.planned-day.late { color: var(--danger) }
+.no-tag, .no-deadline, .rowAction { opacity: 0; color: var(--muted); background: none; padding: 0 4px }
+.no-deadline { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0 }
+.no-deadline .symbol { width: 13px; height: 13px }
+.row:hover .no-tag, .row:hover .no-deadline, .row:hover .rowAction,
+.row:focus-within .no-tag, .row:focus-within .no-deadline, .row:focus-within .rowAction { opacity: 1 }
+.no-tag:hover, .no-deadline:hover, .rowAction:hover { color: var(--ink); background: var(--pressed) }
+.rowAction { color: var(--blue); font-size: 11.5px; line-height: 18px; border-radius: 999px; padding: 0 7px }
+.tag-tone-0 { --tag-color: var(--brown) }
+.tag-tone-1 { --tag-color: var(--red) }
+.tag-tone-2 { --tag-color: var(--action) }
+.tag-tone-3 { --tag-color: var(--orange) }
+.tag-tone-4 { --tag-color: var(--purple) }
+.tag-tone-5 { --tag-color: var(--green) }
+.tag-tone-6 { --tag-color: var(--pink) }
+.picker-options .task-tag, .picker-options .priority { margin: 0 }
+.picker-options button:hover .task-tag, .picker-options button:focus-visible .task-tag,
+.picker-options button:hover .priority, .picker-options button:focus-visible .priority { background: rgba(255,255,255,.22); color: #fff }
 
-.task-group { margin: 14px 0 0 }
-.group-toggle, .inline-add { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); text-align: left }
-.group-toggle { max-width: 100%; margin-bottom: 2px; padding: 3px 4px 3px 1px; border-radius: 4px; color: var(--ink); font: 620 13px/18px var(--sans) }
-.group-toggle .symbol { width: 13px; height: 13px; color: var(--muted) }
-.group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.group-count { font: 500 10px/15px var(--sans); color: var(--muted) }
-.disclosure { width: 6px; height: 6px; flex: none; margin: 0 3px; border: solid var(--muted); border-width: 0 1px 1px 0; transform: rotate(-45deg) }
-.group-toggle[aria-expanded=true] .disclosure { transform: rotate(45deg) translate(-1px,-1px) }
-.task-group > div { padding-left: 16px }
-.inline-add { padding: 4px 5px 4px 2px; font: 500 12px/17px var(--sans) }
-.inline-add span { display: inline-block; width: 14px; text-align: center; font-size: 16px; font-weight: 400 }
-.new-group { margin-top: 14px }
-.task-filters { margin-top: 2px }
-.task-picker {
-  position: fixed;
-  inset: auto;
-  z-index: 10;
-  margin: 0;
-  padding: 5px;
-  width: min(196px,calc(100vw - 12px));
-  max-height: min(320px,calc(100vh - 12px));
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: var(--shadow);
+/* Inline creation */
+.inline-add {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 4px 6px 2px; border-radius: 7px;
+  color: var(--muted); font-size: 13.5px; text-align: left;
 }
-.task-picker form { margin: 0 }
-.task-picker input { font-size: 12px; min-height: 28px }
-.picker-options { display: grid; gap: 1px }
-.task-picker form + .picker-options { margin-top: 4px }
-.picker-options button { display: flex; align-items: center; justify-content: space-between; min-height: 25px; padding: 2px 5px; text-align: left; font-size: 12px; overflow-wrap: anywhere }
-.picker-options .task-tag { max-width: 88% }
-.picker-options .chosen { color: var(--muted) }
-.picker-options .clear-tag { margin-top: 3px; border-top: 1px solid var(--hairline); border-radius: 0; color: var(--muted) }
-.deadline-picker { width: min(244px,calc(100vw - 12px)); padding: 12px }
-.deadline-picker h3 { margin: 0 0 7px; font-size: 13px }
-.deadline-picker label { margin: 6px 0; font-size: 11px }
-.deadline-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 10px }
-.deadline-actions .mini-link { margin-right: auto; font-size: 11px; padding: 2px }
-#candidates .subhead { margin: 16px 0 5px }
-#candidates .candidate { padding: 9px 11px; margin: 6px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--control) }
-#candidates .candidate-title { font-weight: 550 }
-#candidates .candidate-source { margin: 6px 0 0 }
-.candidate-source summary { cursor: pointer; color: var(--muted); font-size: 11px }
-#candidates .formgrid { grid-template-columns: 1.1fr 1fr .7fr; gap: 6px }
-#candidates .formgrid label { margin-top: 5px }
-@media (max-width: 450px) {
-  .row, body.compact .row { flex-wrap: wrap; gap: 3px 5px }
-  .row .task-body { max-width: calc(100% - 52px) }
-  .row .planned-day, .row .has-deadline { font-size: 9px }
+.inline-add:hover { background: var(--hover); color: var(--ink) }
+.inline-add .symbol { width: 19px; height: 19px; padding: 3px; color: var(--faint) }
+.inline-add:hover .symbol { color: var(--view-color, var(--action)) }
+.quick-add { display: grid; grid-template-columns: 19px minmax(0, 1fr); column-gap: 9px; align-items: center; margin: 0; padding: 4px 4px 6px 2px }
+.quick-add .check { margin: 0; box-shadow: inset 0 0 0 1.5px var(--faint) }
+.quick-add input { min-height: 26px; padding: 0; background: none; box-shadow: none; font-size: 13.5px }
+.quick-hint { grid-column: 2; display: flex; flex-wrap: wrap; gap: 5px; min-height: 18px; color: var(--muted); font-size: 11.5px }
+.chip { display: inline-flex; align-items: center; gap: 3px; padding: 0 7px; border-radius: 999px; background: var(--tint); color: var(--blue); line-height: 18px }
+.chip .symbol { width: 11px; height: 11px }
+.new-group { margin-top: 10px }
+
+/* Sections inside a list */
+.task-group, .day-group { margin-top: 18px }
+.group-toggle, .day-head {
+  display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 4px 4px 2px; border-radius: 6px; text-align: left;
+  border-bottom: .5px solid var(--hairline); border-bottom-left-radius: 0; border-bottom-right-radius: 0;
 }
-@media (prefers-contrast: more) {
-  .row .check { border-color: var(--ink) }
-  .task-tag { outline: 1px solid var(--tag-color,var(--muted)) }
+.group-toggle:hover { background: var(--hover) }
+.group-name, .day-head h3 { font: 700 15px/1.3 var(--rounded); color: var(--list-color, var(--ink)) }
+.group-count, .day-head span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
+.day-head span { margin-left: auto }
+.day-head.is-overdue h3 { color: var(--danger) }
+.disclosure { width: 12px; height: 12px; margin-left: auto; color: var(--muted); transition: transform .15s; --glyph: var(--g-chevron-right) }
+.group-toggle[aria-expanded="true"] .disclosure { transform: rotate(90deg) }
+.task-group.over, .day-group.over, .task-list.over { border-radius: 8px; box-shadow: 0 0 0 2px var(--action); background: var(--tint) }
+.day-empty { padding: 5px 30px; color: var(--faint); font-size: 12.5px }
+.task-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 30px 12px 18px }
+.task-empty .symbol { width: 30px; height: 30px; color: var(--faint) }
+
+/* Task details */
+.subtask-list { display: grid; gap: 4px; margin-top: 4px }
+.subtask-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 22px; align-items: center; gap: 7px }
+.subtask-row input[type="text"] { background: none; box-shadow: none; padding: 2px 0; border-radius: 0; border-bottom: .5px solid var(--hairline) }
+.subtask-row input[type="text"]:focus { box-shadow: none; border-bottom-color: var(--action) }
+.subtask-row button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted) }
+.subtask-row button:hover { background: var(--pressed); color: var(--ink) }
+.subtask-row .symbol { width: 10px; height: 10px }
+.field-title { margin-top: 0 }
+.field-title input { min-height: 30px; font-size: 15px; font-weight: 600 }
+.notion-line { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--muted); font-size: 12px }
+
+/* Search results inside sheets */
+#searchMatches { display: grid; gap: 1px; margin-top: 8px }
+
+/* Floating Today window */
+body.compact #shell { grid-template-columns: minmax(0, 1fr) }
+body.compact aside { display: none }
+body.compact .toolbar { min-height: 30px; padding: 0 6px 0 12px }
+body.compact .tool { height: 26px; min-width: 28px }
+body.compact .board-content { padding: 0 12px 16px }
+body.compact #pageTitle, body.compact #pageCount { font-size: 21px }
+body.compact #dateline { font-size: 11.5px }
+body.compact .page-heading { padding-bottom: 4px }
+body.compact #wrapUp { min-height: 22px; padding: 1px 9px; font-size: 12px }
+body.compact .listhead { display: none }
+body.compact .title { font-size: 13px }
+body.compact .row { gap: 8px; padding: 5px 2px 5px 0 }
+/* In the narrow window the tag and deadline wrap under the title instead of being clipped. */
+body.compact .row { flex-wrap: wrap }
+body.compact .task-body { flex: 1 1 150px }
+body.compact .row-trail { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; margin-left: auto }
+body.compact .task-tag, body.compact .task-deadline { max-width: 150px }
+body.compact .task-group { margin-top: 14px }
+body.compact #agentBar:not(:empty) { display: block }
+@media (max-width: 380px) {
+  .row-trail .planned-day, .row-trail .no-tag, .row-trail .rowAction { display: none }
 }
-body.compact .row {
-  flex-wrap: nowrap;
-  min-height: 25px;
-  gap: 5px;
-  padding: 2px 1px;
-}
-body.compact .row .task-body { min-width: 22px; max-width: none; flex: 0 1 auto; padding: 1px 0 }
-body.compact .row .title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px }
-body.compact .row .task-tag { max-width: 21%; font-size: 10px; padding: 0 3px }
-body.compact .row .task-deadline.has-deadline { max-width: 26%; overflow:hidden; text-overflow:ellipsis; font-size:9px; padding-inline:2px }
-body.compact .row:not(:hover):not(:focus-within) :is(.no-tag,.no-deadline,.rowAction) {
-  position:absolute; right:0; width:1px; height:1px; padding:0; overflow:hidden; pointer-events:none;
-}
-body.compact #pool { display: block }
-body.compact .task-group { margin-top: 10px }

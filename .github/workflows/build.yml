@@ -26,8 +26,20 @@ jobs:
       - name: Python connector tests
         run: python3 -m unittest discover -s Tests -v
       - name: UI logic tests
+        run: node --test Tests/*.test.mjs
+      - name: UI checks in a browser
         run: |
-          if ls Tests/*.test.mjs >/dev/null 2>&1; then node --test Tests/*.test.mjs; fi
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node Tests/ui/check.mjs ui-screenshots
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: ui-screenshots
+          if-no-files-found: ignore
+          retention-days: 7
 
   app:
     name: Build Shishi.app

@@ -21,7 +21,8 @@ const ProviderUI = (() => {
     const entries=Object.entries(names).map(([provider,name])=>{
       const list=accounts.filter(a=>a.provider===provider);
       const state=provider==='github'?(git?.connected?git.repo:git?'Not connected':'Check status'):(list.length?list.map(a=>a.email).join(', '):mail?'Not connected':'Check status');
-      return '<button type="button" class="provider-row" data-provider="'+provider+'"><span><b>'+esc(name)+'</b><small>'+esc(state)+'</small></span><span aria-hidden="true">›</span></button>';
+      const badge=provider==='github'?'var(--purple)':provider==='gmail'?'var(--red)':'var(--action)';
+      return '<button type="button" class="group-row provider-row" data-provider="'+provider+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(provider==='github'?'i-bolt':'i-note')+'</span><span class="row-text"><b>'+esc(name)+'</b><small>'+esc(state)+'</small></span>'+symbol('i-chevron-right chev')+'</button>';
     });
     mount.innerHTML=entries.join('');
     mount.onclick=e=>{const button=e.target.closest('[data-provider]');if(!button)return;
@@ -32,7 +33,7 @@ const ProviderUI = (() => {
   function mailbox(provider,accounts,registered=false) {
     const accountRows=accounts.map(a=>'<div class="account-row"><b>'+esc(a.email)+'</b><p>'+esc(stateLabel(a))+' · '+esc(a.sender?'Only from '+a.sender:'All new mail')+'</p>'+(a.error?'<p class="feedback">'+esc(a.error)+'</p>':'')+'<button class="mini-link" type="button" data-edit="'+esc(a.id)+'">Message filter</button><button class="mini-link" type="button" data-remove="'+esc(a.id)+'">Disconnect</button></div>').join('');
     const registration=registered?'':provider==='gmail'?'This beta uses your Google desktop app credentials. Click Connect account and select the OAuth JSON file from Google Cloud.':'This beta uses your registered Microsoft desktop app. Click Connect account and enter its public client ID.';
-    dialog(names[provider]+' accounts',accountRows+(registration?'<p class="hint">'+registration+'</p>':'')+'<p class="hint">Sign in with your email provider to receive the subject, sender, and arrival time of new messages. Shishi stores the access tokens in this Mac’s Keychain.</p><form id="accountForm"><label>Messages to receive<select id="mailScope"><option value="sender">Specific sender</option><option value="all">All new mail</option></select></label><label id="senderLabel">Sender email address<input id="senderAddress" type="email" required autocomplete="off" placeholder="name@example.com"></label><p id="providerFeedback" class="feedback" role="status"></p><div class="actions"><button type="submit" class="primary">Connect account</button></div></form>',{label:'Back to connectors',back:showConnectors});
+    dialog(names[provider]+' accounts',accountRows+(registration?'<p class="hint">'+registration+'</p>':'')+'<p class="hint">Sign in with your email provider to receive the subject, sender, and arrival time of new messages. Shishi stores the access tokens in this Mac’s Keychain.</p><form id="accountForm"><label>Messages to receive<select id="mailScope"><option value="sender">Specific sender</option><option value="all">All new mail</option></select></label><label id="senderLabel">Sender email address<input id="senderAddress" type="email" required autocomplete="off" placeholder="name@example.com"></label><p id="providerFeedback" class="feedback" role="status"></p><div class="actions"><button type="submit" class="primary">Connect account</button></div></form>',{label:'Connections',back:showConnectors});
     $('mailScope').onchange=()=>{const one=$('mailScope').value==='sender';$('senderLabel').hidden=!one;$('senderAddress').required=one};
     const form=$('accountForm');
     form.onsubmit=async e=>{
@@ -49,7 +50,7 @@ const ProviderUI = (() => {
   function accountAction(provider,account,remove,back){
     if(!account)return;
     const fields=remove?'<p class="hint">Disconnecting stops sync and removes this account’s token from your Mac.</p><label class="toggle-label"><input type="checkbox" id="mailPurge">Also remove this account’s messages from the Shishi inbox</label>':'<label>Specific sender<input id="senderAddress" type="email" value="'+esc(account.sender||'')+'" placeholder="Leave blank to receive all new mail"></label>';
-    dialog(remove?'Disconnect account':'Message filter','<p>'+esc(account.email)+'</p><form id="editProvider">'+fields+'<p class="feedback" id="providerFeedback"></p><div class="actions"><button class="primary">'+(remove?'Disconnect':'Save filter')+'</button></div></form>',{label:'Back to mail',back});
+    dialog(remove?'Disconnect account':'Message filter','<p>'+esc(account.email)+'</p><form id="editProvider">'+fields+'<p class="feedback" id="providerFeedback"></p><div class="actions"><button class="primary">'+(remove?'Disconnect':'Save filter')+'</button></div></form>',{label:'Back',back});
     const form=$('editProvider');
     form.onsubmit=async e=>{
       e.preventDefault();const btn=form.querySelector('.primary');btn.disabled=true;
@@ -61,7 +62,7 @@ const ProviderUI = (() => {
   function github(state){
     const connected=!!state?.connected;
     const fields=connected?'<p><b>'+esc(state.repo)+'</b></p><p>'+esc(state.workflow||'All workflows')+'</p>':'<label>Public repository<input id="gitRepo" required placeholder="owner/repository" autocomplete="off"></label><label>Workflow name (optional)<input id="gitWorkflow" placeholder="e.g. CI"></label>';
-    dialog('GitHub Actions','<p class="hint">Receive the branch and build result when a workflow finishes in this public repository.</p><form id="gitForm">'+fields+'<p class="feedback" id="providerFeedback">'+esc(state?.error||'')+'</p><div class="actions"><button class="primary">'+(connected?'Unsubscribe':'Subscribe')+'</button></div></form>',{label:'Back to connectors',back:showConnectors});
+    dialog('GitHub Actions','<p class="hint">Receive the branch and build result when a workflow finishes in this public repository.</p><form id="gitForm">'+fields+'<p class="feedback" id="providerFeedback">'+esc(state?.error||'')+'</p><div class="actions"><button class="primary">'+(connected?'Unsubscribe':'Subscribe')+'</button></div></form>',{label:'Connections',back:showConnectors});
     const form=$('gitForm');
     form.onsubmit=async e=>{
       e.preventDefault();const b=form.querySelector('.primary');b.disabled=true;
