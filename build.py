@@ -40,14 +40,14 @@ with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
         subprocess.run([sys.executable,str(HERE/'Release/prepare_runtime.py'),str(args.python_archive.resolve()),str(contents.resolve())],check=True)
     shutil.copyfile(assets/'Resources'/'assistant.gguf',res/'assistant.gguf')
     shutil.copytree(HERE/'UI',res/'UI')
-    for folder in ['Connectors','GrokBuild','Mail']:
+    for folder in ['Connectors','ClaudeCode','GrokBuild','Mail']:
         shutil.copytree(HERE/folder,res/folder,ignore=shutil.ignore_patterns('__pycache__','*.swift','*.pyc'))
     for name in ['AppIcon.icns','tasks.gbnf']:
         shutil.copy2(HERE/name,res/name)
     shutil.copy2(HERE/'Info.plist',contents/'Info.plist')
     native_sources = [
         'main.swift', 'Engine.swift', 'CodexInbox.swift', 'ConnectorInbox.swift',
-        'EdgeResultsPanel.swift', 'ExternalProviders.swift', 'Mail/MailVault.swift'
+        'EdgeResultsPanel.swift', 'ExternalProviders.swift', 'AgentStatus.swift', 'Mail/MailVault.swift'
     ]
     subprocess.run(['xcrun', 'swiftc', '-O', '-target', 'arm64-apple-macos26.0',
                     '-module-cache-path', str(Path(tmp)/'cache'),

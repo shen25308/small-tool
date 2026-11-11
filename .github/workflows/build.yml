@@ -1,0 +1,92 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Connector and UI tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Python connector tests
+        run: python3 -m unittest discover -s Tests -v
+      - name: UI logic tests
+        run: |
+          if ls Tests/*.test.mjs >/dev/null 2>&1; then node --test Tests/*.test.mjs; fi
+
+  app:
+    name: Build Shishi.app
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Type-check the Swift sources
+        run: |
+          xcrun swiftc -typecheck -target arm64-apple-macos26.0 \
+            main.swift Engine.swift CodexInbox.swift ConnectorInbox.swift EdgeResultsPanel.swift \
+            ExternalProviders.swift AgentStatus.swift Mail/MailVault.swift
+      - name: Restore the pinned model and runtimes
+        id: inputs
+        uses: actions/cache@v4
+        with:
+          path: inputs
+          key: shishi-inputs-1.6.0
+      - name: Download the pinned model and runtimes
+        if: steps.inputs.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p inputs
+          curl --fail --location --retry 3 --output inputs/python.tar.zst \
+            'https://github.com/astral-sh/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-aarch64-apple-darwin-pgo%2Blto-full.tar.zst'
+          curl --fail --location --retry 3 --output inputs/llama.tar.gz \
+            'https://github.com/ggml-org/llama.cpp/releases/download/b12224/llama-b12224-bin-macos-arm64.tar.gz'
+          curl --fail --location --retry 3 --output inputs/model.gguf \
+            'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf?download=true'
+      - name: Assemble the 1.6 release that supplies the offline assets
+        run: |
+          mkdir -p kit assets
+          curl --fail --location --retry 3 --output kit.zip \
+            'https://github.com/shen25308/small-tool/releases/download/v1.6.0/Shishi-1.6.0-macOS-arm64-download-kit.zip'
+          echo '600b4b764e5bde01bb20ae16046a1e89412b6e0ebe4e4819b5f7e8e9acb4cf51  kit.zip' | shasum -a 256 -c -
+          ditto -x -k kit.zip kit
+          # The kit verifies every input and the assembled archive against pinned SHA-256 values.
+          "kit/Shishi Download Kit/Download Shishi.command" --output "$PWD/assets" --cache "$PWD/inputs"
+          ditto -x -k assets/Shishi-1.6-Download.*/Shishi-1.6.0-macOS-arm64.zip assets/release
+          ls assets/release
+      - name: Build the app from this commit
+        run: |
+          python3 build.py --assets assets/release/Shishi.app --output build/Shishi.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/Shishi.app/Contents/Info.plist
+      - name: Launch check with sample data
+        run: python3 Tests/ci/launch_check.py build/Shishi.app screenshots
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Package
+        run: ditto -c -k --keepParent build/Shishi.app Shishi-macOS-arm64.zip
+      - name: Upload the app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shishi-macOS-arm64
+          path: Shishi-macOS-arm64.zip
+          compression-level: 0
+          retention-days: 7

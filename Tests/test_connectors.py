@@ -1,0 +1,200 @@
+"""Run with: python3 -m unittest discover -s Tests"""
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+RECEIVE = ROOT / "ClaudeCode" / "receive.py"
+INSTALL = ROOT / "ClaudeCode" / "install.py"
+AGENTS = ROOT / "Connectors" / "shishi_agents.py"
+
+
+class Sandbox(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.base = Path(self.folder.name)
+        self.env = dict(os.environ, SHISHI_AGENTS_DIR=str(self.base / "Agents"),
+                        SHISHI_INBOX_DIR=str(self.base / "Incoming"), HOME=str(self.base / "home"))
+        self.env.pop("CLAUDE_CONFIG_DIR", None)
+
+    def tearDown(self):
+        self.folder.cleanup()
+
+    def run_script(self, script, *args, stdin=""):
+        return subprocess.run([sys.executable, "-B", str(script), *args], input=stdin, text=True,
+                              capture_output=True, env=self.env, timeout=30)
+
+    def hook(self, **event):
+        base = {"session_id": "s-1", "cwd": "/Users/me/code/small-tool", "transcript_path": ""}
+        result = self.run_script(RECEIVE, stdin=json.dumps({**base, **event}))
+        self.assertEqual(result.stdout, "", "a hook must not print to standard output")
+        return result
+
+    def states(self):
+        folder = self.base / "Agents"
+        return [json.loads(p.read_text()) for p in sorted(folder.glob("*.json"))] if folder.exists() else []
+
+    def receipts(self):
+        folder = self.base / "Incoming"
+        return [json.loads(p.read_text()) for p in sorted(folder.glob("*.json"))] if folder.exists() else []
+
+
+class ClaudeCodeHook(Sandbox):
+    def test_prompt_then_stop_leaves_status_and_receipt(self):
+        self.assertEqual(self.hook(hook_event_name="UserPromptSubmit", prompt="Fix the login bug\nand add tests").returncode, 0)
+        state, = self.states()
+        self.assertEqual((state["state"], state["source"], state["title"]), ("working", "Claude Code", "Claude Code · small-tool"))
+        self.assertEqual(state["detail"], "Fix the login bug and add tests")
+
+        done = self.hook(hook_event_name="Stop", prompt_id="p-1", last_assistant_message="Fixed `auth.py`. Tests pass.")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        state, = self.states()
+        self.assertEqual(state["state"], "done")
+        receipt, = self.receipts()
+        self.assertEqual((receipt["source"], receipt["title"], receipt["summary"]),
+                         ("Claude Code", "Claude Code · small-tool", "Fixed `auth.py`. Tests pass."))
+        digest = hashlib.sha256(("Claude Code\0" + receipt["eventID"]).encode()).hexdigest()
+        self.assertEqual(state["receipt"], "connector/" + digest)
+        self.assertTrue((self.base / "Incoming" / (digest + ".json")).is_file())
+
+    def test_retry_is_deduplicated_and_new_reply_is_kept(self):
+        for _ in range(2):
+            self.hook(hook_event_name="Stop", prompt_id="p-1", last_assistant_message="First answer")
+        self.assertEqual(len(self.receipts()), 1)
+        self.hook(hook_event_name="Stop", prompt_id="p-1", last_assistant_message="Answer after a background task")
+        self.assertEqual(len(self.receipts()), 2)
+
+    def test_permission_prompt_then_tool_use(self):
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Deploy the site")
+        self.hook(hook_event_name="PostToolUse", tool_name="Read")
+        self.assertEqual(self.states()[0]["state"], "working")
+        self.hook(hook_event_name="Notification", notification_type="permission_prompt", message="Claude needs your permission to use Bash")
+        state, = self.states()
+        self.assertEqual((state["state"], state["detail"]), ("attention", "Claude needs your permission to use Bash"))
+        self.hook(hook_event_name="PostToolUse", tool_name="Bash")
+        state, = self.states()
+        self.assertEqual((state["state"], state["detail"]), ("working", "Deploy the site"))
+
+    def test_other_notifications_and_subagents_are_ignored(self):
+        self.hook(hook_event_name="Notification", notification_type="auth_success", message="Signed in")
+        self.hook(hook_event_name="Stop", agent_id="a-1", last_assistant_message="Subagent result")
+        self.assertEqual(self.states(), [])
+        self.assertEqual(self.receipts(), [])
+
+    def test_session_end_clears_unfinished_but_keeps_finished(self):
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Explore")
+        self.hook(hook_event_name="SessionEnd", reason="prompt_input_exit")
+        self.assertEqual(self.states(), [])
+        self.hook(hook_event_name="Stop", last_assistant_message="All done")
+        self.hook(hook_event_name="SessionEnd", reason="other")
+        self.assertEqual(self.states()[0]["state"], "done")
+
+    def test_reply_falls_back_to_transcript_and_session_title(self):
+        transcript = self.base / "t.jsonl"
+        rows = [
+            {"type": "user", "message": {"content": "hi"}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "Earlier reply"}]}},
+            {"type": "assistant", "isSidechain": True, "message": {"content": [{"type": "text", "text": "Subagent"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "thinking", "thinking": "…"}, {"type": "text", "text": "Final reply 你好"}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash"}]}},
+        ]
+        transcript.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        self.hook(hook_event_name="UserPromptSubmit", prompt="go", session_title="Billing refactor")
+        self.hook(hook_event_name="Stop", transcript_path=str(transcript))
+        receipt, = self.receipts()
+        self.assertEqual((receipt["summary"], receipt["title"]), ("Final reply 你好", "Claude Code · Billing refactor"))
+
+    def test_long_reply_is_trimmed_and_bad_input_never_blocks(self):
+        result = self.hook(hook_event_name="Stop", last_assistant_message="é" * 80000)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertLessEqual(len(self.receipts()[0]["summary"].encode()), 64 * 1024)
+        broken = self.run_script(RECEIVE, stdin="not json")
+        self.assertEqual(broken.returncode, 1)
+        self.assertNotEqual(broken.returncode, 2)
+
+
+class ClaudeCodeInstaller(Sandbox):
+    def setUp(self):
+        super().setUp()
+        self.home = self.base / "claude"
+        self.settings = self.home / "settings.json"
+
+    def install(self, action):
+        result = self.run_script(INSTALL, action, "--json", "--claude-home", str(self.home))
+        return json.loads(result.stdout)
+
+    def test_install_keeps_other_settings_and_remove_restores_them(self):
+        self.home.mkdir()
+        original = {"model": "opus", "permissions": {"allow": ["Bash(npm test)"]}, "hooks": {
+            "Stop": [{"hooks": [{"type": "command", "command": "afplay /System/Library/Sounds/Glass.aiff"}]}],
+            "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "./guard.sh"}]}]}}
+        self.settings.write_text(json.dumps(original, indent=2) + "\n")
+        self.assertEqual(self.install("status")["installed"], False)
+
+        result = self.install("install")
+        self.assertTrue(result["ok"] and result["installed"] and result["working"], result)
+        self.assertEqual(result["events"], ["Notification", "PostToolUse", "SessionEnd", "Stop", "UserPromptSubmit"])
+        saved = json.loads(self.settings.read_text())
+        self.assertEqual(saved["model"], "opus")
+        self.assertEqual(saved["hooks"]["Stop"][0], original["hooks"]["Stop"][0])
+        self.assertEqual(saved["hooks"]["PreToolUse"], original["hooks"]["PreToolUse"])
+        ours = saved["hooks"]["Stop"][1]["hooks"][0]
+        self.assertEqual((ours["type"], ours["async"], ours["timeout"]), ("command", True, 10))
+        self.assertIn("permission_prompt", saved["hooks"]["Notification"][0]["matcher"])
+        self.assertEqual(json.loads((self.home / "settings.json.before-shishi").read_text()), original)
+
+        self.install("install")  # A second install replaces the handlers. It never stacks them.
+        self.assertEqual(len(json.loads(self.settings.read_text())["hooks"]["Stop"]), 2)
+
+        self.assertEqual(self.install("remove")["installed"], False)
+        self.assertEqual(json.loads(self.settings.read_text()), original)
+
+    def test_installed_command_runs_the_hook(self):
+        self.install("install")
+        command = json.loads(self.settings.read_text())["hooks"]["Stop"][0]["hooks"][0]["command"]
+        event = {"hook_event_name": "Stop", "session_id": "s-9", "cwd": "/tmp/My Project", "last_assistant_message": "Shipped."}
+        result = subprocess.run(command, shell=True, input=json.dumps(event), text=True, capture_output=True, env=self.env, timeout=30)
+        self.assertEqual((result.returncode, result.stdout), (0, ""), result.stderr)
+        self.assertEqual(self.receipts()[0]["title"], "Claude Code · My Project")
+
+    def test_invalid_settings_are_left_alone(self):
+        self.home.mkdir()
+        self.settings.write_text("{ not json")
+        result = self.install("install")
+        self.assertFalse(result["ok"])
+        self.assertEqual(self.settings.read_text(), "{ not json")
+
+    def test_symlinked_settings_stay_a_symlink(self):
+        self.home.mkdir()
+        real = self.base / "dotfiles-settings.json"
+        real.write_text("{}\n")
+        self.settings.symlink_to(real)
+        self.install("install")
+        self.assertTrue(self.settings.is_symlink())
+        self.assertIn("Stop", json.loads(real.read_text())["hooks"])
+
+    def test_remove_without_settings_creates_nothing(self):
+        self.assertEqual(self.install("remove")["installed"], False)
+        self.assertFalse(self.home.exists())
+
+
+class AgentStatusCommand(Sandbox):
+    def test_set_and_clear(self):
+        ok = self.run_script(AGENTS, "set", "--source", "Codex", "--session", "run 1", "--state", "working", "--title", "Nightly\nbuild")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        state, = self.states()
+        self.assertEqual((state["title"], state["version"]), ("Nightly build", 1))
+        name = hashlib.sha256("Codex\0run 1".encode()).hexdigest() + ".json"
+        self.assertTrue((self.base / "Agents" / name).is_file())
+        self.assertNotEqual(self.run_script(AGENTS, "set", "--source", "Codex", "--session", "x", "--state", "nope", "--title", "t").returncode, 0)
+        self.run_script(AGENTS, "clear", "--source", "Codex", "--session", "run 1")
+        self.assertEqual(self.states(), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -98,6 +98,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         store: file.deletingLastPathComponent().appendingPathComponent("CodexInbox.json")
     )
     private lazy var externalInbox = ConnectorInbox(directory: file.deletingLastPathComponent().appendingPathComponent("Incoming", isDirectory:true))
+    private lazy var agentBoard = AgentBoard(directory: file.deletingLastPathComponent().appendingPathComponent("Agents", isDirectory:true))
+    private var watchers: [DirectoryWatcher] = []
+    private let menuBar = MenuBarStatus()
+    private var unreadByChannel: [String:Int] = [:]
+    private var vibrant = false
     private func updateReminders(_ workspace:Workspace) {
         let checkNow = ready
         inboxQueue.async {
@@ -147,6 +152,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             let send=force || update.changed || lastInboxErrors["codex"] != nil
             return (send ? CodexInbox.wire(update.notices) : [],send)
         }
+        scanExternal(force:force)
+        scanAgents(force:force)
+    }
+    private func scanExternal(force:Bool = false) {
         pushInbox("external",warning:postDueReminders()) {
             let update=try externalInbox.scan()
             let send=force || update.changed || lastInboxErrors["external"] != nil
@@ -154,16 +163,32 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             return (lastExternalRows,send)
         }
     }
+    private func scanAgents(force:Bool = false) {
+        let update=agentBoard.scan()
+        guard force || update.changed else {return}
+        let rows=AgentBoard.wire(update.items)
+        DispatchQueue.main.async {
+            self.menuBar.update(agents:update.items)
+            self.tell("setAgents",rows)
+        }
+    }
     private func startInbox() {
         guard inboxTimer == nil else {return}
         _ = inbox
         _ = codexEnabled
         _ = externalInbox
+        _ = agentBoard
         let timer=DispatchSource.makeTimerSource(queue:inboxQueue)
         timer.schedule(deadline:.now(),repeating:.seconds(10),leeway:.seconds(1))
         timer.setEventHandler { [weak self] in self?.scanInboxes() }
         inboxTimer=timer
         timer.resume()
+        // Hooks publish by adding a file. Watching the folders shows a result as soon as it lands.
+        let base=file.deletingLastPathComponent()
+        watchers=[
+            DirectoryWatcher(url:base.appendingPathComponent("Agents",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanAgents() },
+            DirectoryWatcher(url:base.appendingPathComponent("Incoming",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanExternal() }
+        ]
     }
     private func showEdge(_ visible:Bool) {
         if visible && compact,let screen=window.screen?.visibleFrame {
@@ -199,17 +224,34 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.underPageBackgroundColor = .windowBackgroundColor
-        let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable]
+        let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView]
         let display = NSScreen.main?.visibleFrame.size ?? NSSize(width:760,height:800)
         let frame=NSRect(x:0,y:0,width:min(760,display.width),height:min(800,display.height))
         window = NSWindow(contentRect:NSWindow.contentRect(forFrameRect:frame,styleMask:style),styleMask:style,backing:.buffered,defer:false)
         window.title = "My Notes"
         window.backgroundColor = .windowBackgroundColor
         window.titlebarSeparatorStyle = .none
+        window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 635,height: 420)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.contentView = web
+        // The sidebar shows the desktop through the system sidebar material, like Finder and Reminders.
+        let backdrop = NSVisualEffectView()
+        backdrop.material = .sidebar
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .followsWindowActiveState
+        window.contentView = backdrop
+        web.frame = backdrop.bounds
+        web.autoresizingMask = [.width,.height]
+        backdrop.addSubview(web)
+        // WebKit paints an opaque page unless this switch exists. Without it the page keeps a solid sidebar.
+        if web.responds(to:NSSelectorFromString("_setDrawsBackground:")) {
+            web.setValue(false,forKey:"drawsBackground")
+            web.underPageBackgroundColor = .clear
+            vibrant = true
+        }
+        menuBar.onOpen = { [weak self] inbox in self?.openWorkspace(inbox:inbox) }
+        menuBar.update(agents:[])
         addWindowControls()
         window.center()
         window.setFrameAutosaveName("ShiShiTallWorkspace")
@@ -241,7 +283,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         if inbox {tell("openInbox",fromEdge ? "edge" : "main")}
         else if fromEdge {tell("showWorkspaceHome",true)}
     }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // With the menu bar item on, Shishi keeps collecting results after its window closes.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !menuBar.enabled }
     func webView(_ view: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if let url = action.request.url, url.isFileURL, url.lastPathComponent=="index.html" { decisionHandler(.allow) }
         else { decisionHandler(.cancel) }
@@ -251,6 +294,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         let appItem=NSMenuItem()
         bar.addItem(appItem)
         let appMenu=NSMenu(title:"Shishi")
+        appMenu.addItem(withTitle:"About Shishi",action:#selector(NSApplication.orderFrontStandardAboutPanel(_:)),keyEquivalent:"")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle:"Hide Shishi",action:#selector(NSApplication.hide(_:)),keyEquivalent:"h")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle:"Quit Shishi",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q")
         appItem.submenu=appMenu
         let editItem=NSMenuItem()
@@ -337,6 +384,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private func tell(_ function: String, _ arg: Any) {
         if function=="setInbox", let state=arg as? [String:Any],let rows=state["items"] as? [[String:Any]],let channel=state["channel"] as? String {
             edge.accept(channel:channel,items:rows)
+            unreadByChannel[channel]=rows.filter {($0["read"] as? Bool) != true}.count
+            menuBar.update(unread:unreadByChannel.values.reduce(0,+))
         }
         web.callAsyncJavaScript("window[fn](value);",arguments:["fn":function,"value":arg],in:nil,in:.page,completionHandler:nil)
     }
@@ -480,6 +529,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     self?.inboxQueue.async { [weak self] in self?.scanInboxes(force:true) }
                 }
                 tell("setEdgeVisible",edge.panel.isVisible)
+                // The page pads its top edge by the title bar height because content runs underneath it.
+                tell("setChrome",["titlebar":Double(max(0,window.frame.height-window.contentLayoutRect.height)),"vibrant":vibrant] as [String:Any])
                 if CommandLine.arguments.contains("--open-inbox") {
                     tell("openInbox",true)
                 }
@@ -586,6 +637,42 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 }
                 reply(id,true,true)
             case "paste": reply(id,true,NSPasteboard.general.string(forType:.string) ?? "")
+            case "copy":
+                guard let text=body["text"] as? String, !text.isEmpty, text.utf8.count <= 2_000_000 else {throw AppIssue("There is nothing to copy.")}
+                NSPasteboard.general.clearContents()
+                guard NSPasteboard.general.setString(text,forType:.string) else {throw AppIssue("The text could not be copied.")}
+                reply(id,true,true)
+            case "dismissAgent":
+                guard let key=body["key"] as? String else {throw AppIssue("The agent ID is missing.")}
+                inboxQueue.async {
+                    self.agentBoard.dismiss(key)
+                    self.scanAgents(force:true)
+                    DispatchQueue.main.async {self.reply(id,true,true)}
+                }
+            case "menuBar":
+                if let choice=body["value"] as? Bool {menuBar.enabled=choice}
+                reply(id,true,menuBar.enabled)
+            case "claudeCode":
+                providers.claudeCode(body["action"] as? String ?? "status") { [weak self] result in
+                    switch result {
+                    case .success(let state):self?.reply(id,true,state)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "notion":
+                providers.notion(body,window:window) { [weak self] result in
+                    switch result {
+                    case .success(let state):self?.reply(id,true,state)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "openNotion":
+                let page=(body["page"] as? String ?? "").replacingOccurrences(of:"-",with:"").lowercased()
+                guard page.count==32, page.allSatisfy({$0.isASCII && $0.isHexDigit}),
+                      let url=URL(string:"https://www.notion.so/"+page), NSWorkspace.shared.open(url) else {
+                    throw AppIssue("This Notion page could not be opened.")
+                }
+                reply(id,true,true)
             case "latestSize":
                 sizeLatestResult(expanded:body["expanded"] as? Bool == true)
                 reply(id,true,true)

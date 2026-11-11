@@ -1,0 +1,239 @@
+{
+ "version": 1,
+ "projects": [
+  "AI Task List",
+  "Research notes",
+  "Product ideas",
+  "Personal"
+ ],
+ "labels": [
+  "Urgent"
+ ],
+ "tasks": [
+  {
+   "id": "00000000-0000-4000-8000-000000000001",
+   "title": "Draft the product brief",
+   "project": "AI Task List",
+   "tag": "Product insights",
+   "priority": "P0",
+   "planned": "@0",
+   "source": "",
+   "quote": "",
+   "done": true,
+   "completedAt": "@0T09:12"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000002",
+   "title": "Organize the review notes",
+   "project": "AI Task List",
+   "tag": "Today",
+   "priority": "P0",
+   "planned": "@0",
+   "source": "",
+   "quote": "",
+   "done": false,
+   "notes": "Pull the comments from Friday's review into one page.",
+   "subtasks": [
+    {
+     "id": "a",
+     "title": "Collect comments",
+     "done": true
+    },
+    {
+     "id": "b",
+     "title": "Group by theme",
+     "done": false
+    },
+    {
+     "id": "c",
+     "title": "Share with Maya",
+     "done": false
+    }
+   ]
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000003",
+   "title": "Send the release checklist",
+   "project": "AI Task List",
+   "tag": "This week",
+   "priority": "P1",
+   "planned": "@0",
+   "source": "",
+   "quote": "",
+   "done": false,
+   "dueDate": "@1",
+   "dueTime": "15:00"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000004",
+   "title": "Review the product roadmap",
+   "project": "Product ideas",
+   "tag": "Leadership",
+   "priority": "P2",
+   "planned": "@0",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000005",
+   "title": "Prepare Friday's update",
+   "project": "AI Task List",
+   "tag": "",
+   "priority": "P2",
+   "planned": "@0",
+   "source": "",
+   "quote": "",
+   "done": false,
+   "repeat": "weekly"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000006",
+   "title": "Review QA feedback",
+   "project": "Research notes",
+   "tag": "Feedback",
+   "priority": "P2",
+   "planned": "@-1",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000007",
+   "title": "Outline the inbox flow",
+   "project": "AI Task List",
+   "tag": "Product insights",
+   "priority": "P0",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": true,
+   "completedAt": "@-1T16:40"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000008",
+   "title": "Build the AI task list",
+   "project": "AI Task List",
+   "tag": "This week",
+   "priority": "P0",
+   "planned": "@2",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000009",
+   "title": "Review the prototype",
+   "project": "AI Task List",
+   "tag": "Today",
+   "priority": "P1",
+   "planned": "@1",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000010",
+   "title": "Connect local results",
+   "project": "AI Task List",
+   "tag": "Leadership",
+   "priority": "P1",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": false,
+   "dueDate": "@4"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000011",
+   "title": "Test reminders",
+   "project": "AI Task List",
+   "tag": "",
+   "priority": "P1",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000012",
+   "title": "Draft release notes",
+   "project": "AI Task List",
+   "tag": "Later",
+   "priority": "P1",
+   "planned": "@9",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000013",
+   "title": "Interview notes: onboarding",
+   "project": "Research notes",
+   "tag": "Feedback",
+   "priority": "P2",
+   "planned": "@3",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000014",
+   "title": "Compare pricing pages",
+   "project": "Research notes",
+   "tag": "",
+   "priority": "P2",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000015",
+   "title": "Sketch the widget idea",
+   "project": "Product ideas",
+   "tag": "Long-term",
+   "priority": "P2",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": false
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000016",
+   "title": "Renew passport",
+   "project": "Personal",
+   "tag": "",
+   "priority": "P1",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": false,
+   "dueDate": "@12"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000017",
+   "title": "Book the dentist",
+   "project": "Personal",
+   "tag": "",
+   "priority": "P2",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": true,
+   "completedAt": "@-2T11:05"
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000018",
+   "title": "Capture the customer feedback",
+   "project": "AI Task List",
+   "tag": "Feedback",
+   "priority": "P0",
+   "planned": "",
+   "source": "",
+   "quote": "",
+   "done": true,
+   "completedAt": "@-1T10:20"
+  }
+ ]
+}
