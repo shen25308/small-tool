@@ -91,7 +91,19 @@ def stop(process):
 
 subprocess.run(["defaults", "write", "local.shishi.workdesk", "ShiShiShowsResults", "-bool", "false"], check=False)
 hook(hook_event_name="UserPromptSubmit", prompt="Refactor the billing module and add tests")
-hook(hook_event_name="Stop", session_id="ci-finished", prompt_id="p1",
+# A small session log, so the report's facts come from what the turn actually did.
+log = shots.parent / "ci-session.jsonl"
+log.write_text("\n".join(json.dumps(row) for row in [
+    {"type": "user", "message": {"content": "Refactor billing and add refund tests"}},
+    {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Edit", "input": {"file_path": "/Users/me/code/small-tool/billing.py"}}]}},
+    {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}},
+    {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Write", "input": {"file_path": "/Users/me/code/small-tool/tests/test_refunds.py"}}]}},
+    {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content": "ok"}]}},
+    {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "pytest -q"}}]}},
+    {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t3", "content": "48 passed"}]}},
+]) + "\n")
+hook(hook_event_name="UserPromptSubmit", session_id="ci-finished", prompt="Refactor billing and add refund tests")
+hook(hook_event_name="Stop", session_id="ci-finished", prompt_id="p1", transcript_path=str(log),
      last_assistant_message="Updated `billing.py` and added 12 tests. All checks pass.")
 
 workspace = launch("--workspace")

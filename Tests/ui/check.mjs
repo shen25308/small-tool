@@ -459,6 +459,61 @@ await check('brief report: worth a look, and the full reply', {width: 340, heigh
   assert.equal(await page.locator('#shell').isVisible(), true);
 });
 
+await check('first run: connect Claude Code or watch the demo', {width: 340, height: 640, compact: true, empty: true, workspace: null, scale: 2}, async ({page, host, shot}) => {
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  assert.match(await text(page, '#cardWelcome'), /Know when Claude Code is done[\s\S]*Connect Claude Code[\s\S]*Try a demo/);
+  await shot('first-run');
+  await page.click('[data-welcome="demo"]');
+  await page.waitForFunction(() => document.getElementById('cardWelcome').hidden);
+  assert.match(await page.getAttribute('#island', 'class'), /mode-working/);
+  // The waiting session's report comes first, then the finished one, with facts from its session log.
+  await page.waitForFunction(() => /Needs you/.test(document.getElementById('cardReport').innerText), null, {timeout: 8000});
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => /demo-shop/.test(document.getElementById('cardReport').innerText), null, {timeout: 9000});
+  assert.match(await text(page, '#cardReport'), /No need to check[\s\S]*refunds\.ts[\s\S]*Checks passed/);
+  await shot('demo-report');
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => /real session/.test(document.getElementById('toast').textContent));
+  await page.waitForFunction(() => document.getElementById('cardReport').hidden);
+  assert.equal((await host()).openedApp, undefined, 'the demo never opens a real app');
+  // Nothing from the demo reached the app.
+  assert.equal(((await host()).workspace?.tasks || []).length, 0);
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  await page.click('[data-welcome="connect"]');
+  await page.waitForFunction(() => window.__host.claude.installed && document.getElementById('cardWelcome').hidden);
+});
+
+await check('first run: not now', {width: 340, height: 640, compact: true, empty: true, workspace: null}, async ({page}) => {
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  await page.click('[data-welcome="close"]');
+  await page.waitForFunction(() => window.__host.workspace?.welcomed === true && document.getElementById('cardWelcome').hidden);
+});
+
+await check('light download: no task capture', {lite: true}, async ({page}) => {
+  await page.click('#boardMore');
+  assert.equal(await page.locator('#openCapture').isHidden(), true);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Meta+k');
+  await page.fill('#paletteInput', 'capture');
+  assert.doesNotMatch(await text(page, '#paletteList'), /Capture Tasks/);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.openMessage('Please send the deck by Friday.'));
+  await page.waitForSelector('#captureManual');
+  assert.match(await text(page, '#dialogBody'), /light download leaves out/);
+  await page.click('#captureManual');
+  await page.waitForSelector('#taskForm');
+});
+
+await check('back to card after jumping to the workspace', {width: 340, height: 600, compact: true}, async ({page}) => {
+  await page.locator('#cardTasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
+  await page.waitForSelector('#taskForm');
+  await page.click('#dialog [data-close]');
+  assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
+  assert.equal(await text(page, '#workspaceReturn'), 'Back to card');
+  await page.click('#workspaceReturn');
+  await page.waitForFunction(() => compact && document.getElementById('workspaceReturn').hidden);
+});
+
 await check('corner card when everything is done', {width: 340, height: 420, compact: true}, async ({page}) => {
   for (let i = 0; i < 5; i++) {
     await page.locator('#cardTasks .row .check').first().click();

@@ -352,6 +352,7 @@ function renderBoard() {
   ring.hidden = view !== 'today' || !planned.length;
   ring.style.setProperty('--progress', planned.length ? (finished / planned.length).toFixed(3) : '0');
   ring.classList.toggle('complete', planned.length > 0 && finished === planned.length);
+  ring.classList.toggle('zero', finished === 0);
   ring.setAttribute('aria-label', finished + ' of ' + planned.length + ' done today');
   ring.title = finished + ' of ' + planned.length + ' done today';
   $('dateline').textContent = view === 'today' ? new Intl.DateTimeFormat('en-US', {month: 'long', day: 'numeric', weekday: 'long'}).format(now) : '';
@@ -541,6 +542,12 @@ function projectForm() {
 let captureToken = 0;
 function capture(source = '') {
   ++captureToken;
+  if (!canCapture) {
+    dialog('Capture Tasks', '<p class="hint">Finding tasks in a message uses an offline model that this light download leaves out. Download the full version of Shishi to use it, or add the task yourself.</p>' +
+      (source ? '<blockquote>' + esc(source) + '</blockquote>' : '') + '<div class="actions"><button type="button" class="secondary" data-close>Close</button><button type="button" class="primary" id="captureManual">Add a Task</button></div>');
+    $('captureManual').onclick = () => manualFromText(source);
+    return;
+  }
   dialog('Capture Tasks', '<p class="hint">Paste a chat or meeting notes. Shishi finds tasks on this Mac. Review each suggestion alongside the original message before adding it.</p><label>Message<textarea id="source" maxlength="2400" rows="5" placeholder="Paste a work message here…">' + esc(source) + '</textarea></label><div class="actions"><button id="demoText" class="mini-link">Try an example</button><span class="spacer"></span><button id="paste" class="secondary">Paste</button><button id="recognize" class="primary">Find Tasks</button></div><div id="candidates" aria-live="polite"></div>');
   $('source').focus();
   const reset = () => { captureToken++; $('candidates').innerHTML = ''; $('recognize').disabled = false; $('recognize').textContent = 'Find Tasks'; };
@@ -707,6 +714,12 @@ document.addEventListener('drop', e => {
 });
 document.addEventListener('dragend', () => { dragId = ''; document.querySelectorAll('.over,.dragging').forEach(x => x.classList.remove('over', 'dragging')); });
 $('openCapture').onclick = () => capture();
+// The light download has no offline model, so it cannot find tasks in a message.
+let canCapture = true;
+window.setCapabilities = abilities => {
+  canCapture = abilities?.capture !== false;
+  $('openCapture').hidden = !canCapture;
+};
 $('newProject').onclick = projectForm;
 function startNewTask() { if (view === 'done') taskForm(); else openQuick('view'); }
 $('manual').onclick = startNewTask;
@@ -714,6 +727,7 @@ $('pin').onclick = async () => { try { await native('compact', {value: !compact}
 $('dialog').addEventListener('close', () => { captureToken++; });
 window.setCompact = v => {
   compact = v;
+  if (v) window.setWorkspaceReturn?.(false);
   document.body.classList.toggle('compact', v);
   // One agent capsule: in the toolbar of the workspace, or at the top of the corner card.
   const island = $('island');
@@ -729,11 +743,6 @@ window.setCompact = v => {
 window.setChrome = chrome => {
   document.documentElement.style.setProperty('--titlebar', Math.max(0, Number(chrome?.titlebar) || 0) + 'px');
   document.documentElement.classList.toggle('vibrant', !!chrome?.vibrant);
-};
-window.showWorkspaceHome = () => {
-  // A draft the user began earlier stays on screen when returning from the edge.
-  if ($('dialog').open && ($('dialogBody').querySelector('input:not([type=checkbox]),textarea,select'))) return;
-  closeDialog();
 };
 window.openMessage = text => { capture(text || ''); };
 document.addEventListener('keydown', e => {

@@ -73,6 +73,94 @@ def last_reply(transcript):
     return ""
 
 
+# Commands whose result says whether the work is sound: tests, builds, linters and type checks.
+CHECKS = re.compile(r"\b(?:pytest|py\.test|unittest|tox|nox|jest|vitest|mocha|ava|playwright test|cypress run|node --test|"
+                    r"(?:npm|pnpm|yarn|bun)(?: run)? (?:test|build|lint|check|typecheck|type-check)\b|npx (?:tsc|eslint|jest|vitest)|"
+                    r"tsc\b|eslint\b|ruff\b|mypy\b|pyright\b|flake8\b|black --check|go (?:test|build|vet)|cargo (?:test|build|check|clippy)|"
+                    r"swift (?:test|build)|xcodebuild\b|mvn\b|gradle\w* (?:test|build|check)|rspec\b|rake test|phpunit|mix test|"
+                    r"dotnet (?:test|build)|ctest\b|make(?: \w+)?\b|bazel (?:test|build))")
+EDITS = {"Edit", "MultiEdit", "Write", "NotebookEdit"}
+
+
+def content_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(text(part.get("text")) for part in content if isinstance(part, dict))
+    return ""
+
+
+def is_prompt(row):
+    """A message the user typed, as opposed to tool results or text Claude Code adds by itself."""
+    if row.get("type") != "user" or row.get("isSidechain") or row.get("isMeta"):
+        return False
+    content = (row.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return bool(content.strip()) and not content.lstrip().startswith("<")
+    return isinstance(content, list) and any(isinstance(part, dict) and part.get("type") == "text" for part in content) \
+        and not any(isinstance(part, dict) and part.get("type") == "tool_result" for part in content)
+
+
+def turn_facts(transcript, cwd):
+    """What the last turn actually did, read from Claude Code's own session log rather than from its reply."""
+    path = Path(transcript)
+    if not transcript or not path.is_file():
+        return None
+    with path.open("rb") as stream:
+        stream.seek(max(0, path.stat().st_size - 4 * 1024 * 1024))
+        rows = []
+        for line in stream.read().splitlines():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and not row.get("isSidechain"):
+                rows.append(row)
+    start = max((i for i, row in enumerate(rows) if is_prompt(row)), default=-1)
+    if start < 0:
+        return None
+    root = Path(cwd) if cwd else None
+    files, calls, results = [], {}, {}
+    for row in rows[start + 1:]:
+        content = (row.get("message") or {}).get("content")
+        for part in content if isinstance(content, list) else []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "tool_use":
+                name, args = text(part.get("name")), part.get("input") if isinstance(part.get("input"), dict) else {}
+                calls[text(part.get("id"))] = (name, args)
+                target = text(args.get("file_path")) or text(args.get("notebook_path"))
+                if name in EDITS and target:
+                    try:
+                        shown = str(Path(target).relative_to(root)) if root else target
+                    except ValueError:
+                        shown = target
+                    if shown not in files:
+                        files.append(shown)
+            elif part.get("type") == "tool_result":
+                body = content_text(part.get("content"))
+                failed = part.get("is_error") is True or bool(re.match(r"\s*Exit code [1-9]", body))
+                results[text(part.get("tool_use_id"))] = failed
+    # The last run of each check decides: a test that failed and then passed counts as passed.
+    checks, failed_tools, commands = {}, 0, 0
+    for key, (name, args) in calls.items():
+        if key in results and results[key]:
+            failed_tools += 1
+        if name != "Bash":
+            continue
+        commands += 1
+        command = " ".join(text(args.get("command")).split())
+        if CHECKS.search(command) and key in results:
+            checks[command] = results[key]
+    failing = [command for command, failed in checks.items() if failed]
+    shown_command = (failing or list(checks))[-1] if checks else ""
+    return {
+        "files": files[:12], "fileCount": len(files), "commands": commands, "failedTools": failed_tools,
+        "tests": "failed" if failing else "passed" if checks else "none",
+        "testCommand": shown_command[:120],
+    }
+
+
 def shorten(value, limit):
     data = value.encode("utf-8")
     if len(data) <= limit:
@@ -129,7 +217,14 @@ def receive(event):
         deliver(title, summary, event_id)
         receipt = hashlib.sha256((SOURCE + "\0" + event_id).encode("utf-8")).hexdigest()
         task = text(previous.get("task"))
-        agents.write(SOURCE, session, "done", title, summary, {**keep, "task": task, "receipt": "connector/" + receipt})
+        extra = {**keep, "task": task, "receipt": "connector/" + receipt}
+        try:
+            facts = turn_facts(text(event.get("transcript_path")), text(event.get("cwd")))
+        except (OSError, ValueError):
+            facts = None
+        if facts:
+            extra["facts"] = facts
+        agents.write(SOURCE, session, "done", title, summary, extra)
     elif name == "SessionEnd":
         # A finished result stays visible until it is read or dismissed in Shishi.
         if previous.get("state") != "done":

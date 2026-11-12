@@ -38,3 +38,20 @@ test('questions and blocks need you', () => {
 test('durations read naturally', () => {
   assert.deepEqual([minutes(0), minutes(20), minutes(150), minutes(3700), minutes(7200)], ['', '20 s', '3 min', '1 h 2 min', '2 h']);
 });
+
+test('facts from the session log decide the checks', () => {
+  const facts = (tests, files = ['src/billing.py'], extra = {}) => ({files, fileCount: files.length, commands: 2, failedTools: 0, tests, testCommand: 'pytest', ...extra});
+  const says = 'Refactored billing and added tests. All tests pass.';
+  const verified = brief(note(says), {facts: facts('passed')});
+  assert.deepEqual([verified.verdict, verified.tests, verified.verified, verified.checked], ['done', 'passed', true, 'pytest']);
+  const unverified = brief(note(says), {facts: facts('none')});
+  assert.deepEqual([unverified.verdict, unverified.reason, unverified.tests], ['review', 'It says checks pass, but none ran.', 'none']);
+  const untested = brief(note('Updated the refund rules.'), {facts: facts('none')});
+  assert.deepEqual([untested.verdict, untested.reason], ['review', 'It changed code and ran no checks.']);
+  const docs = brief(note('Updated the README.'), {facts: facts('none', ['README.md'])});
+  assert.equal(docs.verdict, 'done');
+  const failing = brief(note('Everything works. All tests pass.'), {facts: facts('failed')});
+  assert.deepEqual([failing.verdict, failing.reason], ['review', 'A check failed when it ran.']);
+  const many = brief(note('Renamed the module.'), {facts: facts('passed', ['a/one.ts', 'b/two.ts', 'c/three.ts', 'd/four.ts'], {fileCount: 9})});
+  assert.deepEqual([many.files.slice(0, 3), many.moreFiles], [['one.ts', 'two.ts', 'three.ts'], 6]);
+});

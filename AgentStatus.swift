@@ -2,9 +2,34 @@ import AppKit
 import Darwin
 import Foundation
 
+/// What a finished turn actually did, read by the hook from the agent's own session log.
+struct AgentFacts: Equatable {
+    let files: [String]
+    let fileCount, commands, failedTools: Int
+    let tests, testCommand: String
+
+    init?(_ value: Any?) {
+        guard let object = value as? [String: Any], let tests = object["tests"] as? String,
+              ["passed", "failed", "none"].contains(tests) else { return nil }
+        let count = { (key: String) in max(0, min(object[key] as? Int ?? 0, 100_000)) }
+        files = (object["files"] as? [Any] ?? []).compactMap { $0 as? String }
+            .map { String($0.components(separatedBy: .controlCharacters).joined().prefix(300)) }.filter { !$0.isEmpty }.prefix(12).map { $0 }
+        fileCount = max(count("fileCount"), files.count)
+        commands = count("commands")
+        failedTools = count("failedTools")
+        self.tests = tests
+        testCommand = String(((object["testCommand"] as? String) ?? "").components(separatedBy: .controlCharacters).joined(separator: " ").prefix(120))
+    }
+
+    var wire: [String: Any] {
+        ["files": files, "fileCount": fileCount, "commands": commands, "failedTools": failedTools, "tests": tests, "testCommand": testCommand]
+    }
+}
+
 struct AgentState: Equatable {
     let key, source, title, detail, state, receipt, task, app: String
     let time, started: Double
+    let facts: AgentFacts?
 }
 
 /// Reads the one-file-per-session states that local agent hooks publish. All calls run on the inbox queue.
@@ -64,7 +89,7 @@ final class AgentBoard {
                                    detail: Self.line(object["detail"], limit: 400), state: state,
                                    receipt: receipt.hasPrefix("connector/") ? receipt : "",
                                    task: Self.line(object["task"], limit: 400), app: Self.validBundle(app) ? app : "",
-                                   time: time, started: started))
+                                   time: time, started: started, facts: AgentFacts(object["facts"])))
         }
         rows.sort { $0.time == $1.time ? $0.key < $1.key : $0.time > $1.time }
         let changed = !initialized || rows != last
@@ -79,9 +104,13 @@ final class AgentBoard {
     }
 
     static func wire(_ rows: [AgentState]) -> [[String: Any]] {
-        rows.map { ["key": $0.key, "source": $0.source, "title": $0.title, "detail": $0.detail,
-                    "state": $0.state, "receipt": $0.receipt, "time": $0.time, "task": $0.task,
-                    "app": $0.app, "started": $0.started] }
+        rows.map { row in
+            var wire: [String: Any] = ["key": row.key, "source": row.source, "title": row.title, "detail": row.detail,
+                                       "state": row.state, "receipt": row.receipt, "time": row.time, "task": row.task,
+                                       "app": row.app, "started": row.started]
+            if let facts = row.facts { wire["facts"] = facts.wire }
+            return wire
+        }
     }
 }
 

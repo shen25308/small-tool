@@ -16,6 +16,8 @@
     });
   }
 
+  const code = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|swift|kt|java|c|cc|cpp|h|hpp|m|mm|cs|php|scala|sh|vue|svelte|sql|dart|ex|exs)$/i;
+
   function lastLine(text) {
     return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).pop() || '';
   }
@@ -32,7 +34,11 @@
   function brief(note, agent = {}) {
     const text = String(note?.summary || agent.detail || '');
     const digest = root.ShishiDigest.summarize(text, note?.title || '');
-    const tests = stillFailing(text) ? 'failed' : passed.test(text) ? 'passed' : '';
+    // Facts from the session log, when the hook could read it, outrank what the reply says.
+    const facts = agent.facts && ['passed', 'failed', 'none'].includes(agent.facts.tests) ? agent.facts : null;
+    const claimed = stillFailing(text) ? 'failed' : passed.test(text) ? 'passed' : '';
+    const tests = facts ? facts.tests : claimed;
+    const touchedCode = !!facts && facts.files.some(file => code.test(file));
     let verdict = 'done', reason;
     if (agent.state === 'attention') {
       verdict = 'blocked';
@@ -42,7 +48,13 @@
       reason = blocked.test(text) ? 'It stopped early.' : 'It asked you a question.';
     } else if (tests === 'failed' || digest.status === 'attention') {
       verdict = 'review';
-      reason = tests === 'failed' ? 'Some checks failed.' : 'Something is unresolved.';
+      reason = tests === 'failed' ? (facts ? 'A check failed when it ran.' : 'Some checks failed.') : 'Something is unresolved.';
+    } else if (facts && tests === 'none' && claimed === 'passed') {
+      verdict = 'review';
+      reason = 'It says checks pass, but none ran.';
+    } else if (touchedCode && tests === 'none') {
+      verdict = 'review';
+      reason = 'It changed code and ran no checks.';
     } else {
       reason = tests === 'passed' ? 'Checks passed.' : 'Nothing is waiting on you.';
     }
@@ -52,8 +64,11 @@
       headline: verdict === 'blocked' && agent.state === 'attention' ? (agent.detail || 'Waiting for you') : digest.headline,
       // A line that only says the checks passed repeats the chip below it.
       points: verdict === 'blocked' && agent.state === 'attention' ? [] : digest.details.filter(point => !(tests === 'passed' && passed.test(point) && !stillFailing(point))),
-      files: digest.files.map(file => file.label),
+      files: facts ? facts.files.map(file => file.split('/').pop()) : digest.files.map(file => file.label),
+      moreFiles: facts ? Math.max(0, facts.fileCount - Math.min(facts.files.length, 3)) : 0,
       tests,
+      checked: facts?.testCommand || '',
+      verified: !!facts,
       asked: agent.task || '',
       took: agent.started && agent.time ? minutes(agent.time - agent.started) : ''
     };

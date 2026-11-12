@@ -14,7 +14,7 @@ function agentAge(seconds) {
 }
 
 function agentEntries() {
-  const entries = agentRows.map(row => ({...row}));
+  const entries = [...agentRows, ...(window.Demo?.rows() || [])].map(row => ({...row}));
   // Codex has no hook here. Its unread finished turns from the last 12 hours stand in for a status.
   const cutoff = Date.now() / 1000 - 12 * 3600, threads = new Set();
   for (const note of inboxes.get('codex') || []) {
@@ -35,16 +35,15 @@ function agentMarkup(entry) {
 }
 
 function dismissAgent(entry) {
-  if (entry.notice) return native('readNotice', {key: entry.notice.id, channel: entry.notice.channel});
-  return native('dismissAgent', {key: entry.key});
+  return dismissAgentEntry(entry);
 }
 
 function renderAgents() {
   const entries = agentEntries();
   $('agentList').innerHTML = entries.map(agentMarkup).join('') ||
-    '<p class="agent-empty">Claude Code and Codex appear here while they work.</p><button type="button" class="mini-link" data-connect-agents>Connect an agent…</button>';
+    '<p class="agent-empty">Claude Code and Codex appear here while they work.</p><button type="button" class="mini-link" data-connect-agents>Connect an agent…</button><button type="button" class="mini-link" data-agent-demo>Try a demo</button>';
   window.Island?.update(entries);
-  if (compact) window.Card?.renderReport();
+  window.Card?.refresh();
   // Once a finished result has been read, its status has done its job.
   const notices = new Map(allNotices().map(note => [note.id, note]));
   for (const row of agentRows) {
@@ -71,6 +70,7 @@ function agentMenu(entry, at) {
 for (const id of ['agentList']) {
   $(id).addEventListener('click', event => {
     if (event.target.closest('[data-connect-agents]')) { showConnectors(); return; }
+    if (event.target.closest('[data-agent-demo]')) { Demo.start(); return; }
     const row = event.target.closest('[data-agent]');
     const entry = row && agentEntries().find(item => item.key === row.dataset.agent);
     if (!entry) return;

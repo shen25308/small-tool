@@ -18,19 +18,8 @@ function inboxBadge() {
   $('inboxButton').setAttribute('aria-label','Inbox, '+count+' unread');
 }
 let resultLimit=30;
-let inboxFromEdge=false;
-let edgeShown=false;
-window.setEdgeVisible=value=>{
-  edgeShown=!!value;
-  const button=$('edgeToggle');
-  button.setAttribute('aria-pressed',String(edgeShown));
-  button.title=edgeShown?'Hide result panel':'Show result panel';
-  button.setAttribute('aria-label',button.title);
-  button.lastElementChild.textContent=button.title;
-};
-$('edgeToggle').onclick=()=>action(native('edgeVisibility',{value:!edgeShown}));
 const cardOptions={
-  read:note=>action(native('readNotice',{key:note.id,channel:note.channel})),
+  read:note=>action(readNotice(note)),
   open:note=>action(note.thread?native('openCodex',{thread:note.thread}):native('openConnectorLink',{key:note.id})),
   // A finished result often leaves something to check. Keep it as a task for today.
   task:note=>{
@@ -41,14 +30,13 @@ const cardOptions={
 };
 function markAllRead() {
   const unread=allNotices().filter(note=>!note.read);
-  action(unread.reduce((chain,note)=>chain.then(()=>native('readNotice',{key:note.id,channel:note.channel})),Promise.resolve()));
+  action(unread.reduce((chain,note)=>chain.then(()=>readNotice(note)),Promise.resolve()));
 }
 // Opens the inbox on one result, for example from the Agents list.
 function openNotice(id) {
   selectedInboxSource='';
   const position=allNotices().findIndex(note=>note.id===id);
   if(position>=resultLimit)resultLimit=position+1;
-  inboxFromEdge=false;
   listNotices();
   const card=[...document.querySelectorAll('#inboxCards .result-card')].find(node=>node.dataset.notice===id);
   if(!card)return;
@@ -66,14 +54,13 @@ function latestResult() {
   // Preserve an original reply while the user is reading it. The full inbox still receives new cards.
   if(old?.querySelector('[aria-expanded="true"]') && allNotices().some(n=>n.id===old.dataset.notice))return;
   const options={...cardOptions,preview:true,previewChanged:open=>{
-    if(compact)action(native('latestSize',{expanded:open}));
     if(!open)latestResult();
   }};
   slot.replaceChildren(ResultUI.card(latest,options));
 }
 function listNotices() {
   if(!$('dialog').open || !$('inboxList')){
-    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link">Mark All Read</button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Connections…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',inboxFromEdge?{label:'Panel',back:returnToEdge}:{});
+    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link">Mark All Read</button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Connections…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',{});
     $('connectors').onclick=showConnectors;
     $('readAll').onclick=markAllRead;
     $('olderResults').onclick=()=>{resultLimit+=30;listNotices()};
@@ -136,12 +123,13 @@ function showConnectors() {
     connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>')+
     '</div><p>Claude Code and Codex show up under Agents while they work. Each finished turn leaves its reply in the inbox, without a notification.</p>'+
     '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
-    '<h3>Mail and builds</h3><div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div>'+
+    '<details class="more-sources"><summary>More sources: Gmail, Outlook and GitHub Actions</summary>'+
+    '<p>Mail needs a Google or Microsoft app registration of your own. GitHub Actions works with any public repository.</p>'+
+    '<div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div></details>'+
     '<h3>Shishi</h3><div class="group-box">'+
     '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
       [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show status in the menu bar</b><small>Agent progress and unread results stay visible after the window closes.</small></span><input type="checkbox" id="menuBarChoice" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Show new mail in the result panel</b></span><input type="checkbox" id="showEdgeMail" disabled></label>'+
     '</div></div>',{label:'Inbox',back:listNotices});
   ProviderUI.rows();
   const bind=(box,op)=>{
@@ -151,7 +139,6 @@ function showConnectors() {
       box.onchange=()=>action(native(op,{value:box.checked}).catch(error=>{box.checked=!box.checked;throw error}));
     }));
   };
-  bind($('showEdgeMail'),'edgeMailPreference');
   bind($('menuBarChoice'),'menuBar');
   const appearance=$('appearanceChoice');
   const showAppearance=value=>appearance.querySelectorAll('[data-appearance]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.appearance===value)));
@@ -204,17 +191,10 @@ function showConnectors() {
   configure($('copyGrok'),'grokBot');
   configure($('copyMCP'),'mcp');
 }
-function returnToEdge(){
-  closeDialog();inboxFromEdge=false;
-  action(native('returnToEdge'));
-}
+// "Back to card" appears when the card sent you here, and takes you back to it.
 window.setWorkspaceReturn=visible=>{$('workspaceReturn').hidden=!visible};
-$('workspaceReturn').onclick=returnToEdge;
-window.openInbox=origin=>{
-  if (origin==='edge' && $('dialog').open && $('dialogBody').querySelector('form,input:not([type=checkbox]),textarea,select')) return;
-  inboxFromEdge=origin==='edge';
-  listNotices();
-};
+$('workspaceReturn').onclick=()=>{closeDialog();action(native('compact',{value:true}))};
+window.openInbox=()=>listNotices();
 window.setInbox=state=>{
   const channel=state.channel||'codex';
   if(Array.isArray(state.items))updateItems(channel,state.items);
@@ -222,7 +202,7 @@ window.setInbox=state=>{
   inboxBadge();
   if($('dialog').open&&$('inboxList')){const top=$('dialog').scrollTop;listNotices();$('dialog').scrollTop=top}
 };
-$('inboxButton').onclick=()=>{inboxFromEdge=!$('workspaceReturn').hidden;listNotices()};
+$('inboxButton').onclick=()=>listNotices();
 $('dialogBody').addEventListener('click',event=>{
   const filter=event.target.closest('[data-source]');
   if(filter){selectedInboxSource=filter.dataset.source;listNotices();return}

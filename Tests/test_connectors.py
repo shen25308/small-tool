@@ -128,6 +128,67 @@ class ClaudeCodeHook(Sandbox):
         receipt, = self.receipts()
         self.assertEqual((receipt["summary"], receipt["title"]), ("Final reply 你好", "Claude Code · Billing refactor"))
 
+    def write_transcript(self, rows):
+        path = self.base / "session.jsonl"
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+        return str(path)
+
+    @staticmethod
+    def tool(call_id, name, **arguments):
+        return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": call_id, "name": name, "input": arguments}]}}
+
+    @staticmethod
+    def result(call_id, body, error=False):
+        part = {"type": "tool_result", "tool_use_id": call_id, "content": body}
+        if error:
+            part["is_error"] = True
+        return {"type": "user", "message": {"content": [part]}}
+
+    def test_facts_come_from_the_session_log(self):
+        cwd = "/Users/me/code/shop"
+        rows = [
+            {"type": "user", "message": {"content": "Earlier request"}},
+            self.tool("old", "Edit", file_path=cwd + "/old.py"),
+            self.result("old", "ok"),
+            {"type": "user", "message": {"content": "Add refunds"}},
+            {"type": "user", "isMeta": True, "message": {"content": "<system-reminder>ignored</system-reminder>"}},
+            self.tool("a", "Read", file_path=cwd + "/billing.py"),
+            self.result("a", "file text"),
+            self.tool("b", "Edit", file_path=cwd + "/billing.py", old_string="x", new_string="y"),
+            self.result("b", "updated"),
+            self.tool("c", "Write", file_path=cwd + "/tests/test_refunds.py", content="..."),
+            self.result("c", "created"),
+            self.tool("d", "Bash", command="npm   test"),
+            self.result("d", "Exit code 1\n2 failing", error=True),
+            self.tool("e", "Edit", file_path=cwd + "/billing.py", old_string="y", new_string="z"),
+            self.result("e", "updated"),
+            self.tool("f", "Bash", command="npm test"),
+            self.result("f", "48 passing"),
+            self.tool("g", "Bash", command="git status"),
+            self.result("g", "clean"),
+            {"type": "assistant", "isSidechain": True, "message": {"content": [{"type": "tool_use", "id": "s", "name": "Edit", "input": {"file_path": "/elsewhere.py"}}]}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "Done. Tests pass."}]}},
+        ]
+        self.hook(hook_event_name="Stop", cwd=cwd, transcript_path=self.write_transcript(rows), last_assistant_message="Done. Tests pass.")
+        facts = self.states()[0]["facts"]
+        self.assertEqual(facts, {"files": ["billing.py", "tests/test_refunds.py"], "fileCount": 2, "commands": 3,
+                                 "failedTools": 1, "tests": "passed", "testCommand": "npm test"})
+
+    def test_facts_report_missing_and_failing_checks(self):
+        cwd = "/Users/me/code/shop"
+        untested = [{"type": "user", "message": {"content": [{"type": "text", "text": "Fix it"}]}},
+                    self.tool("a", "Edit", file_path="/tmp/outside.py"), self.result("a", "updated")]
+        self.hook(hook_event_name="Stop", session_id="s-a", cwd=cwd, transcript_path=self.write_transcript(untested), last_assistant_message="Fixed.")
+        facts = next(state for state in self.states() if state["session"] == "s-a")["facts"]
+        self.assertEqual((facts["tests"], facts["files"], facts["commands"]), ("none", ["/tmp/outside.py"], 0))
+        failing = [{"type": "user", "message": {"content": "Build it"}},
+                   self.tool("a", "Bash", command="cargo build && cargo test"), self.result("a", "Exit code 101\nerror[E0308]")]
+        self.hook(hook_event_name="Stop", session_id="s-b", cwd=cwd, transcript_path=self.write_transcript(failing), last_assistant_message="Built.")
+        facts = next(state for state in self.states() if state["session"] == "s-b")["facts"]
+        self.assertEqual((facts["tests"], facts["testCommand"]), ("failed", "cargo build && cargo test"))
+        self.hook(hook_event_name="Stop", session_id="s-c", cwd=cwd, transcript_path=str(self.base / "missing.jsonl"), last_assistant_message="Ok.")
+        self.assertNotIn("facts", next(state for state in self.states() if state["session"] == "s-c"))
+
     def test_long_reply_is_trimmed_and_bad_input_never_blocks(self):
         result = self.hook(hook_event_name="Stop", last_assistant_message="é" * 80000)
         self.assertEqual(result.returncode, 0, result.stderr)

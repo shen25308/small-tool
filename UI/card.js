@@ -49,8 +49,10 @@ window.Card = (() => {
       '<div class="report-verdict"><span class="verdict-badge">' + symbol(glyph) + esc(report.label) + '</span><span>' + esc(report.reason) + '</span></div>' +
       '<p class="report-headline">' + esc(report.headline) + '</p>' +
       (report.points.length ? '<ul class="report-points">' + report.points.map(point => '<li>' + esc(point) + '</li>').join('') + '</ul>' : '') +
-      (report.files.length || report.tests ? '<div class="report-chips">' + report.files.map(file => '<code>' + esc(file) + '</code>').join('') +
-        (report.tests ? '<span class="test-chip ' + report.tests + '">' + (report.tests === 'passed' ? 'Checks passed' : 'Checks failed') + '</span>' : '') + '</div>' : '') +
+      (report.files.length || report.tests ? '<div class="report-chips">' + report.files.slice(0, 3).map(file => '<code>' + esc(file) + '</code>').join('') +
+        (report.moreFiles ? '<code class="more-files">+' + report.moreFiles + '</code>' : '') +
+        (report.tests ? '<span class="test-chip ' + report.tests + '"' + (report.checked ? ' title="' + esc(report.checked) + '"' : '') + '>' +
+          ({passed: 'Checks passed', failed: 'Checks failed', none: 'No checks ran'})[report.tests] + '</span>' : '') + '</div>' : '') +
       (report.asked ? '<p class="report-asked" title="' + esc(report.asked) + '">You asked: ' + esc(report.asked) + '</p>' : '') +
       '<div class="report-actions"><button type="button" class="' + (report.verdict === 'done' ? 'secondary' : 'primary') + '" data-report="open">' +
         esc(app ? 'Open in ' + app : 'Open Claude Code') + '</button>' +
@@ -76,17 +78,42 @@ window.Card = (() => {
     const pick = reportShown;
     if (!pick) return;
     const {entry, note} = pick;
-    const markRead = () => note ? native('readNotice', {key: note.id, channel: note.channel}) : native('dismissAgent', {key: entry.key});
+    const markRead = () => note ? readNotice(note) : dismissAgentEntry(entry);
     if (kind === 'dismiss') { action(markRead()); return; }
     if (kind === 'inbox') { inWorkspace(() => $('inboxButton').click()); return; }
     if (kind === 'read') { inWorkspace(() => openNotice(note.id)); return; }
+    if (entry.demo) { toast('In a real session, this brings forward the app Claude Code runs in.'); action(markRead()); return; }
     const opening = entry.notice ? native('openCodex', {thread: entry.notice.thread}) : native('openAgentApp', {app: entry.app || ''});
     action(opening.then(() => { if (note) return markRead(); }));
+  }
+
+  let claude = null, askedClaude = false;
+  function checkClaude() {
+    if (askedClaude) return;
+    askedClaude = true;
+    native('claudeCode', {action: 'status'}).then(state => { claude = state; render(); }).catch(() => { claude = {installed: false}; });
+  }
+  function renderWelcome() {
+    checkClaude();
+    const show = !!claude && !claude.installed && !data.welcomed && !root.classList.contains('has-report') && !Demo.running();
+    $('cardWelcome').hidden = !show;
+  }
+  function welcomeAction(kind) {
+    if (kind === 'demo') { Demo.start(); render(); return; }
+    if (kind === 'close') { action(change(state => { state.welcomed = true; })); return; }
+    const button = root.querySelector('[data-welcome="connect"]');
+    button.disabled = true;
+    action(native('claudeCode', {action: 'install'}).then(state => {
+      claude = state;
+      toast(state.working ? 'Claude Code is connected. Finish a turn to see a report here.' : state.problem || 'Claude Code is connected.');
+      render();
+    }).finally(() => { button.disabled = false; }));
   }
 
   function render() {
     if (!compact) return;
     renderReport();
+    renderWelcome();
     const now = new Date();
     const today = data.tasks.filter(isToday);
     const open = today.filter(task => !task.done), done = today.length - open.length;
@@ -97,11 +124,12 @@ window.Card = (() => {
     const ring = $('cardRing');
     ring.style.setProperty('--progress', ratio.toFixed(3));
     ring.classList.toggle('complete', today.length > 0 && done === today.length);
+    ring.classList.toggle('zero', done === 0);
     ring.querySelector('.ring-label').textContent = today.length ? done + '/' + today.length : '–';
     ring.setAttribute('aria-label', done + ' of ' + today.length + ' done today');
     const shown = open.slice(0, MAX_ROWS);
     $('cardTasks').innerHTML = shown.map(row).join('') || '<div class="card-empty">' + symbol(today.length ? 'i-check-circle' : 'i-sun') +
-      '<span>' + (today.length ? 'Everything for today is done.' : 'Nothing planned. Add a task below.') + '</span></div>';
+      '<span>' + (today.length ? 'Everything for today is done.' : 'A clear day. Add a task below, or plan one from your lists.') + '</span></div>';
     const more = open.length - shown.length;
     $('cardMore').hidden = more <= 0;
     $('cardMore').textContent = '+' + more + ' more';
@@ -121,12 +149,14 @@ window.Card = (() => {
 
   function inWorkspace(next) {
     if (!compact) { next(); return; }
-    action(native('compact', {value: false}).then(next));
+    action(native('compact', {value: false}).then(() => { window.setWorkspaceReturn(true); next(); }));
   }
 
   root.addEventListener('click', event => {
     const report = event.target.closest('[data-report]');
     if (report) { reportAction(report.dataset.report); return; }
+    const welcome = event.target.closest('[data-welcome]');
+    if (welcome) { welcomeAction(welcome.dataset.welcome); return; }
     const open = event.target.closest('[data-card-open]');
     if (open) {
       const task = data.tasks.find(item => item.id === open.closest('.row').dataset.id);
@@ -140,7 +170,7 @@ window.Card = (() => {
 
   // Drag the card by any empty part of it. The app moves the window and snaps it to a corner.
   root.addEventListener('mousedown', event => {
-    if (event.button !== 0 || event.target.closest('button, input, a, .row, .island, [popover], .card-report')) return;
+    if (event.button !== 0 || event.target.closest('button, input, a, .row, .island, [popover], .card-report, .card-welcome')) return;
     native('cardDrag').catch(() => {});
   });
 
@@ -194,5 +224,7 @@ window.Card = (() => {
   $('cardAddInput').addEventListener('keydown', event => { if (event.key === 'Escape') { event.target.value = ''; event.target.blur(); } });
 
   window.setPinned = value => { pinnedNow = !!value; render(); };
-  return {render, report, inWorkspace, renderReport};
+  // Agents and results change often. Refresh only the parts they affect, not the task list.
+  const refresh = () => { if (compact) { renderReport(); renderWelcome(); } };
+  return {render, report, inWorkspace, refresh};
 })();

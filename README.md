@@ -6,11 +6,11 @@ Shishi is a task list for people who work alongside AI. A small card sits in a c
 
 ![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
-[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Brief report in motion (video)](Previews/agent-report.mp4) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
+[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Brief report in motion (video)](Previews/agent-report.mp4) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png)
 
 ## Run on a Mac
 
-Version 1.7 requires an Apple Silicon Mac running macOS 26 or later. Download the ZIP from the release, extract it, and open **Shishi.app**. The preview uses local ad-hoc signing and has not been notarized by Apple. The ZIP includes the offline model, inference engine, Python runtime, and third-party notices.
+Version 1.7 requires an Apple Silicon Mac running macOS 26 or later. Download the ZIP from the release, extract it, and open **Shishi.app**. The build workflow also produces a light download that leaves out the 1.1 GB offline model; everything works in it except finding tasks in a pasted message. The preview uses local ad-hoc signing and has not been notarized by Apple. The ZIP includes the offline model, inference engine, Python runtime, and third-party notices.
 
 If you are upgrading, Shishi keeps the same local workspace, inbox, and connection preferences. If an MCP client or Grok task was configured with the previous app’s absolute path, copy its configuration again after opening Shishi.app.
 
@@ -30,11 +30,9 @@ The design reference for the Today board is [Youniverse’s work task list demo]
 - **Focus timer.** Start 15, 25 or 50 minutes on the next task. Completed minutes count toward your wrap-up.
 - **Wrap Up** shows what you finished, what is still open, your streak and a seven-day chart. It can move open tasks to tomorrow and copy a summary. **Copy Tasks as Markdown** in the ••• menu exports every list.
 
-## Read a result beside your editor
+## Read a result
 
-Choose **More (•••) → Show result panel** and drag the panel beside your document. The result panel and inbox start with collapsed previews. **More → Latest result** opens the latest receipt inside the workspace. Click the preview or focus it and press Space to expand it. Shishi selects sentences from the saved reply, including changes, checks, unresolved work, and file names. Use the original-reply control to read the stored text.
-
-If a new result arrives while you are reading, a control offers to show the latest result. You can finish reading first. Use the back control to return to the summary, the workspace, or your editor. Escape goes up one level in settings. Some replies saved by earlier versions of Shishi contain only the first 4,000 characters. The interface follows the Mac's light or dark appearance. Personal tasks, project names, emails, and AI replies keep their original language.
+Every finished reply waits in the **Inbox** (toolbar, or the card's right-click menu) until you read it. Cards start as one-line previews: click one, or focus it and press Space, to see the summary Shishi picked from the reply (changes, checks, unresolved work and file names), then **Show reply** for the full text. **Mark All Read** clears the list, and **Add Follow-up Task** turns a result into a task for today. Some replies saved by earlier versions of Shishi contain only the first 4,000 characters. Personal tasks, project names, emails and AI replies keep their original language.
 
 ## Connect a source
 
@@ -55,7 +53,10 @@ When Claude Code or Codex finishes, the corner card shows a short report so you 
 
 - **A verdict.** *No need to check* (it finished, and any checks passed), *Worth a look* (checks failed or something is unresolved), or *Needs you* (it asked a question, stopped early, or is waiting for permission).
 - **The essentials.** The main change, up to two supporting lines, the files it touched, whether checks passed, how long it took, and what you asked.
+- **Facts, not just words.** The hook reads the finished turn from Claude Code's own session log: which files Claude actually edited, and which test, build or lint commands it actually ran and whether they passed. If Claude says the tests pass but never ran any, or changed code without running a single check, the report says *Worth a look* and tells you why. Reading the log happens on your Mac and needs nothing from the network.
 - **One click to act.** **Open in Terminal** (or iTerm, VS Code, Cursor, Warp, Ghostty, Zed, the Claude app, or Codex) brings forward the app the session runs in. **Full reply** opens it in the workspace. **Got it** clears the report.
+
+On first launch the empty card offers **Connect Claude Code** and **Try a demo**. The demo plays a pretend session in about ten seconds (working, needing you, finished) without touching your files or your inbox.
 
 A session waiting for you comes first. Other unread results wait behind it, with a count. The hook learns which app the session runs in from the bundle identifier macOS gives your terminal.
 
@@ -78,6 +79,8 @@ Install the macOS Swift command-line tools and Python 3. Extract the release ZIP
 ```sh
 python3 build.py --assets /path/to/Shishi.app --output build/Shishi.app
 ```
+
+Add `--lite` to leave out the offline model and its engine.
 
 Run the tests with `python3 -m unittest discover -s Tests` and `node --test Tests/*.test.mjs`. `node Tests/ui/check.mjs [folder]` drives the interface in Chromium against a stand-in for the Mac app (it needs Playwright) and saves screenshots. GitHub Actions builds the app on macOS, launches it with sample data and publishes screenshots of the real window.
 

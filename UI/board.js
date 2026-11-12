@@ -256,13 +256,12 @@ function paletteCommands() {
   return [
     {label: 'New Task', icon: 'plus', hint: '⌘N', run: startNewTask},
     {label: 'New List', icon: 'i-list', run: projectForm},
-    {label: 'Capture Tasks from a Message', icon: 'sparkles', run: () => capture()},
+    canCapture && {label: 'Capture Tasks from a Message', icon: 'sparkles', run: () => capture()},
     {label: 'Open Inbox', icon: 'inbox', run: () => $('inboxButton').click()},
     {label: 'Connections', icon: 'i-link', run: () => showConnectors()},
     {label: focusSession ? 'Stop Focus Timer' : 'Start Focus Timer', icon: 'i-timer', run: () => focusSession ? stopFocus(false) : startFocus(focusLength)},
     {label: 'Wrap Up Today', icon: 'i-check-circle', run: wrapUp},
     {label: compact ? 'Open Full Workspace' : 'Floating Today List', icon: compact ? 'expand' : 'pin', run: () => $('pin').click()},
-    {label: edgeShown ? 'Hide Result Panel' : 'Show Result Panel', icon: 'edge', run: () => $('edgeToggle').click()},
     {label: 'Copy Tasks as Markdown', icon: 'i-copy', run: exportTasks},
     data.notion && {label: 'Sync with Notion', icon: 'i-link', run: () => syncNotion()}
   ].filter(Boolean);

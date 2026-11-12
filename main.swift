@@ -61,11 +61,9 @@ private final class WindowTitleStrip: NSView {
 final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
     private var window: NSWindow!
     private var web: WKWebView!
-    private var editorApp:NSRunningApplication?
     private var compact = false
     private lazy var card = CornerCard()
     private var mainBackdrop: NSVisualEffectView!
-    private var restoreTodayOnReturn = false
     private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? true
     private let modeButton = NSButton()
     private let pinButton = NSButton()
@@ -74,7 +72,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var captionPosition: NSLayoutConstraint!
     private var startsWithToday: Bool {
         let args = CommandLine.arguments
-        if args.contains("--edge-results") || args.contains("--open-inbox") || args.contains("--workspace") {return false}
+        if args.contains("--open-inbox") || args.contains("--workspace") {return false}
         return args.contains("--compact-workspace") || (UserDefaults.standard.object(forKey:"ShiShiTodayMode") as? Bool ?? true)
     }
     private var ready = false
@@ -189,27 +187,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             DirectoryWatcher(url:base.appendingPathComponent("Incoming",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanExternal() }
         ]
     }
-    private func showEdge(_ visible:Bool) {
-        if visible && compact,let screen=card.panel.screen?.visibleFrame {
-            edge.avoidCovering(card.panel.frame,on:screen)
-        }
-        edge.setVisible(visible)
-    }
-    private let file: URL
-    private lazy var edge: EdgeResultsPanel = {
-        let result = EdgeResultsPanel()
-        result.onVisibility = { [weak self] shown in
-            UserDefaults.standard.set(shown,forKey:"ShiShiShowsResults")
-            self?.tell("setEdgeVisible",shown)
-        }
-        result.onHistory = { [weak self] in self?.openWorkspace(inbox:true,fromEdge:true) }
-        result.onWorkspace = { [weak self] in self?.openWorkspace(inbox:false,fromEdge:true) }
-        result.onRead = { [weak self] id, channel in self?.markNotice(id,channel:channel) }
-        return result
-    }()
     private lazy var providers = ExternalProviders(resources:resources)
     private var storeUnreadable = false
     private let resources = Bundle.main.resourceURL!
+    /// The light download leaves out the offline model, and with it task capture from messages.
+    private var hasModel: Bool { FileManager.default.fileExists(atPath:resources.appendingPathComponent("assistant.gguf").path) }
 
     override init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -268,29 +250,19 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         makeMenu()
         let ui = resources.appendingPathComponent("UI",isDirectory:true)
         web.loadFileURL(ui.appendingPathComponent("index.html"),allowingReadAccessTo: ui)
-        if CommandLine.arguments.contains("--edge-results") {
-            showEdge(true)
-        } else if !startsWithToday {
+        if !startsWithToday {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            if UserDefaults.standard.object(forKey:"ShiShiShowsResults") as? Bool ?? true {showEdge(true)}
         }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {
         openWorkspace(inbox:false);return true
     }
-    private func openWorkspace(inbox:Bool,fromEdge:Bool=false) {
-        if fromEdge {
-            restoreTodayOnReturn = restoreTodayOnReturn || (compact && card.panel.isVisible)
-            let front=NSWorkspace.shared.frontmostApplication
-            if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier {editorApp=front}
-        }
+    private func openWorkspace(inbox:Bool) {
         if compact {setCompact(false)}
-        tell("setWorkspaceReturn",fromEdge)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps:true)
-        if inbox {tell("openInbox",fromEdge ? "edge" : "main")}
-        else if fromEdge {tell("showWorkspaceHome",true)}
+        if inbox {tell("openInbox","main")}
     }
     // With the menu bar item on, Shishi keeps collecting results after its window closes.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !menuBar.enabled }
@@ -395,7 +367,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     }
     private func tell(_ function: String, _ arg: Any) {
         if function=="setInbox", let state=arg as? [String:Any],let rows=state["items"] as? [[String:Any]],let channel=state["channel"] as? String {
-            edge.accept(channel:channel,items:rows)
             unreadByChannel[channel]=rows.filter {($0["read"] as? Bool) != true}.count
             menuBar.update(unread:unreadByChannel.values.reduce(0,+))
         }
@@ -412,7 +383,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             card.attach(web)
             card.show(pinned:pinned)
             window.orderOut(nil)
-            if edge.panel.isVisible,let screen=card.panel.screen?.visibleFrame {edge.avoidCovering(card.panel.frame,on:screen)}
         } else {
             web.removeFromSuperview()
             web.layer?.cornerRadius = 0
@@ -495,14 +465,13 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 ready=true
                 if startsWithToday {
                     setCompact(true)
-                    if UserDefaults.standard.bool(forKey:"ShiShiShowsResults") {showEdge(true)}
                 }
                 startInbox()
                 providers.startPolling { [weak self] in
                     self?.inboxQueue.async { [weak self] in self?.scanInboxes(force:true) }
                 }
-                tell("setEdgeVisible",edge.panel.isVisible)
                 tell("setPinned",pinned)
+                tell("setCapabilities",["capture":hasModel])
                 // The page pads its top edge by the title bar height because content runs underneath it.
                 tell("setChrome",["titlebar":Double(max(0,window.frame.height-window.contentLayoutRect.height)),"vibrant":vibrant] as [String:Any])
                 if CommandLine.arguments.contains("--open-inbox") {
@@ -538,7 +507,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     guard let self else {return}
                     switch result {
                     case .success(let response):
-                        if body["action"] as? String=="disconnect",body["purge"] as? Bool==true {self.edge.discardPreview()}
                         self.reply(id,true,response)
                         if body["action"] as? String != "status" {
                             self.inboxQueue.async {self.scanInboxes(force:true)}
@@ -546,25 +514,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     case .failure(let error):self.reply(id,false,error.localizedDescription)
                     }
                 }
-            case "edgeMailPreference":
-                if let choice=body["value"] as? Bool {
-                    edge.showsMail=choice
-                    UserDefaults.standard.set(choice,forKey:"ShiShiDesktopMail")
-                    edge.discardPreview()
-                    inboxQueue.async {self.scanInboxes(force:true)}
-                }
-                reply(id,true,edge.showsMail)
-            case "returnToEdge":
-                if restoreTodayOnReturn {setCompact(true)} else {window.orderOut(nil)}
-                restoreTodayOnReturn=false
-                showEdge(true)
-                if let editor=editorApp,!editor.isTerminated {editor.activate(options:[])} else {NSApp.deactivate()}
-                editorApp=nil
-                tell("setWorkspaceReturn",false)
-                reply(id,true,true)
-            case "edgeVisibility":
-                showEdge(body["value"] as? Bool == true)
-                reply(id,true,edge.panel.isVisible)
             case "openConnectorLink":
                 guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}
                 inboxQueue.async {
@@ -695,6 +644,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 reply(id,true,choice.chosen)
             case "compact": setCompact(body["value"] as? Bool == true);reply(id,true,true)
             case "extract":
+                guard hasModel else {throw AppIssue("This light download leaves out the offline model that finds tasks in messages. Download the full version to use it.")}
                 guard !processing else{throw AppIssue("Shishi is still extracting tasks from the previous message. Try again in a moment.")}
                 guard let text=body["text"] as? String else{throw AppIssue("Enter a message first.")}
                 processing=true

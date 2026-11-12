@@ -40,7 +40,8 @@ function fakeHost(seed) {
       {key: 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', detail: 'Refactor the billing module and add tests', state: 'working', receipt: '', time: now - 95,
        task: 'Refactor the billing module and add tests', started: now - 95, app: 'com.microsoft.VSCode'},
       {key: 'f'.repeat(64), source: 'Claude Code', title: 'Claude Code · small-tool', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: 'connector/' + 'a'.repeat(64), time: now - 240,
-       task: 'Refactor billing.py and add tests for refunds', started: now - 540, app: 'com.googlecode.iterm2'}
+       task: 'Refactor billing.py and add tests for refunds', started: now - 540, app: 'com.googlecode.iterm2',
+       facts: {files: ['billing.py', 'tests/test_billing.py'], fileCount: 2, commands: 3, failedTools: 0, tests: 'passed', testCommand: 'pytest -q'}}
     ]
   };
   window.__host = state;
@@ -53,7 +54,7 @@ function fakeHost(seed) {
       if (seed.compact) window.setCompact(true);
       push('codex'); push('external');
       window.setAgents(state.agents);
-      window.setEdgeVisible(false);
+      window.setCapabilities({capture: !seed.lite});
       return true;
     },
     syncInboxes: () => true,
@@ -66,14 +67,12 @@ function fakeHost(seed) {
     },
     codexConnection: message => { if (typeof message.enabled === 'boolean') state.codex = message.enabled; return state.codex; },
     externalProvider: message => message.provider === 'github' ? {connected: false} : {accounts: [], configuredDefault: false, connected: false},
-    edgeMailPreference: message => { if (typeof message.value === 'boolean') state.edgeMail = message.value; return state.edgeMail; },
     appearance: message => { if (['system', 'light', 'dark'].includes(message.value)) state.appearance = message.value; return state.appearance || 'system'; },
     cardSize: message => { state.cardHeight = message.height; return true; },
     cardDrag: () => { state.drags = (state.drags || 0) + 1; return true; },
     pin: message => { if (typeof message.value === 'boolean') state.pinned = message.value; window.setPinned(state.pinned !== false); return state.pinned !== false; },
     nativeMenu: message => { state.lastMenu = message.items; return state.menuChoice ? String(message.items.findIndex(item => item.title === state.menuChoice)) : ''; },
     menuBar: message => { if (typeof message.value === 'boolean') state.menuBar = message.value; return state.menuBar; },
-    edgeVisibility: message => { state.edge = !!message.value; window.setEdgeVisible(state.edge); return state.edge; },
     claudeCode: message => {
       if (message.action === 'install') state.claude = {installed: true, working: true, cli: true, problem: ''};
       if (message.action === 'remove') state.claude = {installed: false, working: false, cli: true, problem: ''};
@@ -103,7 +102,6 @@ function fakeHost(seed) {
     compact: message => { window.setCompact(!!message.value); return true; },
     latestSize: () => true, openNotion: () => true, openCodex: message => { state.openedThread = message.thread; return true; },
     openAgentApp: message => { state.openedApp = message.app; return {'com.apple.Terminal': 'Terminal', 'com.googlecode.iterm2': 'iTerm'}[message.app] || 'Terminal'; }, openConnectorLink: () => true, copyConnectorSetup: () => true,
-    returnToEdge: () => true,
     extract: () => [{title: 'Send the homepage prototype to the design team', quote: 'Maya: Please send the new homepage prototype…', tag: 'Design'}]
   };
   window.webkit = {messageHandlers: {host: {postMessage(message) {
@@ -133,7 +131,7 @@ html.desktop body.compact #card { inset: 14px 14px auto auto; width: 340px; heig
 `;
 const EDITOR = '<u>// billing.py</u><br><b>def</b> <i>charge</i>(account, amount):<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>if</b> amount &lt;= 0:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>raise</b> ValueError(<i>"amount must be positive"</i>)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice = Invoice.<i>open</i>(account)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice.<i>add</i>(amount)<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>return</b> invoice.<i>settle</i>()<br><br><u># Claude Code is refactoring this module…</u>';
 
-export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false, video = ''} = {}) {
+export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false, video = '', lite = false} = {}) {
   // Checks run with reduced motion so timing never decides a result. One check turns motion on.
   const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light', reducedMotion: motion ? 'no-preference' : 'reduce', ...(video ? {recordVideo: {dir: video, size: {width, height}}} : {})});
   const page = await context.newPage();
@@ -141,7 +139,7 @@ export async function open(browser, {width = 1040, height = 760, dark = false, c
   page.on('pageerror', error => problems.push('pageerror: ' + error.message));
   page.on('console', message => { if (message.type() === 'error') problems.push('console: ' + message.text()); });
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  await page.addInitScript(fakeHost, {workspace: workspace === undefined ? sampleWorkspace() : workspace, compact, empty, titlebar, tomorrow: iso(tomorrow)});
+  await page.addInitScript(fakeHost, {workspace: workspace === undefined ? sampleWorkspace() : workspace, compact, empty, titlebar, lite, tomorrow: iso(tomorrow)});
   // Chromium reports the Mac platform key as Meta, the same key the page listens for.
   await page.goto(pathToFileURL(path.join(root, 'UI/index.html')).href);
   await page.waitForFunction(() => window.__host && document.querySelector('#nav .smart-tile') && document.querySelector('#agentList'));
