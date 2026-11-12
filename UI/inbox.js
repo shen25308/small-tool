@@ -135,15 +135,21 @@ function listNotices() {
   const before=[...list.children].find(el=>el.getBoundingClientRect().bottom>$('dialog').getBoundingClientRect().top);
   const oldY=before?.getBoundingClientRect().top,scrolled=$('dialog').scrollTop>30;
   let insertion=list.firstElementChild;
+  // A row's verdict depends on the session facts in the agent status, which can arrive after the inbox.
+  // Rebuild a row when those facts change, so the inbox never disagrees with the card.
+  const factsKey=note=>{const agent=window.agentForNotice?.(note.id);return agent?.facts?JSON.stringify(agent.facts):''};
   for(const note of visible){
-    const node=existing.get(note.id)||ResultUI.card(note,{...cardOptions,preview:true});
+    const key=factsKey(note), cached=existing.get(note.id);
+    const node=cached&&cached.dataset.factsKey===key?cached:ResultUI.card(note,{...cardOptions,preview:true});
+    node.dataset.factsKey=key;
+    if(cached&&cached!==node){cached.replaceWith(node);if(insertion===cached)insertion=node}
     node.classList.toggle('unread',!note.read);
     ResultUI.syncState(node,note);
     if(node!==insertion)list.insertBefore(node,insertion);
     insertion=node.nextElementSibling;
     existing.delete(note.id);
   }
-  for(const node of existing.values())node.remove();
+  for(const node of existing.values())if(node.isConnected)node.remove();
   if(!visible.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=selectedInboxSource===ARCHIVED?'Nothing archived.':'No results yet.';list.append(empty)}
   $('olderResults').hidden=filtered.length<=resultLimit;
   if(scrolled&&before?.isConnected)$('dialog').scrollTop+=before.getBoundingClientRect().top-oldY;

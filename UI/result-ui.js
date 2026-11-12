@@ -34,7 +34,7 @@ window.ResultUI = (() => {
     const preview=!!options.preview;
     const top=element(preview?'span':'div','result-meta');
     // Agent replies carry the same verdict as the card, using the session facts when the status still has them.
-    const agent=window.agentEntries?.().find(entry=>entry.receipt===note.id||entry.notice?.id===note.id);
+    const agent=window.agentForNotice?.(note.id);
     const verdict=window.AgentReport&&!isFeed?AgentReport.brief(note,agent||{}):null;
     const state=verdict?verdict.label:info.status==='attention'?'Needs attention':'Turn finished';
     // Build titles in stored receipts may still carry an older localized conclusion.

@@ -38,7 +38,7 @@ window.Card = (() => {
     const unread = allNotices().filter(note => !note.read && !note.archived && !FEEDS.has(note.source)).map(note => {
       const entry = entries.find(item => item.receipt === note.id || item.notice?.id === note.id) ||
         {key: 'note:' + note.id, source: sourceName(note), title: note.title, time: note.time, state: 'done', receipt: note.id,
-         notice: note.channel === 'codex' ? note : null, demo: note.channel === 'demo'};
+         notice: note.channel === 'codex' ? note : null, demo: note.channel === 'demo', facts: window.agentForNotice?.(note.id)?.facts};
       return {entry, note};
     });
     return [...waiting, ...unread];

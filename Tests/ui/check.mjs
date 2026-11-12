@@ -765,6 +765,32 @@ await check('card report keeps its lines and asks for room (native capture)', {w
   assert.ok((await host()).cardHeight > 474, 'the card asks for the height its content needs: ' + (await host()).cardHeight);
 });
 
+await check('inbox and card agree when session facts arrive late (native capture)', {}, async ({page}) => {
+  // Seen in the macOS capture: the app sends the inbox before the agent statuses, and the inbox row kept
+  // "Checks reported passing" while the card showed "Checks passed" for the same result.
+  const id = 'connector/' + '9'.repeat(64);
+  await page.evaluate(id => {
+    const host = window.__host, now = Date.now() / 1000;
+    host.notices.external.unshift({id, source: 'Claude Code', title: 'Claude Code · late-facts', time: now, read: false, thread: '', link: '', summary: 'Done. All tests pass.'});
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+  }, id);
+  await page.click('#inboxButton');
+  const row = () => page.locator('#inboxCards .result-card', {hasText: 'late-facts'}).locator('.result-state');
+  assert.equal(await row().innerText(), 'Completed · Checks reported passing');
+  await page.evaluate(id => {
+    const host = window.__host, now = Date.now() / 1000;
+    host.agents.push({key: '9'.repeat(64), source: 'Claude Code', title: 'Claude Code · late-facts', detail: 'Done.', state: 'done', receipt: id, time: now, task: 'Fix it', started: now - 60,
+      facts: {files: ['a.py'], fileCount: 1, commands: 1, failedTools: 0, tests: 'passed', testCommand: 'pytest -q'}});
+    window.setAgents(host.agents);
+  }, id);
+  await page.waitForTimeout(400);
+  assert.equal(await row().innerText(), 'Completed · Checks passed', 'after facts arrive');
+  // Reading the result clears its session status; the verdict must not fall back to the reply's claim.
+  await page.evaluate(id => { const host = window.__host; host.agents = host.agents.filter(agent => agent.receipt !== id); window.setAgents(host.agents); }, id);
+  await page.waitForTimeout(300);
+  assert.equal(await row().innerText(), 'Completed · Checks passed');
+});
+
 await check('full reply opens the original reply', {width: 340, height: 640, compact: true}, async ({page}) => {
   await page.click('#cardReport [data-report="dismiss"]');
   await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));

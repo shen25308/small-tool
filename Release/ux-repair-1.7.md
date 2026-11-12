@@ -10,7 +10,8 @@ Work landed in four reviewable commits on `claude/charming-ride-cf9jlp`, in the 
 | B. Result reading | `07f174d` | F06, F09, F08, F12 |
 | C. Native window | `19f204f` | F15, F16 |
 | D. Scheduling and long-term data | `8abe8d8` | F11, F10, F14, F13, F17, F18 |
-| E. Delivery | this document, data-survival check, native screenshots | — |
+| E. Delivery | `ef6d66f` | this document, data-survival check, native screenshots |
+| F. Native verification fixes | `4cb0845`, `1b24411`, and the commit that adds this row | defects listed under *Found only by the native run* |
 
 **Test suites.** `node --test Tests/*.test.mjs` (logic), `python3 -m unittest discover -s Tests` (connectors), `node Tests/ui/check.mjs` (Chromium against a stand-in host; these prove page behaviour, **not** native window behaviour), and on the macOS runner `Tests/ci/launch_check.py`, `Tests/ci/window_check.py` and `Tests/ci/data_survival.py` against the built app.
 
@@ -37,6 +38,20 @@ Work landed in four reviewable commits on `claude/charming-ride-cf9jlp`, in the 
 | F17 | Details / Schedule / More reachable only by right-click | Row buttons **Plan days**, **Details**, **More** on hover and keyboard focus; **Choose Days…** in More; card rows get a More button. | UI: *row actions without right-click*, *context menu: …* |
 | F18 | Version, README and artifacts disagreed; light app could never get the model | README separates published 1.6.0 from this unreleased 1.7. `build.py` stamps `ShishiSourceCommit`, `ShishiSourceDirty`, `ShishiVariant`; CI fails if the stamp ≠ `GITHUB_SHA`; **About Shishi** shows it. Light build keeps the engine and downloads the pinned model only on request, verifying SHA-256 `6a1a2eb6…407e` (size 1,117,320,736 bytes) before use. | UI: *light download: no task capture*, *light download: optional verified model download*; CI: stamp check in *Build the app*, `lite_check.py` |
 
+## Found only by the native run
+
+The first macOS run of the repaired build exposed defects that every browser check had passed. Each now has a fix and a test:
+
+| Defect seen on macOS | Cause | Fix | Test |
+|---|---|---|---|
+| Card report text overlapped (“Claude needs your permission…” ran under “You asked…”), and the card stopped at 474 pt on a 768-pt screen | The report is a grid inside a shrinking flex box; its rows shrank instead of scrolling, so it also measured smaller than its text and asked the app for too little height | Report rows keep their height; the report scrolls | UI: *card report keeps its lines and asks for room* (fails on the old CSS) |
+| Horizontal scrollbar in the card's task list | Rows use negative side margins inside a vertical scroller | The list owns the extra margin and hides sideways overflow | same check |
+| Resize handle did nothing | 16×16 handle sat in the transparent, masked-off corner of a 22-pt rounded card, where macOS passes clicks through | Handle moved inside the rounded shape | `window_check.py`: resize now **required** when synthetic input works; passed 340×627 → 430×587, kept after relaunch |
+| Resize changed height but snapped width back | Content-height reports re-placed the card at its stored size during the drag | Placement pauses while a grip or handle drag is in progress | same |
+| Inbox said *Checks reported passing* while the card said *Checks passed* for the same result | Inbox rows were built before the session facts arrived and cached; reading a result also cleared its facts | Facts are remembered per result; rows rebuild when facts arrive | UI: *inbox and card agree when session facts arrive late* (fails without the fix) |
+
+One check was adjusted rather than the app: the command-line helper reads the Dock's reserved area 5 pt differently from the app, so the corner snap is judged by the corner the app saved plus the left edge, with the bottom edge allowed within 8 pt.
+
 ## Native evidence
 
 Produced by the **Build** workflow on the `macos-26` runner for the commit named in each app's **About Shishi** panel, uploaded as the *screenshots* artifact:
@@ -55,9 +70,9 @@ Produced by the **Build** workflow on the `macos-26` runner for the commit named
 | Item | How to check | CI coverage |
 |---|---|---|
 | Stage Manager | Turn on Stage Manager, show the card, switch stages. The card must not join or reorder a stage, and must not come forward on its own. | Best-effort: one card window with Stage Manager's setting written; stage behaviour is manual. |
-| Dragging | Drag the grip bar: the card follows and snaps to the nearest corner; with snapping off it stays where dropped. | Synthetic drag with snapping on; *not verified* if input is not trusted. Snapping off is manual. |
-| Resizing | Drag the bottom-right corner; quit and reopen: the size is kept. | Synthetic drag + relaunch. |
-| Focus preservation | Type in another app while a Claude Code turn finishes: typing must continue in that app. | Hook *Stop* while Calculator is frontmost. |
+| Dragging | Drag the grip bar: the card follows and snaps to the nearest corner; with snapping off it stays where dropped. | Synthetic drag with snapping on: passed (bottom-left). Snapping off is manual. |
+| Resizing | Drag the handle near the bottom-right corner; quit and reopen: the size is kept. | Synthetic drag + relaunch: passed (340×627 → 430×587, restored). |
+| Focus preservation | Type in another app while a Claude Code turn finishes: typing must continue in that app. | Hook *Stop* while Calculator is frontmost: passed (Calculator stayed in front). |
 | Compact ↔ expanded | ⌘P and the expand button switch views without a second window, and the card returns to its place. | Each view is launched and captured separately; switching in place is manual. |
 | Spaces / on top | Toggle **Show on All Spaces** and **Keep Above Other Windows** and switch desktops. | Default window level (not floating) checked; toggles and Spaces switching are manual. |
 | VoiceOver | Rows, chips and the day calendar announce their labels. | Not covered. |

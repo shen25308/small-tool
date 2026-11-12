@@ -53,7 +53,16 @@ function renderAgents() {
   }
 }
 window.renderAgents = renderAgents;
-window.setAgents = rows => { agentRows = Array.isArray(rows) ? rows : []; renderAgents(); };
+// Session facts outlive the agent status: reading a result clears its status, but its verdict must not change.
+const factsByNotice = new Map();
+window.agentForNotice = id => agentEntries().find(entry => entry.receipt === id || entry.notice?.id === id) || factsByNotice.get(id) || null;
+window.setAgents = rows => {
+  agentRows = Array.isArray(rows) ? rows : [];
+  for (const row of agentRows) if (row.receipt && row.facts) factsByNotice.set(row.receipt, {state: 'done', facts: row.facts, task: row.task || '', started: row.started, time: row.time, receipt: row.receipt});
+  renderAgents();
+  // Session facts decide inbox verdicts too; refresh an open inbox so both places agree.
+  if ($('dialog').open && $('inboxList')) { const top = $('dialog').scrollTop; listNotices(); $('dialog').scrollTop = top; }
+};
 
 function agentMenu(entry, at) {
   const hasResult = entry.receipt && allNotices().some(note => note.id === entry.receipt);
