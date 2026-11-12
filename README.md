@@ -8,7 +8,7 @@ Shishi is a task list for people who work alongside AI. A small card sits in a c
 
 ![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
-[Corner card](Previews/today.png) · [Brief report](Previews/report.png) · [Card on the desktop](Previews/desktop.png) · [Brief report in motion (video)](Previews/agent-report.mp4) · [First run and demo (video)](Previews/first-run-demo.mp4) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png)
+[Corner card](Previews/today.png) · [Brief report](Previews/report.png) · [Card on the desktop](Previews/desktop.png) · [Inbox](Previews/inbox.png) · [Planning several days](Previews/schedule.png) · [Connection colours](Previews/connections.png) · [Dark appearance](Previews/workspace-dark.png) · [Brief report in motion (video)](Previews/agent-report.mp4) · [First run and demo (video)](Previews/first-run-demo.mp4)
 
 ## Run on a Mac
 
@@ -21,7 +21,7 @@ Both are previews with local ad-hoc signing. They are not signed with a Develope
 
 If you are upgrading, Shishi keeps the same local workspace, inbox, and connection preferences. If an MCP client or Grok task was configured with the previous app’s absolute path, copy its configuration again after opening Shishi.app.
 
-The design reference for the Today board is [Youniverse’s work task list demo](https://v.douyin.com/qhlq-TKt314/). The previews above are captured from the running Mac app by the build workflow, with sample tasks.
+The design reference for the Today board is [Youniverse’s work task list demo](https://v.douyin.com/qhlq-TKt314/). The still previews above are captured from the running Mac app by the build workflow (commit `47e84d8`), with sample tasks. The two videos come from the browser test harness and predate the 1.7 repairs.
 
 ## Plan your day
 

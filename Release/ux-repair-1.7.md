@@ -11,7 +11,7 @@ Work landed in four reviewable commits on `claude/charming-ride-cf9jlp`, in the 
 | C. Native window | `19f204f` | F15, F16 |
 | D. Scheduling and long-term data | `8abe8d8` | F11, F10, F14, F13, F17, F18 |
 | E. Delivery | `ef6d66f` | this document, data-survival check, native screenshots |
-| F. Native verification fixes | `4cb0845`, `1b24411`, and the commit that adds this row | defects listed under *Found only by the native run* |
+| F. Native verification fixes | `4cb0845`, `1b24411`, `47e84d8` | defects listed under *Found only by the native run* |
 
 **Test suites.** `node --test Tests/*.test.mjs` (logic), `python3 -m unittest discover -s Tests` (connectors), `node Tests/ui/check.mjs` (Chromium against a stand-in host; these prove page behaviour, **not** native window behaviour), and on the macOS runner `Tests/ci/launch_check.py`, `Tests/ci/window_check.py` and `Tests/ci/data_survival.py` against the built app.
 
