@@ -120,7 +120,7 @@ shot("window-3-drag.png")
 # 4. Resize with the handle in the bottom-right corner.
 frame = card_windows(card.pid)[0]
 handle = (frame["x"] + frame["w"] - 12, frame["y"] + frame["h"] - 12)
-tool_json("drag", handle[0], handle[1], handle[0] + 90, handle[1] + 70)
+tool_json("drag", handle[0], handle[1], handle[0] + 90, handle[1] - 40)
 time.sleep(2)
 sized = card_windows(card.pid)[0]
 if sized["w"] != frame["w"]:
@@ -128,7 +128,10 @@ if sized["w"] != frame["w"]:
     check("resize with the handle and remember it", abs(sized["w"] - (frame["w"] + 90)) <= 4 and saved and abs(float(saved) - sized["w"]) <= 1,
           f"{frame['w']}x{frame['h']} -> {sized['w']}x{sized['h']}, saved width {saved}")
 else:
-    check("resize with the handle and remember it", False, "the machine did not deliver synthetic mouse input", required=False)
+    # When the grip drag above moved the card, synthetic input works, so a resize that did not happen is a failure.
+    check("resize with the handle and remember it", False,
+          f"width stayed {sized['w']} (height {frame['h']} -> {sized['h']})" if synthetic else "the machine did not deliver synthetic mouse input",
+          required=synthetic)
 shot("window-4-resize.png")
 
 # 5. Relaunch: the same corner and size come back.

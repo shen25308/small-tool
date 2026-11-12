@@ -10,6 +10,7 @@ final class CardPanel: NSPanel {
 
 /// The strip along the top of the card. Dragging it moves the card; it never selects text or presses buttons.
 final class CardGrip: NSView {
+    var onBegin: (() -> Void)?
     var onEnd: (() -> Void)?
     private var start = NSPoint.zero, origin = NSPoint.zero
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
@@ -17,6 +18,7 @@ final class CardGrip: NSView {
     override func mouseDown(with event: NSEvent) {
         start = NSEvent.mouseLocation
         origin = window?.frame.origin ?? .zero
+        onBegin?()
         NSCursor.closedHand.push()
     }
     override func mouseDragged(with event: NSEvent) {
@@ -32,6 +34,7 @@ final class CardGrip: NSView {
 /// The handle in the bottom-right corner. Dragging it sets the card's width and height.
 final class CardResizeHandle: NSView {
     var onResize: ((NSRect) -> Void)?
+    var onBegin: (() -> Void)?
     var onEnd: (() -> Void)?
     private var start = NSPoint.zero, startFrame = NSRect.zero
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
@@ -39,6 +42,7 @@ final class CardResizeHandle: NSView {
     override func mouseDown(with event: NSEvent) {
         start = NSEvent.mouseLocation
         startFrame = window?.frame ?? .zero
+        onBegin?()
     }
     override func mouseDragged(with event: NSEvent) {
         let now = NSEvent.mouseLocation
@@ -76,6 +80,7 @@ final class CornerCard: NSObject {
     private let defaultWidth: CGFloat = 340
     private let margin: CGFloat = 14
     private let radius: CGFloat = 22
+    private var interacting = false
     private let defaults = UserDefaults.standard
     /// A size the person chose with the handle. A missing height means the card follows its content.
     private var userWidth: CGFloat? { didSet { save("ShiShiCardWidth", userWidth) } }
@@ -116,7 +121,9 @@ final class CornerCard: NSObject {
         grip.setAccessibilityElement(true)
         grip.setAccessibilityRole(.handle)
         grip.setAccessibilityLabel("Move the card")
-        grip.onEnd = { [weak self] in self?.dropped() }
+        // While a drag is in progress, content changes must not move or resize the card under the pointer.
+        grip.onBegin = { [weak self] in self?.interacting = true }
+        grip.onEnd = { [weak self] in self?.interacting = false; self?.dropped() }
         // Inside the rounded corner: a click on the transparent, masked-off corner would pass through to the
         // window behind, so the handle sits where the card is opaque.
         handle.frame = NSRect(x: backdrop.bounds.width - 24, y: 4, width: 20, height: 20)
@@ -125,7 +132,8 @@ final class CornerCard: NSObject {
         handle.setAccessibilityRole(.handle)
         handle.setAccessibilityLabel("Resize the card")
         handle.onResize = { [weak self] rect in self?.panel.setFrame(rect, display: true) }
-        handle.onEnd = { [weak self] in self?.resized() }
+        handle.onBegin = { [weak self] in self?.interacting = true }
+        handle.onEnd = { [weak self] in self?.interacting = false; self?.resized() }
         backdrop.addSubview(grip)
         backdrop.addSubview(handle)
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
@@ -180,7 +188,7 @@ final class CornerCard: NSObject {
         let next = max(120, min(height.rounded(.up), 760))
         guard abs(next - contentHeight) >= 1 else { return }
         contentHeight = next
-        if panel.isVisible && userHeight == nil { place(animated: true) }
+        if panel.isVisible && userHeight == nil && !interacting { place(animated: true) }
     }
 
     func fitHeightToContent() {
