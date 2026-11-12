@@ -217,7 +217,16 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         file = support.appendingPathComponent("ShiShiDesk/Workspace.json")
         super.init()
     }
+    private static let appearances = ["system","light","dark"]
+    private func applyAppearance(_ name:String) {
+        NSApp.appearance = name == "dark" ? NSAppearance(named:.darkAqua) : name == "light" ? NSAppearance(named:.aqua) : nil
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // "--appearance dark" overrides the saved choice for one launch, e.g. for screenshots.
+        let args = CommandLine.arguments
+        let forced = args.firstIndex(of:"--appearance").flatMap { $0+1 < args.count ? args[$0+1] : nil }
+        applyAppearance(forced.flatMap { Host.appearances.contains($0) ? $0 : nil }
+                        ?? UserDefaults.standard.string(forKey:"ShiShiAppearance") ?? "system")
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "host")
@@ -651,6 +660,12 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     self.scanAgents(force:true)
                     DispatchQueue.main.async {self.reply(id,true,true)}
                 }
+            case "appearance":
+                if let choice=body["value"] as? String, Host.appearances.contains(choice) {
+                    UserDefaults.standard.set(choice,forKey:"ShiShiAppearance")
+                    applyAppearance(choice)
+                }
+                reply(id,true,UserDefaults.standard.string(forKey:"ShiShiAppearance") ?? "system")
             case "menuBar":
                 if let choice=body["value"] as? Bool {menuBar.enabled=choice}
                 reply(id,true,menuBar.enabled)

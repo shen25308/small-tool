@@ -273,6 +273,9 @@ await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host
   await page.click('#claudeConnection');
   await page.waitForFunction(() => document.querySelector('#claudeConnection').textContent === 'Disconnect');
   assert.match(await text(page, '#claudeRow [data-state]'), /Connected/);
+  await page.waitForSelector('#appearanceChoice [data-appearance="system"][aria-pressed="true"]');
+  await page.click('#appearanceChoice [data-appearance="dark"]');
+  await page.waitForFunction(() => window.__host.appearance === 'dark' && document.querySelector('[data-appearance="dark"]').getAttribute('aria-pressed') === 'true');
   await page.uncheck('#menuBarChoice');
   await page.waitForFunction(() => window.__host.menuBar === false);
   await page.click('#notionRow');

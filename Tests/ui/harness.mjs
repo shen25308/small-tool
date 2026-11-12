@@ -64,6 +64,7 @@ function fakeHost(seed) {
     codexConnection: message => { if (typeof message.enabled === 'boolean') state.codex = message.enabled; return state.codex; },
     externalProvider: message => message.provider === 'github' ? {connected: false} : {accounts: [], configuredDefault: false, connected: false},
     edgeMailPreference: message => { if (typeof message.value === 'boolean') state.edgeMail = message.value; return state.edgeMail; },
+    appearance: message => { if (['system', 'light', 'dark'].includes(message.value)) state.appearance = message.value; return state.appearance || 'system'; },
     menuBar: message => { if (typeof message.value === 'boolean') state.menuBar = message.value; return state.menuBar; },
     edgeVisibility: message => { state.edge = !!message.value; window.setEdgeVisible(state.edge); return state.edge; },
     claudeCode: message => {

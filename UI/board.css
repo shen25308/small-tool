@@ -65,6 +65,7 @@
 .menu-segment button { flex: 1; min-height: 22px; border-radius: 5px; background: var(--control); font-size: 12px; font-weight: 500 }
 .menu-segment button:hover { background: var(--pressed) }
 .menu-segment button[aria-pressed="true"] { background: var(--action); color: #fff }
+.appearance-choice { flex: none; width: 210px; padding: 0 }
 
 .task-picker { width: 220px; max-height: min(340px, calc(100vh - 12px)); overflow-y: auto }
 .task-picker form { margin: 2px 2px 5px }

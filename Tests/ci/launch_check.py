@@ -113,8 +113,7 @@ inbox = launch("--workspace", "--open-inbox")
 shot("inbox.png", inbox)
 stop(inbox)
 
-# NSArgumentDomain overrides the appearance for this launch only.
-dark = launch("--workspace", "-AppleInterfaceStyle", "Dark")
+dark = launch("--workspace", "--appearance", "dark")
 shot("workspace-dark.png", dark)
 stop(dark)
 

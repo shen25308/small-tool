@@ -138,6 +138,8 @@ function showConnectors() {
     '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
     '<h3>Mail and builds</h3><div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div>'+
     '<h3>Shishi</h3><div class="group-box">'+
+    '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
+      [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show status in the menu bar</b><small>Agent progress and unread results stay visible after the window closes.</small></span><input type="checkbox" id="menuBarChoice" disabled></label>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show new mail in the result panel</b></span><input type="checkbox" id="showEdgeMail" disabled></label>'+
     '</div></div>',{label:'Inbox',back:listNotices});
@@ -151,6 +153,13 @@ function showConnectors() {
   };
   bind($('showEdgeMail'),'edgeMailPreference');
   bind($('menuBarChoice'),'menuBar');
+  const appearance=$('appearanceChoice');
+  const showAppearance=value=>appearance.querySelectorAll('[data-appearance]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.appearance===value)));
+  action(native('appearance').then(showAppearance));
+  appearance.onclick=event=>{
+    const choice=event.target.closest('[data-appearance]');
+    if(choice)action(native('appearance',{value:choice.dataset.appearance}).then(showAppearance));
+  };
 
   const connectButton=$('codexConnection'), badge=$('codexRow').querySelector('[data-state]');
   function setCodex(enabled) {

@@ -49,7 +49,7 @@ Open the inbox and choose **Connections…**, or press ⌘K and search for *Conn
 
 ### Stay out of the way
 
-Agent progress shows in three quiet places: the **Agents** list in the sidebar, three rows at the bottom of the floating Today list, and the **menu bar item**, which counts working agents and unread results and lists each one. With the menu bar item on, Shishi keeps collecting results after you close its window. Turn it off in Connections to quit with the last window. Nothing here sends a system notification. Open a finished result from Agents to read it, or add a follow-up task from the result.
+Agent progress shows in three quiet places: the **Agents** list in the sidebar, three rows at the bottom of the floating Today list, and the **menu bar item**, which counts working agents and unread results and lists each one. With the menu bar item on, Shishi keeps collecting results after you close its window. Turn it off in Connections to quit with the last window. The same section sets the appearance to follow the system, or to stay light or dark. Nothing here sends a system notification. Open a finished result from Agents to read it, or add a follow-up task from the result.
 
 ### Notion
 
