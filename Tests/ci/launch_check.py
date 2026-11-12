@@ -31,7 +31,20 @@ def sample_workspace():
     return re.sub(r'"@(-?\d+)', lambda m: '"' + (today + datetime.timedelta(days=int(m.group(1)))).isoformat(), text)
 
 
-(support / "Workspace.json").write_text(sample_workspace())
+def native_sample():
+    """The sample, plus a task planned on several days and connection colours, for the 1.7 screenshots."""
+    import datetime
+    data = json.loads(sample_workspace())
+    today = datetime.date.today()
+    days = [(today + datetime.timedelta(days=n)).isoformat() for n in (0, 2, 3, 4)]
+    for task in data["tasks"]:
+        if task["title"] == "Review the product roadmap":
+            task["plannedDates"], task["planned"] = days, days[0]
+    data["sourceColors"] = {"Claude Code": "#af52de", "Codex": "#30b0c7"}
+    return json.dumps(data, ensure_ascii=False)
+
+
+(support / "Workspace.json").write_text(native_sample())
 
 
 def hook(**event):
@@ -132,6 +145,18 @@ stop(report)
 inbox = launch("--workspace", "--open-inbox")
 shot("inbox.png", inbox)
 stop(inbox)
+
+schedule = launch("--workspace", "--show", "schedule")
+shot("schedule.png", schedule)
+stop(schedule)
+
+connections = launch("--workspace", "--show", "connections")
+shot("connections.png", connections)
+stop(connections)
+
+expanded_inbox = launch("--workspace", "--open-inbox", "--appearance", "dark")
+shot("inbox-dark.png", expanded_inbox)
+stop(expanded_inbox)
 
 dark = launch("--workspace", "--appearance", "dark")
 shot("workspace-dark.png", dark)

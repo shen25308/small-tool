@@ -556,6 +556,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 if CommandLine.arguments.contains("--open-inbox") {
                     tell("openInbox",true)
                 }
+                // "--show schedule" or "--show connections" opens that sheet, for screenshots of the real window.
+                let launchArgs=CommandLine.arguments
+                if let at=launchArgs.firstIndex(of:"--show"), at+1 < launchArgs.count {
+                    tell("showForCapture",launchArgs[at+1])
+                }
                 reply(id,true,true)
                 if let text=pendingSource{pendingSource=nil;receive(text)}
             case "syncInboxes":
@@ -762,6 +767,41 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             }
         } catch { reply(id,false,error.localizedDescription) }
     }
+}
+// `ShiShi --check-data` is read-only: it loads the saved workspace, Codex inbox and result receipts through the
+// same decoders the app uses, prints what it found as JSON, and exits. It never writes to the data files.
+if CommandLine.arguments.contains("--check-data") {
+    let support=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("ShiShiDesk")
+    var report:[String:Any]=["support":support.path,"version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                             "commit":Bundle.main.infoDictionary?["ShishiSourceCommit"] as? String ?? "unknown"]
+    var healthy=true
+    let workspaceFile=support.appendingPathComponent("Workspace.json")
+    if let bytes=try? Data(contentsOf:workspaceFile) {
+        do {
+            let workspace=try JSONDecoder().decode(Workspace.self,from:bytes)
+            try workspace.validate()
+            report["workspace"]=["lists":workspace.projects.count,"tasks":workspace.tasks.count,
+                                 "open":workspace.tasks.filter{!$0.done}.count,"ids":workspace.tasks.map(\.id)] as [String:Any]
+        } catch {healthy=false;report["workspace"]=["error":String(describing:error)] as [String:Any]}
+    } else {report["workspace"]="none"}
+    if FileManager.default.fileExists(atPath:support.appendingPathComponent("CodexInbox.json").path) {
+        do {
+            let notices=try CodexInbox(root:FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"),
+                                       store:support.appendingPathComponent("CodexInbox.json")).storedNotices()
+            report["codex"]=["notices":notices.count,"unread":notices.filter{!$0.read}.count,"ids":notices.map(\.id)] as [String:Any]
+        } catch {healthy=false;report["codex"]=["error":String(describing:error)] as [String:Any]}
+    } else {report["codex"]="none"}
+    if FileManager.default.fileExists(atPath:support.appendingPathComponent("Incoming").path) {
+        do {
+            let notices=try ConnectorInbox(directory:support.appendingPathComponent("Incoming",isDirectory:true)).scan().notices
+            report["results"]=["notices":notices.count,"unread":notices.filter{!$0.read}.count,
+                               "archived":notices.filter(\.archived).count,"ids":notices.map(\.id)] as [String:Any]
+        } catch {healthy=false;report["results"]=["error":String(describing:error)] as [String:Any]}
+    } else {report["results"]="none"}
+    report["healthy"]=healthy
+    let out=(try? JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys])) ?? Data()
+    print(String(decoding:out,as:UTF8.self))
+    exit(healthy ? 0 : 1)
 }
 let app=NSApplication.shared
 app.setActivationPolicy(.regular)

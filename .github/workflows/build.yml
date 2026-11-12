@@ -96,6 +96,10 @@ jobs:
         run: python3 Tests/ci/launch_check.py build/Shishi.app screenshots
       - name: Native window checks
         run: python3 Tests/ci/window_check.py build/Shishi.app screenshots
+      - name: Existing data survives the upgrade
+        run: python3 Tests/ci/data_survival.py build/Shishi.app screenshots
+      - name: Read-only data check of this build
+        run: build/Shishi.app/Contents/MacOS/ShiShi --check-data
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4

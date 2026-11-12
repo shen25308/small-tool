@@ -994,6 +994,15 @@ await check('backup: invalid files change nothing', {}, async ({page, tasks}) =>
   assert.equal((await tasks()).length, 18);
 });
 
+await check('native capture flags open the right sheets', {}, async ({page}) => {
+  await page.evaluate(() => window.showForCapture('schedule'));
+  await page.locator('#plannedPicker:not([hidden]) .day-picker').waitFor();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#dialog').open);
+  await page.evaluate(() => window.showForCapture('connections'));
+  await page.locator('.color-picker').waitFor();
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);

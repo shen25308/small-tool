@@ -470,3 +470,16 @@ $('closePeek').onclick = () => {
   $('latestPeek').hidden = true;
   $('boardMore').focus();
 };
+
+// The build workflow opens these sheets with "--show <name>" to capture the real window.
+window.showForCapture = name => {
+  if (name === 'connections') {
+    showConnectors();
+    setTimeout(() => document.querySelector('#claudeRow .source-swatch')?.click(), 300);
+  } else if (name === 'schedule') {
+    const task = data.tasks.find(item => !item.done && item.plannedDates?.length > 1) || data.tasks.find(item => !item.done);
+    if (!task) return;
+    taskForm(task);
+    $('plannedToggle')?.click();
+  }
+};
