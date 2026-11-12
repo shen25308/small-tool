@@ -745,6 +745,26 @@ await check('compact card at a constrained height', {width: 340, height: 430, co
 });
 
 // F09: Full reply opens the stored reply in one action and keeps where you were.
+await check('card report keeps its lines and asks for room (native capture)', {width: 340, height: 474, compact: true}, async ({page, host}) => {
+  // Seen in the macOS capture: the headline was squeezed under the next line, the task list scrolled
+  // sideways, and the card asked for less height than its content needed.
+  await page.waitForTimeout(800);
+  const layout = await page.evaluate(() => {
+    const report = document.querySelector('.card-report');
+    const parts = [...report.children].filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect());
+    const overlaps = parts.slice(1).filter((box, i) => box.top < parts[i].bottom - 1).length;
+    const sideways = [...document.querySelectorAll('#card *')].filter(node => node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== 'visible' && getComputedStyle(node).overflowX !== 'hidden').map(node => node.id || node.className);
+    const headline = report.querySelector('.report-headline');
+    const squeezed = [...report.children].filter(node => node.getClientRects().length && node.scrollHeight > node.clientHeight + 1).map(node => node.className);
+    return {overlaps, sideways, squeezed, headline: headline.clientHeight};
+  });
+  assert.equal(layout.overlaps, 0, 'report lines overlap');
+  assert.deepEqual(layout.squeezed, [], 'report lines squeezed into less height than their text');
+  assert.ok(layout.headline >= 17, 'headline height ' + layout.headline);
+  assert.deepEqual(layout.sideways, [], 'something scrolls sideways');
+  assert.ok((await host()).cardHeight > 474, 'the card asks for the height its content needs: ' + (await host()).cardHeight);
+});
+
 await check('full reply opens the original reply', {width: 340, height: 640, compact: true}, async ({page}) => {
   await page.click('#cardReport [data-report="dismiss"]');
   await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));

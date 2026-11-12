@@ -117,7 +117,9 @@ final class CornerCard: NSObject {
         grip.setAccessibilityRole(.handle)
         grip.setAccessibilityLabel("Move the card")
         grip.onEnd = { [weak self] in self?.dropped() }
-        handle.frame = NSRect(x: backdrop.bounds.width - 16, y: 0, width: 16, height: 16)
+        // Inside the rounded corner: a click on the transparent, masked-off corner would pass through to the
+        // window behind, so the handle sits where the card is opaque.
+        handle.frame = NSRect(x: backdrop.bounds.width - 24, y: 4, width: 20, height: 20)
         handle.autoresizingMask = [.minXMargin, .maxYMargin]
         handle.setAccessibilityElement(true)
         handle.setAccessibilityRole(.handle)

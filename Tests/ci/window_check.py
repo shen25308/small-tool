@@ -105,15 +105,21 @@ moved = card_windows(card.pid)[0]
 synthetic = moved["x"] != frame["x"] or moved["y"] != frame["y"]
 record["notes"].append(f"Synthetic input trusted: {drag['trusted']}")
 if synthetic:
+    # A command-line helper can read the Dock's reserved area a few points differently from the app
+    # (seen: 5 points), so the corner the app saved decides, and the bottom edge must be near the Dock.
     bottom = screen["visibleTop"] + screen["visibleHeight"] - margin
-    check("drag with the grip snaps to the nearest corner", abs(moved["x"] - (screen["visibleX"] + margin)) <= 2 and abs(moved["y"] + moved["h"] - bottom) <= 2, f"frame {moved}")
+    corner = subprocess.run(["defaults", "read", DOMAIN, "ShiShiCardCorner"], capture_output=True, text=True).stdout.strip()
+    gap = moved["y"] + moved["h"] - bottom
+    check("drag with the grip snaps to the nearest corner",
+          corner == "bottomLeft" and abs(moved["x"] - (screen["visibleX"] + margin)) <= 2 and abs(gap) <= 8,
+          f"saved corner {corner!r}, frame {moved}, bottom edge {gap:+.0f} points from the helper's visible area")
 else:
     check("drag with the grip snaps to the nearest corner", False, "the machine did not deliver synthetic mouse input", required=False)
 shot("window-3-drag.png")
 
 # 4. Resize with the handle in the bottom-right corner.
 frame = card_windows(card.pid)[0]
-handle = (frame["x"] + frame["w"] - 5, frame["y"] + frame["h"] - 5)
+handle = (frame["x"] + frame["w"] - 12, frame["y"] + frame["h"] - 12)
 tool_json("drag", handle[0], handle[1], handle[0] + 90, handle[1] + 70)
 time.sleep(2)
 sized = card_windows(card.pid)[0]

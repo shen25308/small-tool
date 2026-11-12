@@ -13,7 +13,9 @@ body.compact #card::before { content: ""; position: absolute; top: 8px; left: 50
 /* When space is short the report and the task list scroll inside the card; the header and footer stay put (F08). */
 .card-inner > * { flex: none }
 .card-inner > .card-report { flex: 0 1 auto; min-height: 72px; overflow-y: auto; overscroll-behavior: contain }
-.card-inner > .card-tasks { flex: 1 1 auto; min-height: 40px; overflow-y: auto; overscroll-behavior: contain }
+.card-inner > .card-tasks { flex: 1 1 auto; min-height: 40px; margin: 0 -8px; padding: 0 8px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain }
+/* Rows keep their full height; a short card scrolls the report instead of squeezing its lines together. */
+.card-report { grid-auto-rows: max-content; align-content: start }
 .card-island-slot { display: flex; justify-content: center; margin-top: -2px }
 .card-island-slot:empty, .card-island-slot:has(.island.mode-idle) { display: none }
 #card .island { position: relative; left: auto; top: auto; transform: none }
