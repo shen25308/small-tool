@@ -6,7 +6,7 @@ Shishi is a task list for people who work alongside AI. A small card sits in a c
 
 ![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
-[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
+[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Card in motion (video)](Previews/corner-card-motion.mp4) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
 
 ## Run on a Mac
 

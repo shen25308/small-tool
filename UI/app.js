@@ -32,7 +32,8 @@ function projectLabel(name) {
   return data.projects.includes('My Work') ? 'My Work (original)' : 'My Work';
 }
 const currentTitle = () => projectOfView() ? projectLabel(projectOfView()) : titles[view];
-const isToday = t => t.planned === day() || (!t.done && t.planned && t.planned < day());
+// Planned for today, or overdue and still open. An overdue task finished today still counts toward today.
+const isToday = t => t.planned === day() || (!!t.planned && t.planned < day() && (!t.done || (t.completedAt || '').slice(0, 10) === day()));
 const taskDate = t => t.planned || t.dueDate || '';
 function isOverdue(t) {
   if (t.done || !t.dueDate) return false;

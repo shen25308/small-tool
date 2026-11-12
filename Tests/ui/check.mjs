@@ -378,6 +378,10 @@ await check('corner card', {width: 340, height: 420, compact: true}, async ({pag
   await page.locator('#cardTasks .row', {hasText: 'Review the product roadmap'}).locator('.check').click();
   await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
   assert.equal(await text(page, '#cardRing .ring-label'), '2/7');
+  // An overdue task finished today stays in today's tally.
+  await page.locator('#cardTasks .row', {hasText: 'Review QA feedback'}).locator('.check').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').done);
+  assert.equal(await text(page, '#cardRing .ring-label'), '3/7');
 
   await page.locator('.card-head').dispatchEvent('mousedown', {button: 0});
   await page.waitForFunction(() => window.__host.drags === 1);
@@ -416,6 +420,22 @@ for (const dark of [false, true]) {
     await shot('card-desktop' + (dark ? '-dark' : ''));
   });
 }
+
+await check('agent capsule leaves the toolbar buttons free in a narrow window', {width: 760, height: 680}, async ({page}) => {
+  await page.waitForTimeout(2700);
+  await page.evaluate(() => {
+    window.__host.agents.push({key: 'a'.repeat(64), source: 'Claude Code', title: 'Claude Code · billing', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: '', time: Date.now() / 1000});
+    window.setAgents(window.__host.agents);
+  });
+  await page.waitForFunction(() => /mode-flash/.test(document.getElementById('island').className));
+  for (const open of [false, true]) {
+    if (open) { await page.click('#island'); await page.waitForFunction(() => /mode-panel/.test(document.getElementById('island').className)); }
+    const [island, tools] = await page.evaluate(() => [document.getElementById('island'), document.querySelector('.toolbar-tools')].map(node => {
+      const box = node.getBoundingClientRect(); return {left: box.left, right: box.left + parseFloat(node.style.width || box.width)};
+    }));
+    assert.ok(island.right <= tools.left, 'the capsule reaches ' + island.right + ', the toolbar starts at ' + tools.left);
+  }
+});
 
 await check('motion: agent island, completion and progress', {motion: true, scale: 2}, async ({page, host, shot}) => {
   assert.equal(await page.locator('#dayRing').isVisible(), true);

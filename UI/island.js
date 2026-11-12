@@ -41,6 +41,19 @@ window.Island = (() => {
     return {mode: now.mode, html: '<div class="island-pill">' + glyph(now.mode) + '<span class="island-text">' + esc(now.text) + '</span></div>'};
   }
 
+  // The capsule may not cover the toolbar buttons. When the middle of a narrow window is too tight,
+  // it moves to the left edge, where it has more room.
+  function room() {
+    const bar = node.parentElement?.getBoundingClientRect();
+    if (!bar?.width) return 316;
+    if (compact) return Math.floor(bar.width);
+    const tools = document.querySelector('.toolbar-tools').getBoundingClientRect();
+    const centered = 2 * (tools.left - (bar.left + bar.width / 2)) - 24;
+    const left = centered < 300;
+    node.classList.toggle('island-left', left);
+    return Math.max(140, Math.floor(left ? tools.left - bar.left - 40 : centered));
+  }
+
   function paint() {
     const view = markup();
     const signature = view.mode + view.html;
@@ -50,6 +63,7 @@ window.Island = (() => {
     inner.className = 'island-inner';
     inner.innerHTML = view.html;
     node.className = 'island mode-' + view.mode;
+    node.style.setProperty('--island-max', room() + 'px');
     node.replaceChildren(inner);
     node.setAttribute('aria-expanded', String(open));
     // The capsule animates between measured sizes, so it morphs instead of jumping.
@@ -107,6 +121,7 @@ window.Island = (() => {
   node.addEventListener('keydown', event => {
     if ((event.key === 'Enter' || event.key === ' ') && event.target === node) { event.preventDefault(); node.click(); }
   });
+  addEventListener('resize', () => { lastMarkup = ''; paint(); });
   document.addEventListener('pointerdown', event => { if (open && !node.contains(event.target)) close(); }, true);
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && open) close(); });
 

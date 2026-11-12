@@ -129,9 +129,9 @@ html.desktop body.compact #card { inset: 14px 14px auto auto; width: 340px; heig
 `;
 const EDITOR = '<u>// billing.py</u><br><b>def</b> <i>charge</i>(account, amount):<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>if</b> amount &lt;= 0:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>raise</b> ValueError(<i>"amount must be positive"</i>)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice = Invoice.<i>open</i>(account)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice.<i>add</i>(amount)<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>return</b> invoice.<i>settle</i>()<br><br><u># Claude Code is refactoring this module…</u>';
 
-export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false} = {}) {
+export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false, video = ''} = {}) {
   // Checks run with reduced motion so timing never decides a result. One check turns motion on.
-  const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light', reducedMotion: motion ? 'no-preference' : 'reduce'});
+  const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light', reducedMotion: motion ? 'no-preference' : 'reduce', ...(video ? {recordVideo: {dir: video, size: {width, height}}} : {})});
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', error => problems.push('pageerror: ' + error.message));
