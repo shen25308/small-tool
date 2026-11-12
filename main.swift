@@ -187,6 +187,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             DirectoryWatcher(url:base.appendingPathComponent("Incoming",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanExternal() }
         ]
     }
+    private let file: URL
     private lazy var providers = ExternalProviders(resources:resources)
     private var storeUnreadable = false
     private let resources = Bundle.main.resourceURL!
