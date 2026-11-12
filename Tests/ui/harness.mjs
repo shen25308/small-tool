@@ -35,9 +35,12 @@ function fakeHost(seed) {
       ]
     },
     agents: seed.empty ? [] : [
-      {key: 'e'.repeat(64), source: 'Claude Code', title: 'Claude Code · web-app', detail: 'Claude needs your permission to use Bash', state: 'attention', receipt: '', time: now - 50},
-      {key: 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', detail: 'Refactor the billing module and add tests', state: 'working', receipt: '', time: now - 95},
-      {key: 'f'.repeat(64), source: 'Claude Code', title: 'Claude Code · small-tool', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: 'connector/' + 'a'.repeat(64), time: now - 240}
+      {key: 'e'.repeat(64), source: 'Claude Code', title: 'Claude Code · web-app', detail: 'Claude needs your permission to use Bash', state: 'attention', receipt: '', time: now - 50,
+       task: 'Deploy the preview build', started: now - 400, app: 'com.apple.Terminal'},
+      {key: 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', detail: 'Refactor the billing module and add tests', state: 'working', receipt: '', time: now - 95,
+       task: 'Refactor the billing module and add tests', started: now - 95, app: 'com.microsoft.VSCode'},
+      {key: 'f'.repeat(64), source: 'Claude Code', title: 'Claude Code · small-tool', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: 'connector/' + 'a'.repeat(64), time: now - 240,
+       task: 'Refactor billing.py and add tests for refunds', started: now - 540, app: 'com.googlecode.iterm2'}
     ]
   };
   window.__host = state;
@@ -98,7 +101,8 @@ function fakeHost(seed) {
     paste: () => state.clipboard,
     dismissAgent: message => { state.agents = state.agents.filter(agent => agent.key !== message.key); window.setAgents(state.agents); return true; },
     compact: message => { window.setCompact(!!message.value); return true; },
-    latestSize: () => true, openNotion: () => true, openCodex: () => true, openConnectorLink: () => true, copyConnectorSetup: () => true,
+    latestSize: () => true, openNotion: () => true, openCodex: message => { state.openedThread = message.thread; return true; },
+    openAgentApp: message => { state.openedApp = message.app; return {'com.apple.Terminal': 'Terminal', 'com.googlecode.iterm2': 'iTerm'}[message.app] || 'Terminal'; }, openConnectorLink: () => true, copyConnectorSetup: () => true,
     returnToEdge: () => true,
     extract: () => [{title: 'Send the homepage prototype to the design team', quote: 'Maya: Please send the new homepage prototype…', tag: 'Design'}]
   };

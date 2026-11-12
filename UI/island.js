@@ -32,10 +32,12 @@ window.Island = (() => {
     }
     if (flash) {
       const entry = flash.entry;
-      const verb = flash.mode === 'done' ? 'Finished' : 'Needs you';
-      return {mode: 'flash flash-' + flash.mode, html: '<div class="island-flash">' + glyph(flash.mode) +
-        '<span class="island-copy"><b>' + esc(place(entry)) + '<small>' + verb + ' · ' + esc(entry.source || 'Agent') + '</small></b>' +
-        '<span>' + esc(entry.detail || (flash.mode === 'done' ? 'The result is in your inbox.' : 'Waiting for your answer.')) + '</span></span></div>'};
+      const note = entry.notice || allNotices().find(item => item.id === entry.receipt);
+      const report = AgentReport.brief(note, entry);
+      const tone = flash.mode === 'attention' || report.verdict === 'blocked' ? 'attention' : report.verdict === 'review' ? 'review' : 'done';
+      return {mode: 'flash flash-' + tone, html: '<div class="island-flash">' + glyph(tone === 'review' ? 'attention' : tone) +
+        '<span class="island-copy"><b>' + esc(place(entry)) + '<small>' + esc(report.label) + ' · ' + esc(entry.source || 'Agent') + '</small></b>' +
+        '<span>' + esc(report.headline || (flash.mode === 'done' ? 'The result is in your inbox.' : 'Waiting for your answer.')) + '</span></span></div>'};
     }
     const now = summary();
     return {mode: now.mode, html: '<div class="island-pill">' + glyph(now.mode) + '<span class="island-text">' + esc(now.text) + '</span></div>'};
@@ -82,7 +84,7 @@ window.Island = (() => {
   function update(list) {
     entries = list;
     // Only news flashes: a change seen while running, about something that happened in the last two minutes.
-    if (started && !open && Date.now() - loadedAt > 2500) {
+    if (started && !open && !compact && Date.now() - loadedAt > 2500) {
       for (const entry of entries) {
         if (Date.now() / 1000 - entry.time > 120) continue;
         const before = previous.get(entry.key);

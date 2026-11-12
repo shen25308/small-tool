@@ -361,7 +361,9 @@ await check('corner card', {width: 340, height: 420, compact: true}, async ({pag
   // The agent capsule moved into the card and reports the agent that needs you.
   assert.equal(await page.locator('.card-island-slot #island').count(), 1);
   assert.match(await page.getAttribute('#island', 'class'), /mode-attention/);
-  assert.match(await text(page, '#island'), /web-app needs you/);
+  // The waiting agent's report replaces the capsule, so the news is not shown twice.
+  assert.equal(await page.locator('.card-island-slot').isHidden(), true);
+  assert.match(await text(page, '#cardReport'), /web-app[\s\S]*Needs you[\s\S]*Claude needs your permission to use Bash/);
   // The card tells the app how tall it needs to be.
   await page.waitForFunction(() => window.__host.cardHeight > 150);
   const natural = await page.evaluate(() => Math.ceil(document.querySelector('.card-inner').getBoundingClientRect().height));
@@ -403,6 +405,58 @@ await check('corner card', {width: 340, height: 420, compact: true}, async ({pag
   await page.waitForSelector('#taskForm');
   assert.equal(await page.locator('#shell').isVisible(), true);
   assert.equal(await page.locator('.toolbar #island').count(), 1);
+});
+
+await check('brief report: decide whether to open the agent', {width: 340, height: 600, compact: true, scale: 2}, async ({page, host, shot}) => {
+  const report = () => text(page, '#cardReport');
+  // 1. An agent waiting for permission comes first.
+  assert.match(await page.getAttribute('#cardReport', 'class'), /verdict-blocked/);
+  assert.match(await report(), /Needs you[\s\S]*You asked: Deploy the preview build/);
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in Terminal');
+  await shot('report-needs-you');
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => window.__host.openedApp === 'com.apple.Terminal');
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => !window.__host.agents.some(agent => agent.state === 'attention'));
+
+  // 2. Then the newest unread result, with a verdict.
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
+  assert.match(await page.getAttribute('#cardReport', 'class'), /verdict-done/);
+  const done = await report();
+  for (const part of [/No need to check/, /Checks passed\./, /Updated billing\.py and added 12 tests/, /billing\.py/, /Checks passed/, /You asked: Refactor billing\.py/, /5 min/, /1 more result/]) assert.match(done, part);
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in iTerm');
+  await page.waitForTimeout(100);
+  await shot('report-done');
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+
+  // 3. The Codex result opens its own conversation.
+  await page.waitForFunction(() => /api-server/.test(document.getElementById('cardReport').innerText));
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in Codex');
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => window.__host.openedThread && window.__host.notices.codex[0].read);
+  await page.waitForFunction(() => document.getElementById('cardReport').hidden);
+  assert.doesNotMatch(await page.getAttribute('#card', 'class') || '', /has-report/);
+});
+
+await check('brief report: worth a look, and the full reply', {width: 340, height: 600, compact: true}, async ({page}) => {
+  await page.evaluate(() => {
+    const now = Date.now() / 1000;
+    window.__host.agents = [];
+    window.__host.notices.codex = [];
+    window.__host.notices.external = [{id: 'connector/' + 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · api', time: now - 30, read: false, thread: '', link: '',
+      summary: 'Added the refund endpoint in `routes/refunds.ts`.\n\n2 tests failed in `refunds.test.ts`: the currency rounding is off.'}];
+    window.__host.agents.push({key: 'b'.repeat(64), source: 'Claude Code', title: 'Claude Code · api', detail: '', state: 'done', receipt: 'connector/' + 'd'.repeat(64), time: now - 30, task: 'Add a refund endpoint', started: now - 400, app: ''});
+    window.setInbox({channel: 'codex', items: [], error: ''});
+    window.setInbox({channel: 'external', items: window.__host.notices.external, error: ''});
+    window.setAgents(window.__host.agents);
+  });
+  await page.waitForFunction(() => /verdict-review/.test(document.getElementById('cardReport').className));
+  assert.match(await text(page, '#cardReport'), /Worth a look[\s\S]*Some checks failed[\s\S]*Checks failed/);
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open Claude Code');
+  await page.click('#cardReport [data-report="read"]');
+  await page.waitForSelector('#inboxCards .result-card');
+  assert.equal(await page.locator('#shell').isVisible(), true);
 });
 
 await check('corner card when everything is done', {width: 340, height: 420, compact: true}, async ({page}) => {
@@ -449,7 +503,7 @@ await check('motion: agent island, completion and progress', {motion: true, scal
     window.setAgents(window.__host.agents);
   });
   await page.waitForFunction(() => /mode-flash/.test(document.getElementById('island').className));
-  assert.match(await text(page, '#island'), /docs-site[\s\S]*Finished[\s\S]*Rewrote the docs navigation/);
+  assert.match(await text(page, '#island'), /docs-site[\s\S]*No need to check[\s\S]*Rewrote the docs navigation/);
   await page.waitForTimeout(700);
   await shot('island-flash');
   await page.click('#island');

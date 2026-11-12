@@ -6,7 +6,7 @@ Shishi is a task list for people who work alongside AI. A small card sits in a c
 
 ![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
-[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Card in motion (video)](Previews/corner-card-motion.mp4) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
+[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Brief report in motion (video)](Previews/agent-report.mp4) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
 
 ## Run on a Mac
 
@@ -48,6 +48,16 @@ Open the inbox and choose **Connections…**, or press ⌘K and search for *Conn
 - **GitHub Actions.** Enter a public repository as `owner/repo` and optionally specify a workflow. Completed runs show the conclusion, branch, and run number. The connector polls the public REST API about every five minutes and respects rate limits.
 - **Grok Bot.** Copy the setup instructions from Connections and include them in a task. Grok manages permission to run its local delivery command. The terminal client has a separate [Grok Build stop hook](GrokBuild/README.md).
 - **Other MCP clients.** Copy the local stdio configuration from Connections and ask the client to call `deliver_result` on completion with a stable event ID. The optional HTTP transport uses a loopback address and a bearer token. A cloud client requires a reachable HTTPS endpoint. [Grok custom connectors](https://docs.x.ai/grok/connectors/custom-mcp-tunneling)
+
+### A brief report when an agent finishes
+
+When Claude Code or Codex finishes, the corner card shows a short report so you can decide whether to switch to it now:
+
+- **A verdict.** *No need to check* (it finished, and any checks passed), *Worth a look* (checks failed or something is unresolved), or *Needs you* (it asked a question, stopped early, or is waiting for permission).
+- **The essentials.** The main change, up to two supporting lines, the files it touched, whether checks passed, how long it took, and what you asked.
+- **One click to act.** **Open in Terminal** (or iTerm, VS Code, Cursor, Warp, Ghostty, Zed, the Claude app, or Codex) brings forward the app the session runs in. **Full reply** opens it in the workspace. **Got it** clears the report.
+
+A session waiting for you comes first. Other unread results wait behind it, with a count. The hook learns which app the session runs in from the bundle identifier macOS gives your terminal.
 
 ### Stay out of the way
 

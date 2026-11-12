@@ -613,6 +613,22 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 NSPasteboard.general.clearContents()
                 guard NSPasteboard.general.setString(text,forType:.string) else {throw AppIssue("The text could not be copied.")}
                 reply(id,true,true)
+            case "openAgentApp":
+                // Bring forward the app the session runs in. Opening it through Launch Services works
+                // even though Shishi itself is not the active app.
+                let wanted=body["app"] as? String ?? ""
+                let fallbacks=["com.apple.Terminal","com.googlecode.iterm2","com.mitchellh.ghostty","dev.warp.Warp-Stable",
+                               "com.microsoft.VSCode","com.todesktop.230313mzl4w4u92","dev.zed.Zed","com.anthropic.claudefordesktop"]
+                let preferred=AgentBoard.validBundle(wanted) ? [wanted] : []
+                let running=fallbacks.filter {!NSRunningApplication.runningApplications(withBundleIdentifier:$0).isEmpty}
+                guard let bundle=(preferred+running).first,
+                      let url=NSWorkspace.shared.urlForApplication(withBundleIdentifier:bundle) else {
+                    throw AppIssue("Shishi could not tell which app this session runs in. Switch to it yourself.")
+                }
+                let launch=NSWorkspace.OpenConfiguration()
+                launch.activates=true
+                NSWorkspace.shared.openApplication(at:url,configuration:launch) { _,_ in }
+                reply(id,true,FileManager.default.displayName(atPath:url.path).replacingOccurrences(of:".app",with:""))
             case "dismissAgent":
                 guard let key=body["key"] as? String else {throw AppIssue("The agent ID is missing.")}
                 inboxQueue.async {

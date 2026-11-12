@@ -6,8 +6,11 @@ it exits 0 on success and 1 on a delivery problem, and it prints nothing to stan
 """
 import hashlib
 import json
+import os
+import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -18,11 +21,22 @@ import shishi_agents as agents  # noqa: E402
 
 SOURCE = "Claude Code"
 MAX_SUMMARY_BYTES = 60 * 1024
+# Terminals that set TERM_PROGRAM but whose sessions may not carry a bundle identifier.
+TERMINALS = {"Apple_Terminal": "com.apple.Terminal", "iTerm.app": "com.googlecode.iterm2", "vscode": "com.microsoft.VSCode",
+             "WarpTerminal": "dev.warp.Warp-Stable", "ghostty": "com.mitchellh.ghostty"}
 NEEDS_USER = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
 
 
 def text(value):
     return value if isinstance(value, str) else ""
+
+
+def host_app():
+    """The app this Claude Code session runs in, so Shishi can bring it forward. Only its bundle ID is kept."""
+    bundle = os.environ.get("__CFBundleIdentifier", "")
+    if len(bundle) <= 120 and re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", bundle):
+        return bundle
+    return TERMINALS.get(os.environ.get("TERM_PROGRAM", ""), "")
 
 
 def title_for(event, previous):
@@ -86,10 +100,15 @@ def receive(event):
     previous = agents.read(SOURCE, session) or {}
     title, label = title_for(event, previous)
     keep = {"label": label} if label else {}
+    app = host_app() or text(previous.get("app"))
+    if app:
+        keep["app"] = app
+    if isinstance(previous.get("started"), (int, float)):
+        keep["started"] = previous["started"]
 
     if name == "UserPromptSubmit":
         prompt = agents.clean(event.get("prompt"), "detail", required=False)
-        agents.write(SOURCE, session, "working", title, prompt, {**keep, "task": prompt})
+        agents.write(SOURCE, session, "working", title, prompt, {**keep, "task": prompt, "started": time.time()})
     elif name == "PostToolUse":
         # A tool ran, so a pending permission request has been answered.
         if previous.get("state") == "attention":
@@ -109,7 +128,8 @@ def receive(event):
         event_id = hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
         deliver(title, summary, event_id)
         receipt = hashlib.sha256((SOURCE + "\0" + event_id).encode("utf-8")).hexdigest()
-        agents.write(SOURCE, session, "done", title, summary, {**keep, "receipt": "connector/" + receipt})
+        task = text(previous.get("task"))
+        agents.write(SOURCE, session, "done", title, summary, {**keep, "task": task, "receipt": "connector/" + receipt})
     elif name == "SessionEnd":
         # A finished result stays visible until it is read or dismissed in Shishi.
         if previous.get("state") != "done":

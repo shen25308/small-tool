@@ -26,8 +26,67 @@ window.Card = (() => {
       '</article>';
   }
 
+  // The report answers one question when an agent finishes: do I need to open it now?
+  let reportShown = null;
+  function pendingReport() {
+    const entries = agentEntries(), notices = allNotices();
+    const unread = entries.filter(entry => entry.state === 'done').map(entry => {
+      const note = entry.notice || notices.find(item => item.id === entry.receipt);
+      return note && !note.read ? {entry, note} : null;
+    }).filter(Boolean);
+    const waiting = entries.find(entry => entry.state === 'attention');
+    const pick = waiting ? {entry: waiting, note: null} : unread[0];
+    return pick && {...pick, others: unread.length - (waiting ? 0 : 1)};
+  }
+  function reportMarkup({entry, note, others}) {
+    const report = AgentReport.brief(note, entry);
+    const place = (entry.title || '').split(' · ').slice(1).join(' · ') || entry.title || 'Agent';
+    const app = entry.notice ? 'Codex' : AgentReport.appName(entry.app);
+    const glyph = {done: 'i-check', review: 'i-flag', blocked: 'i-bolt'}[report.verdict];
+    const meta = [entry.source || 'Agent', report.took].filter(Boolean).join(' · ');
+    return '<div class="report-head"><b>' + esc(place) + '</b><span>' + esc(meta) + '</span><time>' + agentAge(entry.time) + '</time>' +
+      '<button type="button" class="report-close" data-report="dismiss" title="Dismiss" aria-label="Dismiss">' + symbol('close-icon') + '</button></div>' +
+      '<div class="report-verdict"><span class="verdict-badge">' + symbol(glyph) + esc(report.label) + '</span><span>' + esc(report.reason) + '</span></div>' +
+      '<p class="report-headline">' + esc(report.headline) + '</p>' +
+      (report.points.length ? '<ul class="report-points">' + report.points.map(point => '<li>' + esc(point) + '</li>').join('') + '</ul>' : '') +
+      (report.files.length || report.tests ? '<div class="report-chips">' + report.files.map(file => '<code>' + esc(file) + '</code>').join('') +
+        (report.tests ? '<span class="test-chip ' + report.tests + '">' + (report.tests === 'passed' ? 'Checks passed' : 'Checks failed') + '</span>' : '') + '</div>' : '') +
+      (report.asked ? '<p class="report-asked" title="' + esc(report.asked) + '">You asked: ' + esc(report.asked) + '</p>' : '') +
+      '<div class="report-actions"><button type="button" class="' + (report.verdict === 'done' ? 'secondary' : 'primary') + '" data-report="open">' +
+        esc(app ? 'Open in ' + app : 'Open Claude Code') + '</button>' +
+        (note ? '<button type="button" class="secondary" data-report="read">Full reply</button>' : '') +
+        '<button type="button" class="' + (report.verdict === 'done' ? 'primary' : 'mini-link') + '" data-report="dismiss">Got it</button></div>' +
+      (others > 0 ? '<button type="button" class="report-more" data-report="inbox">' + others + ' more ' + (others === 1 ? 'result' : 'results') + ' in the inbox</button>' : '');
+  }
+  function renderReport() {
+    const pick = pendingReport(), box = $('cardReport');
+    const key = pick ? pick.entry.key + '|' + pick.entry.state + '|' + (pick.note?.id || '') + '|' + pick.others : '';
+    root.classList.toggle('has-report', !!pick);
+    if (!pick) { box.hidden = true; box.replaceChildren(); reportShown = null; return; }
+    if (reportShown?.key === key) return;
+    const report = AgentReport.brief(pick.note, pick.entry);
+    box.className = 'card-report verdict-' + report.verdict;
+    box.innerHTML = reportMarkup(pick);
+    const appeared = box.hidden || reportShown?.entry.key !== pick.entry.key;
+    box.hidden = false;
+    reportShown = {...pick, key};
+    if (appeared && !Motion.reduced()) box.animate([{opacity: 0, transform: 'translateY(-10px) scale(.98)'}, {opacity: 1, transform: 'none'}], {duration: 520, easing: Motion.spring});
+  }
+  function reportAction(kind) {
+    const pick = reportShown;
+    if (!pick) return;
+    const {entry, note} = pick;
+    const markRead = () => note ? native('readNotice', {key: note.id, channel: note.channel}) : native('dismissAgent', {key: entry.key});
+    if (kind === 'dismiss') { action(markRead()); return; }
+    if (kind === 'inbox') { inWorkspace(() => $('inboxButton').click()); return; }
+    if (kind === 'read') { inWorkspace(() => openNotice(note.id)); return; }
+    const opening = entry.notice ? native('openCodex', {thread: entry.notice.thread}) : native('openAgentApp', {app: entry.app || ''});
+    action(opening.then(() => { if (note) return markRead(); }));
+  }
+
   function render() {
     if (!compact) return;
+    renderReport();
     const now = new Date();
     const today = data.tasks.filter(isToday);
     const open = today.filter(task => !task.done), done = today.length - open.length;
@@ -66,6 +125,8 @@ window.Card = (() => {
   }
 
   root.addEventListener('click', event => {
+    const report = event.target.closest('[data-report]');
+    if (report) { reportAction(report.dataset.report); return; }
     const open = event.target.closest('[data-card-open]');
     if (open) {
       const task = data.tasks.find(item => item.id === open.closest('.row').dataset.id);
@@ -79,7 +140,7 @@ window.Card = (() => {
 
   // Drag the card by any empty part of it. The app moves the window and snaps it to a corner.
   root.addEventListener('mousedown', event => {
-    if (event.button !== 0 || event.target.closest('button, input, a, .row, .island, [popover]')) return;
+    if (event.button !== 0 || event.target.closest('button, input, a, .row, .island, [popover], .card-report')) return;
     native('cardDrag').catch(() => {});
   });
 
@@ -133,5 +194,5 @@ window.Card = (() => {
   $('cardAddInput').addEventListener('keydown', event => { if (event.key === 'Escape') { event.target.value = ''; event.target.blur(); } });
 
   window.setPinned = value => { pinnedNow = !!value; render(); };
-  return {render, report, inWorkspace};
+  return {render, report, inWorkspace, renderReport};
 })();

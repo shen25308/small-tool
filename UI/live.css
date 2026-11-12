@@ -134,6 +134,7 @@ main::before {
 }
 @keyframes orbit { to { --spin: 360deg } }
 .island.mode-attention, .island.flash-attention { box-shadow: inset 0 0 0 .5px rgba(255,159,10,.5), 0 0 0 1px rgba(255,159,10,.35), 0 8px 26px rgba(255,159,10,.3) }
+.island.flash-review { box-shadow: inset 0 0 0 .5px rgba(255,159,10,.5), 0 0 0 1px rgba(255,159,10,.3), 0 10px 30px rgba(255,159,10,.25) }
 .island.flash-done { box-shadow: inset 0 0 0 .5px rgba(48,209,88,.5), 0 0 0 1px rgba(48,209,88,.3), 0 10px 30px rgba(48,209,88,.28) }
 .island.mode-flash, .island.mode-panel { border-radius: 20px }
 .island-flash { display: flex; align-items: flex-start; gap: 10px; width: min(292px, var(--island-max, 292px)); padding: 11px 14px 12px 12px }

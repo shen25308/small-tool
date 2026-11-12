@@ -3,8 +3,8 @@ import Darwin
 import Foundation
 
 struct AgentState: Equatable {
-    let key, source, title, detail, state, receipt: String
-    let time: Double
+    let key, source, title, detail, state, receipt, task, app: String
+    let time, started: Double
 }
 
 /// Reads the one-file-per-session states that local agent hooks publish. All calls run on the inbox queue.
@@ -22,6 +22,10 @@ final class AgentBoard {
         let flat = text.components(separatedBy: .controlCharacters).joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(flat.prefix(limit))
+    }
+
+    static func validBundle(_ value: String) -> Bool {
+        value.count <= 120 && value.range(of: #"^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$"#, options: .regularExpression) != nil
     }
 
     private static func validKey(_ key: String) -> Bool {
@@ -53,10 +57,14 @@ final class AgentBoard {
             }
             let title = Self.line(object["title"], limit: 200)
             let receipt = Self.line(object["receipt"], limit: 80)
+            let app = object["app"] as? String ?? ""
+            let started = (object["started"] as? Double).flatMap { $0.isFinite && $0 > 0 && $0 <= time ? $0 : nil } ?? 0
             rows.append(AgentState(key: key, source: Self.line(object["source"], limit: 100),
                                    title: title.isEmpty ? "Agent" : title,
                                    detail: Self.line(object["detail"], limit: 400), state: state,
-                                   receipt: receipt.hasPrefix("connector/") ? receipt : "", time: time))
+                                   receipt: receipt.hasPrefix("connector/") ? receipt : "",
+                                   task: Self.line(object["task"], limit: 400), app: Self.validBundle(app) ? app : "",
+                                   time: time, started: started))
         }
         rows.sort { $0.time == $1.time ? $0.key < $1.key : $0.time > $1.time }
         let changed = !initialized || rows != last
@@ -72,7 +80,8 @@ final class AgentBoard {
 
     static func wire(_ rows: [AgentState]) -> [[String: Any]] {
         rows.map { ["key": $0.key, "source": $0.source, "title": $0.title, "detail": $0.detail,
-                    "state": $0.state, "receipt": $0.receipt, "time": $0.time] }
+                    "state": $0.state, "receipt": $0.receipt, "time": $0.time, "task": $0.task,
+                    "app": $0.app, "started": $0.started] }
     }
 }
 

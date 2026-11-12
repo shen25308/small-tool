@@ -62,6 +62,25 @@ class ClaudeCodeHook(Sandbox):
         self.assertEqual(state["receipt"], "connector/" + digest)
         self.assertTrue((self.base / "Incoming" / (digest + ".json")).is_file())
 
+    def test_report_details_survive_to_the_finished_state(self):
+        self.env["__CFBundleIdentifier"] = "com.googlecode.iterm2"
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Fix the login bug")
+        started = self.states()[0]["started"]
+        self.env.pop("__CFBundleIdentifier")
+        self.env["TERM_PROGRAM"] = "Apple_Terminal"
+        self.hook(hook_event_name="Notification", notification_type="permission_prompt", message="Allow Bash?")
+        self.hook(hook_event_name="Stop", last_assistant_message="Fixed it.")
+        state, = self.states()
+        self.assertEqual((state["state"], state["task"], state["started"]), ("done", "Fix the login bug", started))
+        self.assertEqual(state["app"], "com.apple.Terminal")
+        self.assertGreaterEqual(state["time"], started)
+
+    def test_unusual_bundle_ids_are_ignored(self):
+        self.env["__CFBundleIdentifier"] = "../../etc; rm -rf"
+        self.env.pop("TERM_PROGRAM", None)
+        self.hook(hook_event_name="UserPromptSubmit", prompt="hi")
+        self.assertNotIn("app", self.states()[0])
+
     def test_retry_is_deduplicated_and_new_reply_is_kept(self):
         for _ in range(2):
             self.hook(hook_event_name="Stop", prompt_id="p-1", last_assistant_message="First answer")

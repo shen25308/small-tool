@@ -44,6 +44,7 @@ function renderAgents() {
   $('agentList').innerHTML = entries.map(agentMarkup).join('') ||
     '<p class="agent-empty">Claude Code and Codex appear here while they work.</p><button type="button" class="mini-link" data-connect-agents>Connect an agent…</button>';
   window.Island?.update(entries);
+  if (compact) window.Card?.renderReport();
   // Once a finished result has been read, its status has done its job.
   const notices = new Map(allNotices().map(note => [note.id, note]));
   for (const row of agentRows) {
