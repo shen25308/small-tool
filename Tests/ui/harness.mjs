@@ -65,6 +65,10 @@ function fakeHost(seed) {
     externalProvider: message => message.provider === 'github' ? {connected: false} : {accounts: [], configuredDefault: false, connected: false},
     edgeMailPreference: message => { if (typeof message.value === 'boolean') state.edgeMail = message.value; return state.edgeMail; },
     appearance: message => { if (['system', 'light', 'dark'].includes(message.value)) state.appearance = message.value; return state.appearance || 'system'; },
+    cardSize: message => { state.cardHeight = message.height; return true; },
+    cardDrag: () => { state.drags = (state.drags || 0) + 1; return true; },
+    pin: message => { if (typeof message.value === 'boolean') state.pinned = message.value; window.setPinned(state.pinned !== false); return state.pinned !== false; },
+    nativeMenu: message => { state.lastMenu = message.items; return state.menuChoice ? String(message.items.findIndex(item => item.title === state.menuChoice)) : ''; },
     menuBar: message => { if (typeof message.value === 'boolean') state.menuBar = message.value; return state.menuBar; },
     edgeVisibility: message => { state.edge = !!message.value; window.setEdgeVisible(state.edge); return state.edge; },
     claudeCode: message => {
@@ -111,8 +115,23 @@ function fakeHost(seed) {
 
 export async function launch() { return chromium.launch(); }
 
-export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1} = {}) {
-  const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light'});
+// A stand-in desktop for pictures of the corner card: wallpaper, an editor window, and the card at top right.
+const DESKTOP = `
+html.desktop, html.desktop body { background: linear-gradient(135deg, #3a5bd9 0%, #7b4fd6 38%, #e0679b 70%, #f4a259 100%) fixed !important }
+html.desktop.dark-desk, html.desktop.dark-desk body { background: linear-gradient(135deg, #0f1a3d 0%, #2a1c4f 45%, #4b1f45 75%, #5a2f22 100%) fixed !important }
+html.desktop body.compact #card { inset: 14px 14px auto auto; width: 340px; height: auto; border-radius: 22px; overflow: hidden;
+  background: color-mix(in srgb, var(--paper) 74%, transparent) !important; -webkit-backdrop-filter: blur(40px) saturate(1.8); backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 22px 60px rgba(0,0,0,.35) }
+.fake-editor { position: fixed; left: 70px; top: 40px; width: 760px; bottom: 60px; border-radius: 12px; background: #1e1f24; box-shadow: 0 30px 80px rgba(0,0,0,.45);
+  font: 12.5px/1.7 ui-monospace, Menlo, monospace; color: #c9d1d9; padding: 46px 22px; overflow: hidden }
+.fake-editor::before { content: "● ● ●"; position: absolute; top: 12px; left: 16px; color: #555; letter-spacing: 2px }
+.fake-editor b { color: #ff7b72; font-weight: 400 } .fake-editor i { color: #79c0ff; font-style: normal } .fake-editor u { color: #8b949e; text-decoration: none }
+`;
+const EDITOR = '<u>// billing.py</u><br><b>def</b> <i>charge</i>(account, amount):<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>if</b> amount &lt;= 0:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>raise</b> ValueError(<i>"amount must be positive"</i>)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice = Invoice.<i>open</i>(account)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice.<i>add</i>(amount)<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>return</b> invoice.<i>settle</i>()<br><br><u># Claude Code is refactoring this module…</u>';
+
+export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false} = {}) {
+  // Checks run with reduced motion so timing never decides a result. One check turns motion on.
+  const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light', reducedMotion: motion ? 'no-preference' : 'reduce'});
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', error => problems.push('pageerror: ' + error.message));
@@ -122,6 +141,15 @@ export async function open(browser, {width = 1040, height = 760, dark = false, c
   // Chromium reports the Mac platform key as Meta, the same key the page listens for.
   await page.goto(pathToFileURL(path.join(root, 'UI/index.html')).href);
   await page.waitForFunction(() => window.__host && document.querySelector('#nav .smart-tile') && document.querySelector('#agentList'));
+  if (desktop) {
+    await page.addStyleTag({content: DESKTOP});
+    await page.evaluate(([html, dark]) => {
+      document.documentElement.classList.add('desktop');
+      if (dark) document.documentElement.classList.add('dark-desk');
+      const editor = document.createElement('div'); editor.className = 'fake-editor'; editor.innerHTML = html;
+      document.body.prepend(editor);
+    }, [EDITOR, dark]);
+  }
   await page.waitForTimeout(150);
   return {page, context, problems};
 }

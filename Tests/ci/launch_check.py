@@ -107,6 +107,8 @@ stop(workspace)
 
 today = launch("--compact-workspace")
 shot("today.png", today)
+# The whole screen, to show the card sitting in its corner.
+subprocess.run(["screencapture", "-x", str(shots / "desktop.png")], check=False, timeout=30)
 stop(today)
 
 inbox = launch("--workspace", "--open-inbox")

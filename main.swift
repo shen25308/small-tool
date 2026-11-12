@@ -62,10 +62,9 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var window: NSWindow!
     private var web: WKWebView!
     private var editorApp:NSRunningApplication?
-    private var smallWorkspaceFrame: NSRect?
-    private var expandedFrame: NSRect?
     private var compact = false
-    private var placingWindow = false
+    private lazy var card = CornerCard()
+    private var mainBackdrop: NSVisualEffectView!
     private var restoreTodayOnReturn = false
     private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? true
     private let modeButton = NSButton()
@@ -191,8 +190,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         ]
     }
     private func showEdge(_ visible:Bool) {
-        if visible && compact,let screen=window.screen?.visibleFrame {
-            edge.avoidCovering(window.frame,on:screen)
+        if visible && compact,let screen=card.panel.screen?.visibleFrame {
+            edge.avoidCovering(card.panel.frame,on:screen)
         }
         edge.setVisible(visible)
     }
@@ -250,6 +249,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         backdrop.blendingMode = .behindWindow
         backdrop.state = .followsWindowActiveState
         window.contentView = backdrop
+        mainBackdrop = backdrop
         web.frame = backdrop.bounds
         web.autoresizingMask = [.width,.height]
         backdrop.addSubview(web)
@@ -281,7 +281,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     }
     private func openWorkspace(inbox:Bool,fromEdge:Bool=false) {
         if fromEdge {
-            restoreTodayOnReturn = restoreTodayOnReturn || (compact && window.isVisible)
+            restoreTodayOnReturn = restoreTodayOnReturn || (compact && card.panel.isVisible)
             let front=NSWorkspace.shared.frontmostApplication
             if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier {editorApp=front}
         }
@@ -389,8 +389,9 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     @objc private func togglePinned() {
         pinned.toggle()
         UserDefaults.standard.set(pinned,forKey:"ShiShiTodayPinned")
-        window.level = compact && pinned ? .floating : .normal
+        card.setPinned(pinned)
         updateWindowControls()
+        tell("setPinned",pinned)
     }
     private func tell(_ function: String, _ arg: Any) {
         if function=="setInbox", let state=arg as? [String:Any],let rows=state["items"] as? [[String:Any]],let channel=state["channel"] as? String {
@@ -401,66 +402,28 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         web.callAsyncJavaScript("window[fn](value);",arguments:["fn":function,"value":arg],in:nil,in:.page,completionHandler:nil)
     }
     @objc private func toggleCompact() { setCompact(!compact) }
+    /// Compact mode moves the one web view into the corner card, so both views share the same page state.
     private func setCompact(_ enabled: Bool) {
         guard compact != enabled else { return }
-        placingWindow = true
-        defer {placingWindow = false}
         compact = enabled
         UserDefaults.standard.set(enabled,forKey:"ShiShiTodayMode")
         updateWindowControls()
-        smallWorkspaceFrame=nil
         if enabled {
-            expandedFrame=window.frame
-            // Keep the expanded window's saved geometry independent from the floating view.
-            window.setFrameAutosaveName("")
-            window.minSize=NSSize(width:300,height:320)
-            let screen=window.screen?.visibleFrame ?? window.frame
-            let width=min(356,screen.width), height=min(484,screen.height)
-            var rect=NSRect(x:screen.maxX-width-16,y:screen.maxY-height-16,width:width,height:height)
-            if let saved=UserDefaults.standard.string(forKey:"ShiShiTodayFrame") {
-                let frame=NSRectFromString(saved)
-                if frame.width>=300,frame.height>=320,let display=NSScreen.screens.first(where:{$0.visibleFrame.contains(frame)}) {
-                    rect=frame.intersection(display.visibleFrame)
-                }
-            }
-            window.setFrame(rect,display:true)
-            window.level = pinned ? .floating : .normal
-            window.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary]
-            if edge.panel.isVisible {edge.avoidCovering(window.frame,on:screen)}
+            card.attach(web)
+            card.show(pinned:pinned)
+            window.orderOut(nil)
+            if edge.panel.isVisible,let screen=card.panel.screen?.visibleFrame {edge.avoidCovering(card.panel.frame,on:screen)}
         } else {
-            window.level = .normal
-            window.collectionBehavior = []
-            window.minSize = NSSize(width:635,height:420)
-            if let frame=expandedFrame {window.setFrame(frame,display:true)}
-            window.setFrameAutosaveName("ShiShiTallWorkspace")
+            web.removeFromSuperview()
+            web.layer?.cornerRadius = 0
+            web.frame = mainBackdrop.bounds
+            web.autoresizingMask = [.width,.height]
+            mainBackdrop.addSubview(web)
+            card.panel.orderOut(nil)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps:true)
         }
         tell("setCompact",enabled)
-    }
-    private func rememberTodayFrame() {
-        if compact && !placingWindow && smallWorkspaceFrame == nil && window.isVisible {
-            UserDefaults.standard.set(NSStringFromRect(window.frame),forKey:"ShiShiTodayFrame")
-        }
-    }
-    func windowDidMove(_ notification:Notification) {rememberTodayFrame()}
-    func windowDidEndLiveResize(_ notification:Notification) {rememberTodayFrame()}
-    private func sizeLatestResult(expanded:Bool) {
-        guard compact, let screen=window.screen?.visibleFrame else {return}
-        let current=window.frame
-        let size:NSSize
-        if expanded {
-            guard smallWorkspaceFrame==nil else {return}
-            smallWorkspaceFrame=current
-            size=NSSize(width:max(current.width,382),height:max(current.height,475))
-        } else {
-            guard let previous=smallWorkspaceFrame else {return}
-            size=previous.size
-            smallWorkspaceFrame=nil
-        }
-        let width=min(size.width,screen.width),height=min(size.height,screen.height)
-        let left=current.midX >= screen.midX ? current.maxX-width : current.minX
-        let x=max(screen.minX,min(left,screen.maxX-width))
-        let y=max(screen.minY,min(current.maxY-height,screen.maxY-height))
-        window.setFrame(NSRect(x:x,y:y,width:width,height:height),display:true)
     }
     @objc private func captureMenu(){ receive("") }
     @objc func captureWork(_ board: NSPasteboard, userData: String?, error errorPtr: AutoreleasingUnsafeMutablePointer<NSString?>) {
@@ -532,7 +495,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 ready=true
                 if startsWithToday {
                     setCompact(true)
-                    window.orderFrontRegardless()
                     if UserDefaults.standard.bool(forKey:"ShiShiShowsResults") {showEdge(true)}
                 }
                 startInbox()
@@ -540,6 +502,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     self?.inboxQueue.async { [weak self] in self?.scanInboxes(force:true) }
                 }
                 tell("setEdgeVisible",edge.panel.isVisible)
+                tell("setPinned",pinned)
                 // The page pads its top edge by the title bar height because content runs underneath it.
                 tell("setChrome",["titlebar":Double(max(0,window.frame.height-window.contentLayoutRect.height)),"vibrant":vibrant] as [String:Any])
                 if CommandLine.arguments.contains("--open-inbox") {
@@ -592,10 +555,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 }
                 reply(id,true,edge.showsMail)
             case "returnToEdge":
-                if restoreTodayOnReturn {
-                    setCompact(true)
-                    window.orderFrontRegardless()
-                } else {window.orderOut(nil)}
+                if restoreTodayOnReturn {setCompact(true)} else {window.orderOut(nil)}
                 restoreTodayOnReturn=false
                 showEdge(true)
                 if let editor=editorApp,!editor.isTerminated {editor.activate(options:[])} else {NSApp.deactivate()}
@@ -690,9 +650,33 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     throw AppIssue("This Notion page could not be opened.")
                 }
                 reply(id,true,true)
-            case "latestSize":
-                sizeLatestResult(expanded:body["expanded"] as? Bool == true)
+            case "latestSize": reply(id,true,true)
+            case "cardSize":
+                if let height=body["height"] as? Double, height.isFinite {card.setContentHeight(CGFloat(height))}
                 reply(id,true,true)
+            case "cardDrag":
+                if compact {card.beginDrag()}
+                reply(id,true,true)
+            case "pin":
+                if let value=body["value"] as? Bool, value != pinned {togglePinned()}
+                reply(id,true,pinned)
+            case "nativeMenu":
+                // A system menu can extend past the small card, unlike anything drawn inside the page.
+                guard let items=body["items"] as? [[String:Any]] else {throw AppIssue("The menu is empty.")}
+                let menu=NSMenu()
+                menu.autoenablesItems=false
+                let choice=MenuChoice()
+                for item in items.prefix(40) {
+                    if item["separator"] as? Bool == true {menu.addItem(.separator());continue}
+                    let entry=NSMenuItem(title:String((item["title"] as? String ?? "").prefix(80)),action:#selector(MenuChoice.pick(_:)),keyEquivalent:"")
+                    entry.target=choice
+                    entry.representedObject=item["id"] as? String ?? ""
+                    entry.state=item["checked"] as? Bool == true ? .on : .off
+                    entry.isEnabled=item["enabled"] as? Bool ?? true
+                    menu.addItem(entry)
+                }
+                menu.popUp(positioning:nil,at:NSEvent.mouseLocation,in:nil)
+                reply(id,true,choice.chosen)
             case "compact": setCompact(body["value"] as? Bool == true);reply(id,true,true)
             case "extract":
                 guard !processing else{throw AppIssue("Shishi is still extracting tasks from the previous message. Try again in a moment.")}

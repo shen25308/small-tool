@@ -105,7 +105,7 @@ function deadlineLabel(task) {
 
 function smartTile(id, label, count, icon) {
   return '<button class="smart-tile tile-' + id + (view === id && !tag ? ' active" aria-current="page' : '') + '" data-view="' + id + '"' +
-    (id === 'today' ? ' data-target="today"' : '') + '><span class="tile-icon">' + icon + '</span><span class="tile-count">' + count +
+    (id === 'today' ? ' data-target="today"' : '') + '><span class="tile-icon">' + icon + '</span><span class="tile-count" data-count-key="tile-' + id + '">' + count +
     '</span><span class="tile-label">' + label + '</span></button>';
 }
 function navButton(id, label, count) {
@@ -320,7 +320,21 @@ function completedMarkup(tasks) {
     [...groups].map(([key, list]) => dayGroup(key ? dayLabel(key, true) : 'Earlier', list)).join('');
 }
 
+// Morning, afternoon, evening or night, for the color of the light behind the title.
+function daypart(hour = new Date().getHours()) {
+  return hour < 5 ? 'night' : hour < 11 ? 'morning' : hour < 17 ? 'day' : hour < 21 ? 'evening' : 'night';
+}
+const motionKey = () => compact ? 'card' : view + '|' + tag;
+
 function render() {
+  const motion = window.Motion?.capture(motionKey());
+  renderBoard();
+  if (compact) window.Card?.render();
+  window.Motion?.play(motion, motionKey());
+  window.renderAgents?.();
+}
+
+function renderBoard() {
   const draftField = document.querySelector('.quick-add input');
   const draft = draftField ? {value: draftField.value, focused: document.activeElement === draftField} : null;
   const tasks = data.tasks, open = tasks.filter(t => !t.done), today = tasks.filter(isToday), project = projectOfView();
@@ -331,6 +345,14 @@ function render() {
     smartTile('done', 'Completed', tasks.length - open.length, symbol('i-check'));
   $('projects').innerHTML = data.projects.map(p => navButton('p:' + p, p, open.filter(t => t.project === p).length)).join('');
   $('board').className = 'board-content ' + (project ? 'view-project ' + projectTone(project) : 'view-' + view);
+  $('aurora').className = 'aurora ' + (project ? 'aura-project ' + projectTone(project) : view === 'today' ? 'aura-' + daypart() : 'aura-' + view);
+  const planned = tasks.filter(isToday), finished = planned.filter(t => t.done).length;
+  const ring = $('dayRing');
+  ring.hidden = view !== 'today' || !planned.length;
+  ring.style.setProperty('--progress', planned.length ? (finished / planned.length).toFixed(3) : '0');
+  ring.classList.toggle('complete', planned.length > 0 && finished === planned.length);
+  ring.setAttribute('aria-label', finished + ' of ' + planned.length + ' done today');
+  ring.title = finished + ' of ' + planned.length + ' done today';
   $('dateline').textContent = view === 'today' ? new Intl.DateTimeFormat('en-US', {month: 'long', day: 'numeric', weekday: 'long'}).format(now) : '';
   $('dateline').hidden = view !== 'today';
   $('pageTitle').textContent = tag || currentTitle();
@@ -378,7 +400,6 @@ function render() {
     if (draft) { field.value = draft.value; showQuickHint(field); }
     if ((!draft || draft.focused) && !$('dialog').open && !$('palette').open) field.focus();
   }
-  window.renderAgents?.();
 }
 
 let dialogBack = closeDialog;
@@ -663,7 +684,12 @@ document.addEventListener('click', e => {
   if (a.dataset.act === 'edit') taskForm(t);
   if (a.dataset.act === 'deadline') editDeadline(a, t);
   if (a.dataset.act === 'tag' || a.dataset.act === 'priority') showTaskPicker(a, t, a.dataset.act);
-  if (a.dataset.act === 'toggle') action(toggleTask(t.id));
+  if (a.dataset.act === 'toggle') {
+    const row = a.closest('.row');
+    if (row.classList.contains('completing')) return;
+    // Let the check fill before the task leaves the list.
+    (t.done ? Promise.resolve() : Motion.celebrate(row)).then(() => action(toggleTask(t.id)));
+  }
   if (a.dataset.act === 'today') action(schedule(t.id, 'today'));
 });
 document.addEventListener('dragstart', e => { const r = e.target.closest?.('.row[draggable=true]'); if (!r) return; dragId = r.dataset.id; r.classList.add('dragging'); e.dataTransfer.setData('text/plain', dragId); e.dataTransfer.effectAllowed = 'move'; });
@@ -688,6 +714,10 @@ $('dialog').addEventListener('close', () => { captureToken++; });
 window.setCompact = v => {
   compact = v;
   document.body.classList.toggle('compact', v);
+  // One agent capsule: in the toolbar of the workspace, or at the top of the corner card.
+  const island = $('island');
+  if (v) document.querySelector('.card-island-slot').append(island);
+  else document.querySelector('.toolbar').insertBefore(island, document.querySelector('.toolbar-tools'));
   if (v) {
     const preview = document.querySelector('#latestResult .result-preview[aria-expanded="true"]');
     if (preview) preview.click();

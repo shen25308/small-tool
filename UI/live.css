@@ -1,0 +1,165 @@
+/* Motion and light: the agent capsule, glass controls, the glow behind the title, and completion feedback.
+   All of it stops under "Reduce motion" (see the rule at the end of style.css). */
+@property --a1 { syntax: '<color>'; inherits: true; initial-value: transparent }
+@property --a2 { syntax: '<color>'; inherits: true; initial-value: transparent }
+@property --a3 { syntax: '<color>'; inherits: true; initial-value: transparent }
+@property --spin { syntax: '<angle>'; inherits: false; initial-value: 0deg }
+:root {
+  --glass: color-mix(in srgb, var(--paper) 64%, transparent);
+  --glass-rim: inset 0 0 0 .5px rgba(255,255,255,.6), inset 0 1px 0 rgba(255,255,255,.75), 0 0 0 .5px rgba(0,0,0,.09), 0 6px 20px rgba(0,0,0,.08);
+  --ease-spring: var(--spring, cubic-bezier(.2, .9, .25, 1.12));
+}
+@media (prefers-color-scheme: dark) {
+  :root { --glass-rim: inset 0 0 0 .5px rgba(255,255,255,.14), inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 .5px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.35) }
+}
+
+/* Content scrolls under the title bar and a floating glass toolbar. */
+main { position: relative; padding-top: 0 }
+main::before {
+  content: ""; position: absolute; z-index: 5; top: 0; left: 0; right: 0; height: calc(var(--titlebar) + 18px); pointer-events: none;
+  background: color-mix(in srgb, var(--paper) 70%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  -webkit-mask: linear-gradient(#000 55%, transparent); mask: linear-gradient(#000 55%, transparent);
+}
+.toolbar { position: absolute; z-index: 6; top: var(--titlebar); left: 0; right: 0; pointer-events: none }
+.toolbar > * { pointer-events: auto }
+.content { position: relative; padding-top: calc(var(--titlebar) + 48px) }
+.toolbar-tools {
+  gap: 0; padding: 3px; border-radius: 999px; background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8); box-shadow: var(--glass-rim);
+}
+.tool { border-radius: 999px; transition: background .2s, transform .35s var(--ease-spring) }
+.tool:active { transform: scale(.9) }
+.board-content { position: relative; z-index: 1 }
+
+/* A glow behind the title. Today follows the time of day; other views take their own color. */
+.aurora {
+  position: absolute; z-index: 0; top: 0; left: 0; right: 0; height: 320px; overflow: hidden; pointer-events: none;
+  transition: --a1 1.2s ease, --a2 1.2s ease, --a3 1.2s ease;
+  -webkit-mask: linear-gradient(#000 30%, transparent); mask: linear-gradient(#000 30%, transparent);
+}
+.aurora i { position: absolute; width: 52%; height: 260px; border-radius: 50%; filter: blur(64px); opacity: .36; animation: aurora-drift 26s ease-in-out infinite alternate }
+.aurora i:nth-child(1) { background: var(--a1); left: -8%; top: -90px }
+.aurora i:nth-child(2) { background: var(--a2); left: 28%; top: -140px; animation-duration: 33s; animation-delay: -9s }
+.aurora i:nth-child(3) { background: var(--a3); right: -10%; top: -70px; animation-duration: 39s; animation-delay: -17s }
+@keyframes aurora-drift {
+  0% { transform: translate(0, 0) scale(1) }
+  50% { transform: translate(7%, 22px) scale(1.14) }
+  100% { transform: translate(-6%, -8px) scale(.94) }
+}
+@media (prefers-color-scheme: dark) { .aurora i { opacity: .24 } }
+.aura-morning { --a1: #ff9d6c; --a2: #ffd36e; --a3: #ff7eb6 }
+.aura-day { --a1: #4ea9ff; --a2: #79e0ff; --a3: #9f8cff }
+.aura-evening { --a1: #ff7b54; --a2: #b56cff; --a3: #ffb469 }
+.aura-night { --a1: #5b5bff; --a2: #2cbfd0; --a3: #a85cff }
+.aura-upcoming { --a1: #ff5f57; --a2: #ffa95e; --a3: #ff6fae }
+.aura-all { --a1: #8e9bb5; --a2: #6fb5ff; --a3: #b9a7ff }
+.aura-done { --a1: #34c759; --a2: #9bd8a8; --a3: #7fd3ff }
+.aura-project { --a1: var(--list-color); --a2: color-mix(in srgb, var(--list-color) 55%, #fff); --a3: color-mix(in srgb, var(--list-color) 60%, #a35cff) }
+
+#pageTitle {
+  background: linear-gradient(100deg, var(--view-color, var(--action)) 20%, color-mix(in srgb, var(--view-color, var(--action)) 55%, #ff5fa2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.view-all #pageTitle, .view-done #pageTitle { background: none; color: var(--view-color) }
+
+/* Progress ring */
+.progress-ring { position: relative; display: inline-grid; place-items: center; width: 24px; height: 24px; flex: none; align-self: center; --progress: 0 }
+.progress-ring svg { width: 100%; height: 100%; transform: rotate(-90deg) }
+.ring-track { fill: none; stroke: var(--control); stroke-width: 4 }
+.ring-fill {
+  fill: none; stroke: var(--view-color, var(--action)); stroke-width: 4; stroke-linecap: round;
+  stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--progress) * 100); transition: stroke-dashoffset .9s var(--ease-spring), stroke .4s;
+}
+.progress-ring.complete .ring-fill { stroke: var(--green) }
+.progress-ring.complete { animation: ring-pop .7s var(--ease-spring) }
+@keyframes ring-pop { 0% { transform: scale(.8) } 60% { transform: scale(1.15) } 100% { transform: none } }
+.heading-line .progress-ring { margin-left: 2px }
+
+/* Smart tiles respond to touch */
+.smart-tile { transition: transform .45s var(--ease-spring), background .25s, box-shadow .35s }
+.smart-tile:active { transform: scale(.95) }
+.smart-tile.active { box-shadow: 0 8px 22px color-mix(in srgb, var(--tile) 38%, transparent) }
+.tile-count, #pageCount { display: inline-block }
+
+/* Completion: the circle fills, a check draws in, and the title is struck through. */
+.done .check, .row.completing .check { background: var(--view-color, var(--action)); box-shadow: none }
+.done .check::after, .row.completing .check::after {
+  content: ""; position: absolute; inset: 4.5px; border-radius: 0; background: #fff;
+  -webkit-mask: var(--g-check) center / contain no-repeat; mask: var(--g-check) center / contain no-repeat;
+}
+.row.completing .check { animation: check-pop .45s var(--ease-spring) }
+.row.completing .check::after { animation: check-draw .3s ease-out .05s both }
+.row.completing .title {
+  color: var(--muted); background: linear-gradient(currentColor, currentColor) 0 58% / 100% 1.2px no-repeat; animation: strike .32s ease-out both;
+}
+@keyframes check-pop { 0% { transform: scale(.7) } 55% { transform: scale(1.18) } 100% { transform: none } }
+@keyframes check-draw { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0) } }
+@keyframes strike { from { background-size: 0 1.2px } }
+.burst { position: fixed; z-index: 60; width: 0; height: 0; pointer-events: none }
+.burst i { position: absolute; left: 0; top: 0; width: 5px; height: 5px; border-radius: 50% }
+
+/* The Agent Island */
+.toolbar .island { position: absolute; left: 50%; top: 5px; transform: translateX(-50%) }
+.island {
+  position: relative; display: block; overflow: hidden; width: 92px; height: 30px; border-radius: 16px;
+  background: rgba(20,20,22,.88); color: #fff; font-size: 12.5px; cursor: default; outline: none;
+  -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14), 0 8px 24px rgba(0,0,0,.2), 0 1px 3px rgba(0,0,0,.2);
+  transition: width .6s var(--ease-spring), height .6s var(--ease-spring), border-radius .45s ease, box-shadow .45s ease;
+}
+.island:focus-visible { box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14), var(--focus) }
+.island-inner { position: absolute; top: 0; left: 0; width: max-content }
+.island-pill { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px 0 9px; white-space: nowrap; font-weight: 600 }
+.island-text { max-width: 210px; overflow: hidden; text-overflow: ellipsis }
+.mode-idle .island-text { color: rgba(255,255,255,.62); font-weight: 500 }
+.island-glyph { position: relative; display: inline-grid; place-items: center; width: 14px; height: 14px; flex: none; border-radius: 50% }
+.glyph-idle { background: radial-gradient(circle, rgba(255,255,255,.7) 0 2.4px, transparent 2.8px) }
+.glyph-working { border: 2px solid rgba(10,132,255,.28); border-top-color: #0a84ff; animation: spin .85s linear infinite }
+.glyph-attention { background: #ff9f0a; transform: scale(.72); animation: ping 1.5s ease-out infinite }
+.glyph-done { background: #30d158 }
+.glyph-done svg { width: 100%; height: 100% }
+.glyph-done path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; animation: draw-check .45s ease-out .1s both }
+.glyph-panel { display: none }
+@keyframes spin { to { transform: rotate(360deg) } }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(255,159,10,.7) } 100% { box-shadow: 0 0 0 9px rgba(255,159,10,0) } }
+@keyframes draw-check { from { stroke-dashoffset: 16 } to { stroke-dashoffset: 0 } }
+/* A light that travels around the capsule while agents work. */
+.island.mode-working::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--spin), transparent 0 62%, rgba(10,132,255,.9) 80%, rgba(120,200,255,.9) 86%, transparent 94%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: orbit 2.6s linear infinite;
+}
+@keyframes orbit { to { --spin: 360deg } }
+.island.mode-attention, .island.flash-attention { box-shadow: inset 0 0 0 .5px rgba(255,159,10,.5), 0 0 0 1px rgba(255,159,10,.35), 0 8px 26px rgba(255,159,10,.3) }
+.island.flash-done { box-shadow: inset 0 0 0 .5px rgba(48,209,88,.5), 0 0 0 1px rgba(48,209,88,.3), 0 10px 30px rgba(48,209,88,.28) }
+.island.mode-flash, .island.mode-panel { border-radius: 20px }
+.island-flash { display: flex; align-items: flex-start; gap: 10px; width: 292px; padding: 11px 14px 12px 12px }
+.island-flash .island-glyph { width: 22px; height: 22px; margin-top: 1px }
+.island-flash .glyph-attention { transform: scale(.6) }
+.island-copy { min-width: 0; display: grid; gap: 2px }
+.island-copy b { display: flex; align-items: baseline; gap: 7px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden }
+.island-copy small { color: rgba(255,255,255,.55); font-size: 11px; font-weight: 500 }
+.island-copy > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: rgba(255,255,255,.76); font-size: 12px; line-height: 1.38 }
+.island-panel { width: 316px; padding: 9px 8px 8px }
+.island-head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 7px; font-size: 13px }
+.island-head span { margin-left: auto; color: rgba(255,255,255,.5); font-variant-numeric: tabular-nums }
+.island-list { max-height: 252px; overflow-y: auto }
+.island .agent-row { color: #fff }
+.island .agent-row:hover { background: rgba(255,255,255,.09) }
+.island .agent-detail, .island .agent-time, .island .agent-empty { color: rgba(255,255,255,.58) }
+.island .agent-state.working { color: #64b5ff }
+.island .agent-state.done { color: #4cd97b }
+.island .agent-state.attention { color: #ffb340 }
+.island-actions { display: flex; gap: 6px; padding: 8px 4px 0 }
+.island-actions button { flex: 1; min-height: 26px; border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; font-size: 12px; font-weight: 500 }
+.island-actions button:hover { background: rgba(255,255,255,.2) }
+
+/* Sheets and menus pick up the glass rim. */
+dialog, .menu, #boardMenu, .task-picker, .focus-pop, #palette { box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.35) }
+dialog[open] { animation: sheet-in .38s var(--ease-spring) }
+.menu:popover-open, #boardMenu:popover-open, .task-picker:popover-open, .focus-pop:popover-open { animation: menu-in .2s ease-out }
+#palette[open] { animation: sheet-in .32s var(--ease-spring) }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(10px) scale(.97) } }
+@keyframes menu-in { from { opacity: 0; transform: scale(.97) } }

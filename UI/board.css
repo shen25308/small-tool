@@ -125,10 +125,6 @@
 .agent-state.done { color: var(--success) }
 .agent-state.attention { color: var(--warning) }
 .agent-empty { padding: 2px 8px 4px; color: var(--muted); font-size: 12px; line-height: 1.45 }
-#agentBar { display: none; flex: none; border-top: .5px solid var(--line); background: var(--panel) }
-#agentBar .agent-row { border-radius: 0; padding: 6px 12px }
-#agentBar .agent-row + .agent-row { border-top: .5px solid var(--hairline) }
-#agentBar .agent-more { width: 100%; padding: 3px; color: var(--muted); font-size: 11px; border-radius: 0 }
 
 /* Focus timer */
 .focus-pop { width: 232px; padding: 12px }

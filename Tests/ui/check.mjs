@@ -346,20 +346,109 @@ await check('drag a task into Today and onto a list', {height: 1500}, async ({pa
   await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Compare pricing pages').project === 'Personal');
 });
 
-await check('floating Today window', {width: 356, height: 484, compact: true, scale: 2}, async ({page, shot}) => {
-  assert.equal(await page.locator('aside').isHidden(), true);
-  assert.equal(await page.locator('#agentBar .agent-row').count(), 3);
-  assert.match(await text(page, '#agentBar'), /1 more/);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-  assert.equal(overflow, 0);
-  await shot('today-floating');
-  await page.click('#tasks [data-quick="view"]');
-  await page.locator('.quick-add input').fill('Stretch');
-  await page.locator('.quick-add input').press('Enter');
+const weekdayNow = () => new Intl.DateTimeFormat('en-US', {weekday: 'long'}).format(new Date()).toUpperCase();
+
+await check('corner card', {width: 340, height: 420, compact: true}, async ({page, host, tasks}) => {
+  assert.equal(await page.locator('#shell').isHidden(), true);
+  assert.equal(await text(page, '#cardWeekday'), weekdayNow());
+  assert.equal(await text(page, '#cardDay'), String(new Date().getDate()));
+  assert.equal(await text(page, '#cardSummary'), '5 tasks left');
+  assert.equal(await text(page, '#cardRing .ring-label'), '1/6');
+  assert.equal(await page.locator('#cardTasks .row').count(), 5);
+  assert.equal(await page.locator('#cardTasks .row.p0').count(), 1);
+  assert.equal(await text(page, '#cardTasks .row:has-text("Send the release checklist") .card-due'), 'Tomorrow');
+  assert.match(await text(page, '#cardTasks .row:has-text("Review QA feedback")'), /Review QA feedback/);
+  // The agent capsule moved into the card and reports the agent that needs you.
+  assert.equal(await page.locator('.card-island-slot #island').count(), 1);
+  assert.match(await page.getAttribute('#island', 'class'), /mode-attention/);
+  assert.match(await text(page, '#island'), /web-app needs you/);
+  // The card tells the app how tall it needs to be.
+  await page.waitForFunction(() => window.__host.cardHeight > 150);
+  const natural = await page.evaluate(() => Math.ceil(document.querySelector('.card-inner').getBoundingClientRect().height));
+  assert.equal((await host()).cardHeight, natural);
+
+  await page.fill('#cardAddInput', 'Stretch at 5pm');
+  await page.press('#cardAddInput', 'Enter');
   await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Stretch'));
+  const stretch = (await tasks()).find(t => t.title === 'Stretch');
+  assert.deepEqual([stretch.planned, stretch.dueDate, stretch.dueTime], [day(0), day(0), '17:00']);
+  assert.equal(await text(page, '#cardSummary'), '6 tasks left');
+  assert.equal(await page.locator('#cardMore').isHidden(), true);
+
+  await page.locator('#cardTasks .row', {hasText: 'Review the product roadmap'}).locator('.check').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
+  assert.equal(await text(page, '#cardRing .ring-label'), '2/7');
+
+  await page.locator('.card-head').dispatchEvent('mousedown', {button: 0});
+  await page.waitForFunction(() => window.__host.drags === 1);
+  await page.locator('#cardTasks .row').first().dispatchEvent('mousedown', {button: 0});
+  await page.waitForTimeout(100);
+  assert.equal((await host()).drags, 1, 'a press on a task must not move the card');
+
+  await page.evaluate(() => { window.__host.menuChoice = 'Move to Tomorrow'; });
+  await page.locator('#cardTasks .row', {hasText: 'Prepare Friday'}).click({button: 'right'});
+  await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update").planned === d, day(1));
+  assert.ok((await host()).lastMenu.some(item => item.title === 'Keep Above Other Windows' && item.checked));
+
+  await page.hover('#card');
+  await page.click('#cardPin');
+  await page.waitForFunction(() => window.__host.pinned === false && document.getElementById('cardPin').getAttribute('aria-pressed') === 'false');
+
+  // Details open in the full workspace, not inside the small card.
+  await page.locator('#cardTasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
+  await page.waitForSelector('#taskForm');
+  assert.equal(await page.locator('#shell').isVisible(), true);
+  assert.equal(await page.locator('.toolbar #island').count(), 1);
 });
 
-await check('floating Today window, dark', {width: 356, height: 484, compact: true, dark: true, scale: 2}, async ({shot}) => { await shot('today-floating-dark'); });
+await check('corner card when everything is done', {width: 340, height: 420, compact: true}, async ({page}) => {
+  for (let i = 0; i < 5; i++) {
+    await page.locator('#cardTasks .row .check').first().click();
+    await page.waitForFunction(n => document.querySelectorAll('#cardTasks .row').length === n, 4 - i);
+  }
+  assert.equal(await text(page, '#cardSummary'), 'All done');
+  assert.match(await text(page, '#cardTasks'), /Everything for today is done/);
+  assert.match(await page.getAttribute('#cardRing', 'class'), /complete/);
+});
+
+for (const dark of [false, true]) {
+  await check('corner card on the desktop' + (dark ? ', dark' : ''), {width: 1280, height: 800, compact: true, desktop: true, dark, scale: 2}, async ({shot}) => {
+    await shot('card-desktop' + (dark ? '-dark' : ''));
+  });
+}
+
+await check('motion: agent island, completion and progress', {motion: true, scale: 2}, async ({page, host, shot}) => {
+  assert.equal(await page.locator('#dayRing').isVisible(), true);
+  assert.match(await page.getAttribute('#island', 'class'), /mode-attention/);
+  // Results that were already there at launch do not flash. A fresh one does.
+  await page.waitForTimeout(2700);
+  await page.evaluate(() => {
+    const now = Date.now() / 1000;
+    window.__host.agents = window.__host.agents.filter(agent => agent.state !== 'attention')
+      .map(agent => agent.state === 'working' ? {...agent, state: 'done', time: now, detail: 'Rewrote the docs navigation and fixed 3 broken links.'} : agent);
+    window.setAgents(window.__host.agents);
+  });
+  await page.waitForFunction(() => /mode-flash/.test(document.getElementById('island').className));
+  assert.match(await text(page, '#island'), /docs-site[\s\S]*Finished[\s\S]*Rewrote the docs navigation/);
+  await page.waitForTimeout(700);
+  await shot('island-flash');
+  await page.click('#island');
+  await page.waitForFunction(() => /mode-panel/.test(document.getElementById('island').className));
+  assert.equal(await page.locator('#island .agent-row').count(), 3);
+  await page.waitForTimeout(700);
+  await shot('island-panel');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !/mode-panel/.test(document.getElementById('island').className));
+
+  const row = page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await row.locator('.check').click();
+  assert.match(await row.getAttribute('class'), /completing/);
+  assert.equal((await host()).workspace.tasks.find(t => t.title === 'Review the product roadmap').done, false, 'the task waits for its animation');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
+  assert.equal(await page.locator('.burst').count() <= 1, true);
+  await page.waitForTimeout(900);
+  await shot('motion-after-complete');
+});
 
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');

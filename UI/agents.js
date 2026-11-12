@@ -43,9 +43,7 @@ function renderAgents() {
   const entries = agentEntries();
   $('agentList').innerHTML = entries.map(agentMarkup).join('') ||
     '<p class="agent-empty">Claude Code and Codex appear here while they work.</p><button type="button" class="mini-link" data-connect-agents>Connect an agent…</button>';
-  const shown = entries.slice(0, 3);
-  $('agentBar').innerHTML = shown.map(agentMarkup).join('') +
-    (entries.length > shown.length ? '<button type="button" class="agent-more" data-agents-more>' + (entries.length - shown.length) + ' more in the inbox</button>' : '');
+  window.Island?.update(entries);
   // Once a finished result has been read, its status has done its job.
   const notices = new Map(allNotices().map(note => [note.id, note]));
   for (const row of agentRows) {
@@ -69,10 +67,9 @@ function agentMenu(entry, at) {
   ], at);
 }
 
-for (const id of ['agentList', 'agentBar']) {
+for (const id of ['agentList']) {
   $(id).addEventListener('click', event => {
     if (event.target.closest('[data-connect-agents]')) { showConnectors(); return; }
-    if (event.target.closest('[data-agents-more]')) { $('inboxButton').click(); return; }
     const row = event.target.closest('[data-agent]');
     const entry = row && agentEntries().find(item => item.key === row.dataset.agent);
     if (!entry) return;

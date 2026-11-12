@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
     shutil.copy2(HERE/'Info.plist',contents/'Info.plist')
     native_sources = [
         'main.swift', 'Engine.swift', 'CodexInbox.swift', 'ConnectorInbox.swift',
-        'EdgeResultsPanel.swift', 'ExternalProviders.swift', 'AgentStatus.swift', 'Mail/MailVault.swift'
+        'EdgeResultsPanel.swift', 'ExternalProviders.swift', 'AgentStatus.swift', 'CornerCard.swift', 'Mail/MailVault.swift'
     ]
     subprocess.run(['xcrun', 'swiftc', '-O', '-target', 'arm64-apple-macos26.0',
                     '-module-cache-path', str(Path(tmp)/'cache'),

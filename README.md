@@ -1,12 +1,12 @@
 # Shishi
 
-Shishi is a task list for people who work alongside AI. A narrow Today list stays beside your editor. Expand it for the full workspace, with smart lists, your own lists and tags in the sidebar. Claude Code, Codex and other agents report to a small Agents list while they work, and their finished replies wait in a quiet inbox, so a result never interrupts you while you type. The interface follows macOS: system fonts and accent color, a translucent sidebar, light and dark appearance, and a menu bar item.
+Shishi is a task list for people who work alongside AI. A small card sits in a corner of your screen, like a desktop widget: today's date, a progress ring, the tasks that are left, and a line to add one. Expand it for the full workspace, with smart lists, your own lists and tags in the sidebar. Claude Code, Codex and other agents report to a small Agents list while they work, and their finished replies wait in a quiet inbox, so a result never interrupts you while you type. The interface follows macOS: system fonts and accent color, a translucent sidebar, light and dark appearance, and a menu bar item.
 
 [Download the English macOS preview](https://github.com/shen25308/small-tool/releases/tag/v1.6.0) · [Data and permissions](Release/data-and-permissions.md)
 
 ![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
-[Floating Today list](Previews/today.png) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
+[Corner card](Previews/today.png) · [Card on the desktop](Previews/desktop.png) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
 
 ## Run on a Mac
 
@@ -18,7 +18,9 @@ The design reference for the Today board is [Youniverse’s work task list demo]
 
 ## Plan your day
 
-Use the toolbar to switch between the floating Today list and the full workspace, or pin the small list above other windows. The sidebar has four smart lists (**Today**, **Upcoming**, **All**, **Completed**), your own lists and your tags. Press ⌘1 to ⌘4 to jump between the smart lists.
+**The corner card.** Switch to the card from the title bar or with ⌘P. Drag it anywhere and let go: it glides into the nearest corner of that screen and stays on every desktop. It grows and shrinks with what it shows, keeps above other windows unless you turn that off, and never takes focus from your editor until you click into it. Check off a task, type a new one (natural language works here too), or right-click for a menu. Clicking a task, the agent capsule or **+N more** opens the full workspace.
+
+**The workspace.** The sidebar has four smart lists (**Today**, **Upcoming**, **All**, **Completed**), your own lists and your tags. Press ⌘1 to ⌘4 to jump between the smart lists.
 
 - **Add a task by typing.** Choose **New Task** (⌘N) and write naturally: `Send report friday 3pm #Finance !p1 @Work every week`. Shishi recognizes dates (today, tomorrow, friday, next week, in 3 days, Dec 3, 11/20), times, `!p0`–`!p2` priority, `#tag`, `@list` and repeats, and shows what it understood before you press Return. A date schedules the task. A time or the words *by* and *due* set its deadline.
 - **Work through the list.** The round checkbox completes a task. Click a priority, tag or deadline to change it in place. Right-click a task to schedule it, set its priority, move it, duplicate it or delete it (with Undo). Drag a task onto Today, a list or a day in Upcoming.
@@ -49,7 +51,7 @@ Open the inbox and choose **Connections…**, or press ⌘K and search for *Conn
 
 ### Stay out of the way
 
-Agent progress shows in three quiet places: the **Agents** list in the sidebar, three rows at the bottom of the floating Today list, and the **menu bar item**, which counts working agents and unread results and lists each one. With the menu bar item on, Shishi keeps collecting results after you close its window. Turn it off in Connections to quit with the last window. The same section sets the appearance to follow the system, or to stay light or dark. Nothing here sends a system notification. Open a finished result from Agents to read it, or add a follow-up task from the result.
+Agent progress shows in three quiet places: the **agent capsule** at the top of the window and of the corner card, the **Agents** list in the sidebar, and the **menu bar item**, which counts working agents and unread results and lists each one. With the menu bar item on, Shishi keeps collecting results after you close its window. Turn it off in Connections to quit with the last window. The same section sets the appearance to follow the system, or to stay light or dark. The capsule spins while an agent works, glows orange when one needs you, and opens for a few seconds with the first line of a fresh result before it shrinks back. Click it to read the result or see every agent. Nothing here sends a system notification. Open a finished result from Agents to read it, or add a follow-up task from the result.
 
 ### Notion
 
