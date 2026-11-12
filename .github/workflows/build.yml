@@ -52,6 +52,7 @@ jobs:
           xcrun swiftc -typecheck -target arm64-apple-macos26.0 \
             main.swift Engine.swift CodexInbox.swift ConnectorInbox.swift \
             ExternalProviders.swift AgentStatus.swift CornerCard.swift Mail/MailVault.swift
+          xcrun swiftc -typecheck Tests/ci/windows.swift
       - name: Restore the pinned model and runtimes
         id: inputs
         uses: actions/cache@v4
@@ -89,6 +90,8 @@ jobs:
           du -sh build/Shishi.app build-lite/Shishi.app
       - name: Launch check with sample data
         run: python3 Tests/ci/launch_check.py build/Shishi.app screenshots
+      - name: Native window checks
+        run: python3 Tests/ci/window_check.py build/Shishi.app screenshots
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4

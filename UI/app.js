@@ -858,7 +858,7 @@ $('pin').onclick = async () => { try { await native('compact', {value: !compact}
 $('dialog').addEventListener('close', () => { captureToken++; dialogGuard = null; document.body.append($('toast')); });
 window.setCompact = v => {
   compact = v;
-  if (v) window.setWorkspaceReturn?.(false);
+  if (v) { window.setWorkspaceReturn?.(false); window.Card?.setPrefs().catch(() => {}); }
   document.body.classList.toggle('compact', v);
   // One agent capsule: in the toolbar of the workspace, or at the top of the corner card.
   const island = $('island');

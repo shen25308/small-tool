@@ -376,6 +376,11 @@ await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host
   await page.waitForSelector('#appearanceChoice [data-appearance="system"][aria-pressed="true"]');
   await page.click('#appearanceChoice [data-appearance="dark"]');
   await page.waitForFunction(() => window.__host.appearance === 'dark' && document.querySelector('[data-appearance="dark"]').getAttribute('aria-pressed') === 'true');
+  await page.waitForFunction(() => document.querySelectorAll('[data-card-pref]:not([disabled])').length === 3);
+  assert.deepEqual(await page.$$eval('[data-card-pref]', boxes => boxes.map(box => [box.dataset.cardPref, box.checked])), [['pinned', false], ['allSpaces', false], ['snap', true]]);
+  await page.check('[data-card-pref="snap"]').catch(() => {});
+  await page.uncheck('[data-card-pref="snap"]');
+  await page.waitForFunction(() => window.__host.card.snap === false);
   await page.uncheck('#menuBarChoice');
   await page.waitForFunction(() => window.__host.menuBar === false);
   await page.click('#notionRow');
@@ -485,20 +490,24 @@ await check('corner card', {width: 340, height: 420, compact: true}, async ({pag
   await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').done);
   assert.equal(await text(page, '#cardRing .ring-label'), '3/7');
 
-  await page.locator('.card-head').dispatchEvent('mousedown', {button: 0});
-  await page.waitForFunction(() => window.__host.drags === 1);
-  await page.locator('#cardTasks .row').first().dispatchEvent('mousedown', {button: 0});
-  await page.waitForTimeout(100);
-  assert.equal((await host()).drags, 1, 'a press on a task must not move the card');
+  // Report text can be selected: pressing in the page never starts a window drag (F15).
+  const selected = await page.evaluate(() => { const node = document.querySelector('#cardReport .report-reason'); getSelection().selectAllChildren(node); return getSelection().toString(); });
+  assert.ok(selected.length > 5);
+  await page.evaluate(() => getSelection().removeAllRanges());
 
   await page.evaluate(() => { window.__host.menuChoice = 'Move to Tomorrow'; });
   await page.locator('#cardTasks .row', {hasText: 'Prepare Friday'}).click({button: 'right'});
   await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update").planned === d, day(1));
-  assert.ok((await host()).lastMenu.some(item => item.title === 'Keep Above Other Windows' && item.checked));
+  const menu = (await host()).lastMenu;
+  // Window behaviour is explicit, and off by default (F16).
+  assert.deepEqual(['Keep Above Other Windows', 'Show on All Spaces', 'Snap to Screen Corners'].map(title => menu.find(item => item.title === title)?.checked), [false, false, true]);
+  await page.evaluate(() => { window.__host.menuChoice = 'Show on All Spaces'; });
+  await page.locator('.card-head').click({button: 'right'});
+  await page.waitForFunction(() => window.__host.card.allSpaces === true);
 
   await page.hover('#card');
   await page.click('#cardPin');
-  await page.waitForFunction(() => window.__host.pinned === false && document.getElementById('cardPin').getAttribute('aria-pressed') === 'false');
+  await page.waitForFunction(() => window.__host.pinned === true && document.getElementById('cardPin').getAttribute('aria-pressed') === 'true');
 
   // Details open in the full workspace, not inside the small card.
   await page.locator('#cardTasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();

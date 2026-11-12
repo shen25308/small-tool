@@ -78,8 +78,14 @@ function fakeHost(seed) {
     externalProvider: message => message.provider === 'github' ? {connected: false} : {accounts: [], configuredDefault: false, connected: false},
     appearance: message => { if (['system', 'light', 'dark'].includes(message.value)) state.appearance = message.value; return state.appearance || 'system'; },
     cardSize: message => { state.cardHeight = message.height; return true; },
-    cardDrag: () => { state.drags = (state.drags || 0) + 1; return true; },
-    pin: message => { if (typeof message.value === 'boolean') state.pinned = message.value; window.setPinned(state.pinned !== false); return state.pinned !== false; },
+    cardPrefs: message => {
+      state.card = state.card || {snap: true, allSpaces: false, pinned: state.pinned === true, userSized: false};
+      for (const key of ['snap', 'allSpaces', 'pinned']) if (typeof message[key] === 'boolean') state.card[key] = message[key];
+      if (message.fit) state.card.userSized = false;
+      state.pinned = state.card.pinned;
+      return {...state.card};
+    },
+    pin: message => { if (typeof message.value === 'boolean') state.pinned = message.value; window.setPinned(state.pinned === true); return state.pinned === true; },
     nativeMenu: message => { state.lastMenu = message.items; return state.menuChoice ? String(message.items.findIndex(item => item.title === state.menuChoice)) : ''; },
     menuBar: message => { if (typeof message.value === 'boolean') state.menuBar = message.value; return state.menuBar; },
     claudeCode: message => {

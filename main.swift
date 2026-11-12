@@ -64,7 +64,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var compact = false
     private lazy var card = CornerCard()
     private var mainBackdrop: NSVisualEffectView!
-    private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? true
+    // Off unless chosen: a window that floats above everything is a deliberate preference.
+    private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? false
     private let modeButton = NSButton()
     private let pinButton = NSButton()
     private let titleStrip = WindowTitleStrip()
@@ -635,9 +636,13 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             case "cardSize":
                 if let height=body["height"] as? Double, height.isFinite {card.setContentHeight(CGFloat(height))}
                 reply(id,true,true)
-            case "cardDrag":
-                if compact {card.beginDrag()}
-                reply(id,true,true)
+            case "cardPrefs":
+                // Window behaviour of the card is a set of explicit choices.
+                if let snap=body["snap"] as? Bool {card.snapsToCorners=snap}
+                if let spaces=body["allSpaces"] as? Bool {card.allSpaces=spaces}
+                if let onTop=body["pinned"] as? Bool, onTop != pinned {togglePinned()}
+                if body["fit"] as? Bool == true {card.fitHeightToContent()}
+                reply(id,true,["snap":card.snapsToCorners,"allSpaces":card.allSpaces,"pinned":pinned,"userSized":card.userSized])
             case "pin":
                 if let value=body["value"] as? Bool, value != pinned {togglePinned()}
                 reply(id,true,pinned)

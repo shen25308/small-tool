@@ -172,6 +172,11 @@ function showConnectors() {
     '<details class="more-sources"><summary>More sources: Gmail, Outlook and GitHub Actions</summary>'+
     '<p>Mail needs a Google or Microsoft app registration of your own. GitHub Actions works with any public repository.</p>'+
     '<div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div></details>'+
+    '<h3>Corner card</h3><div class="group-box">'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Keep above other windows</b><small>Otherwise the card stays behind the app you are using.</small></span><input type="checkbox" data-card-pref="pinned" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Show on all Spaces</b><small>Otherwise the card stays on the Space where you put it.</small></span><input type="checkbox" data-card-pref="allSpaces" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Snap to screen corners</b><small>Otherwise the card stays exactly where you drop it.</small></span><input type="checkbox" data-card-pref="snap" disabled></label>'+
+    '</div>'+
     '<h3>Shishi</h3><div class="group-box">'+
     '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
       [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
@@ -186,6 +191,10 @@ function showConnectors() {
     }));
   };
   bind($('menuBarChoice'),'menuBar');
+  const cardBoxes=[...document.querySelectorAll('[data-card-pref]')];
+  const showPrefs=value=>cardBoxes.forEach(box=>{box.checked=!!value[box.dataset.cardPref];box.disabled=false});
+  action(native('cardPrefs').then(showPrefs));
+  cardBoxes.forEach(box=>{box.onchange=()=>action(Card.setPrefs({[box.dataset.cardPref]:box.checked}).then(showPrefs).catch(error=>{box.checked=!box.checked;throw error}))});
   const appearance=$('appearanceChoice');
   const showAppearance=value=>appearance.querySelectorAll('[data-appearance]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.appearance===value)));
   action(native('appearance').then(showAppearance));

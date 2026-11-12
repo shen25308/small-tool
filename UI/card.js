@@ -215,14 +215,13 @@ window.Card = (() => {
     if (event.target.closest('#cardMore')) inWorkspace(() => go('today'));
     if (event.target.closest('#cardExpand')) inWorkspace(() => {});
     if (event.target.closest('#cardInbox')) inWorkspace(() => $('inboxButton').click());
-    if (event.target.closest('#cardPin')) action(native('pin', {value: !pinnedNow}).then(value => { pinnedNow = value; render(); }));
+    if (event.target.closest('#cardPin')) action(setPrefs({pinned: !pinnedNow}));
   });
 
-  // Drag the card by any empty part of it. The app moves the window and snaps it to a corner.
-  root.addEventListener('mousedown', event => {
-    if (event.button !== 0 || event.target.closest('button, input, a, .row, .island, [popover], .card-report, .card-welcome')) return;
-    native('cardDrag').catch(() => {});
-  });
+  // Moving and resizing the card happen in the app's own grip and handle (F15), so pressing anywhere
+  // in the page selects text or presses a control as usual.
+  let prefs = {snap: true, allSpaces: false, pinned: false, userSized: false};
+  const setPrefs = (changes = {}) => native('cardPrefs', changes).then(value => { prefs = value; pinnedNow = value.pinned; render(); return value; });
 
   // System menus, because a menu drawn in the page could not extend past the card.
   async function menu(items) {
@@ -242,7 +241,11 @@ window.Card = (() => {
     const task = taskRow && data.tasks.find(item => item.id === taskRow.dataset.id);
     const plan = date => () => action(patchTask(task.id, item => { item.planned = date; }));
     const card = [
-      {label: 'Keep Above Other Windows', checked: pinnedNow, run: () => action(native('pin', {value: !pinnedNow}).then(value => { pinnedNow = value; render(); }))},
+      {label: 'Keep Above Other Windows', checked: prefs.pinned, run: () => action(setPrefs({pinned: !prefs.pinned}))},
+      {label: 'Show on All Spaces', checked: prefs.allSpaces, run: () => action(setPrefs({allSpaces: !prefs.allSpaces}))},
+      {label: 'Snap to Screen Corners', checked: prefs.snap, run: () => action(setPrefs({snap: !prefs.snap}))},
+      prefs.userSized && {label: 'Fit Height to Content', run: () => action(setPrefs({fit: true}))},
+      '-',
       {label: 'Open Full Workspace', run: () => inWorkspace(() => {})},
       {label: 'Open Inbox', run: () => inWorkspace(() => $('inboxButton').click())}
     ];
@@ -279,8 +282,8 @@ window.Card = (() => {
   box.addEventListener('mouseleave', later);
   box.addEventListener('focusout', later);
 
-  window.setPinned = value => { pinnedNow = !!value; render(); };
+  window.setPinned = value => { pinnedNow = !!value; prefs.pinned = pinnedNow; render(); };
   // Agents and results change often. Refresh only the parts they affect, not the task list.
   const refresh = () => { if (compact) { renderReport(); renderWelcome(); } };
-  return {render, report, inWorkspace, refresh};
+  return {render, report, inWorkspace, refresh, setPrefs, prefs: () => prefs};
 })();

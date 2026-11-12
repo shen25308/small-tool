@@ -7,7 +7,9 @@ body.compact #card { display: flex; flex-direction: column; position: fixed; ins
 html:not(.vibrant) body.compact #card { background: var(--card-surface) }
 html.vibrant body.compact #card { background: color-mix(in srgb, var(--paper) 22%, transparent) }
 
-.card-inner { display: flex; flex: 1 1 auto; flex-direction: column; gap: 10px; min-height: 0; max-height: 100vh; padding: 14px 14px 10px }
+.card-inner { display: flex; flex: 1 1 auto; flex-direction: column; gap: 10px; min-height: 0; max-height: 100vh; padding: 22px 14px 10px }
+/* The app's move grip covers the top 24 points. This bar shows where it is. */
+body.compact #card::before { content: ""; position: absolute; top: 8px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--faint); opacity: .7 }
 /* When space is short the report and the task list scroll inside the card; the header and footer stay put (F08). */
 .card-inner > * { flex: none }
 .card-inner > .card-report { flex: 0 1 auto; min-height: 72px; overflow-y: auto; overscroll-behavior: contain }
@@ -129,3 +131,5 @@ html.vibrant .card-welcome { background: color-mix(in srgb, var(--action) 12%, c
 .card-inbox .symbol { width: 15px; height: 15px }
 .card-inbox:has(#cardInboxCount:not(:empty)) { color: var(--action) }
 .card-report.has-source-color { box-shadow: inset 3px 0 0 var(--source-color), inset 0 0 0 .5px color-mix(in srgb, var(--tone) 35%, transparent) }
+/* Report text can be selected and copied; the move grip is separate (F15). */
+.card-report .report-reason, .card-report .report-headline, .card-report .report-points, .card-report .report-asked, .card-report .report-chips code { -webkit-user-select: text; user-select: text; cursor: text }
