@@ -113,6 +113,11 @@ inbox = launch("--workspace", "--open-inbox")
 shot("inbox.png", inbox)
 stop(inbox)
 
+# NSArgumentDomain overrides the appearance for this launch only.
+dark = launch("--workspace", "-AppleInterfaceStyle", "Dark")
+shot("workspace-dark.png", dark)
+stop(dark)
+
 status = subprocess.run([str(python), "-B", str(resources / "ClaudeCode/install.py"), "install", "--json",
                          "--claude-home", str(shots.parent / "claude-home")], capture_output=True, text=True, timeout=60)
 print(status.stdout.strip())

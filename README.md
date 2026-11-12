@@ -4,9 +4,9 @@ Shishi is a task list for people who work alongside AI. A narrow Today list stay
 
 [Download the English macOS preview](https://github.com/shen25308/small-tool/releases/tag/v1.6.0) · [Data and permissions](Release/data-and-permissions.md)
 
-![Shishi workspace showing Today and project lists with sample tasks](Previews/workspace.png)
+![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
-[Floating Today list](Previews/today.png) · [Dark appearance](Previews/workspace-dark.png) · [Connections](Previews/connections.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
+[Floating Today list](Previews/today.png) · [Dark appearance](Previews/workspace-dark.png) · [Inbox](Previews/inbox.png) · [Small result panel](Previews/result-panel.png)
 
 ## Run on a Mac
 
@@ -14,7 +14,7 @@ Version 1.7 requires an Apple Silicon Mac running macOS 26 or later. Download th
 
 If you are upgrading, Shishi keeps the same local workspace, inbox, and connection preferences. If an MCP client or Grok task was configured with the previous app’s absolute path, copy its configuration again after opening Shishi.app.
 
-The design reference for the Today board is [Youniverse’s work task list demo](https://v.douyin.com/qhlq-TKt314/). The English previews above show sample tasks in the running Mac app.
+The design reference for the Today board is [Youniverse’s work task list demo](https://v.douyin.com/qhlq-TKt314/). The previews above are captured from the running Mac app by the build workflow, with sample tasks.
 
 ## Plan your day
 

@@ -323,6 +323,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         caption.textColor = .secondaryLabelColor
         caption.translatesAutoresizingMaskIntoConstraints = false
         caption.setAccessibilityElement(false)
+        // The page shows its own large title, as Reminders and Notes do. The window title stays for Mission Control and accessibility.
+        caption.isHidden = true
         titleStrip.addSubview(caption)
         let strip = NSStackView(views:[modeButton,pinButton])
         strip.orientation = .horizontal
