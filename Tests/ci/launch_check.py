@@ -123,6 +123,12 @@ shot("today.png", today)
 subprocess.run(["screencapture", "-x", str(shots / "desktop.png")], check=False, timeout=30)
 stop(today)
 
+# Once the waiting session ends, the finished one's report, built from its session log, comes forward.
+hook(hook_event_name="SessionEnd", reason="other")
+report = launch("--compact-workspace")
+shot("report.png", report)
+stop(report)
+
 inbox = launch("--workspace", "--open-inbox")
 shot("inbox.png", inbox)
 stop(inbox)

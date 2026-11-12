@@ -32,10 +32,13 @@ window.ResultUI = (() => {
     const isFeed=isMail||isReminder||note.source==='GitHub Actions';
     const preview=!!options.preview;
     const top=element(preview?'span':'div','result-meta');
-    const state=info.status==='attention'?'Needs attention':'Turn finished';
+    // Agent replies carry the same verdict as the card, using the session facts when the status still has them.
+    const agent=window.agentEntries?.().find(entry=>entry.receipt===note.id||entry.notice?.id===note.id);
+    const verdict=window.AgentReport&&!isFeed?AgentReport.brief(note,agent||{}):null;
+    const state=verdict?verdict.label:info.status==='attention'?'Needs attention':'Turn finished';
     // Build titles in stored receipts may still carry an older localized conclusion.
     const failedBuild = /[·•]\s*(?:failure|failed|timed out|timeout|action required|needs attention|startup failure|failed to start|\u5931\u8d25|\u8d85\u65f6|\u9700\u8981\u5904\u7406|\u542f\u52a8\u5931\u8d25)$/i;
-    const needsAttention=isFeed&&!isMail?failedBuild.test(note.title):!isFeed&&info.status==='attention';
+    const needsAttention=isFeed&&!isMail?failedBuild.test(note.title):!isFeed&&(verdict?verdict.verdict!=='done':info.status==='attention');
     top.append(element('span','result-state '+(needsAttention?'attention':isMail?'mail':''),isReminder?'Due':isMail?'New mail':isFeed?'Build result':state));
     top.append(element('span','result-source',sourceName(note)));
     const date=new Date(note.time*1000);
