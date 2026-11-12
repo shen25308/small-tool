@@ -72,22 +72,28 @@
       </header>
       <div id="cardTasks" class="card-tasks"></div>
       <button type="button" id="cardMore" class="card-more" hidden></button>
+      <div class="card-add-area">
       <div class="card-foot">
-        <form id="cardAdd" class="card-add"><span class="card-add-icon"><span class="symbol plus" aria-hidden="true"></span></span><input id="cardAddInput" maxlength="240" autocomplete="off" placeholder="Add a task" aria-label="Add a task for today"></form>
+        <form id="cardAdd" class="card-add"><span class="card-add-icon"><span class="symbol plus" aria-hidden="true"></span></span><input id="cardAddInput" maxlength="240" autocomplete="off" placeholder="Add a task" title="Dates and times can be typed in English or Chinese" aria-label="Add a task for today"></form>
         <button type="button" id="cardInbox" class="card-inbox" title="Inbox" aria-label="Inbox"><span class="symbol inbox" aria-hidden="true"></span><span id="cardInboxCount"></span></button>
         <button type="button" id="cardPin" class="card-tool" aria-pressed="true" aria-label="Keep above other windows"><span class="symbol pin" aria-hidden="true"></span></button>
         <button type="button" id="cardExpand" class="card-tool" title="Open full workspace" aria-label="Open full workspace"><span class="symbol expand" aria-hidden="true"></span></button>
+      </div>
+      <div id="cardAddHint" class="quick-hint card-add-hint" aria-live="polite"></div>
       </div>
     </div>
   </section>
   <div id="boardMenu" popover="auto" aria-label="Workspace options">
     <button id="manual"><span class="symbol plus" aria-hidden="true"></span>New Task<span class="shortcut">⌘N</span></button>
     <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture Tasks from a Message</button>
+    <button id="downloadModelMenu" hidden><span class="symbol i-download" aria-hidden="true"></span>Download Offline Model…</button>
     <div class="menu-divider"></div>
     <button id="peekLatest"><span class="symbol i-bolt" aria-hidden="true"></span>Latest Result</button>
     <button id="openConnectors"><span class="symbol i-link" aria-hidden="true"></span>Connections…</button>
     <div class="menu-divider"></div>
     <button id="exportTasks"><span class="symbol i-copy" aria-hidden="true"></span>Copy Tasks as Markdown</button>
+    <button id="backupExport"><span class="symbol i-download" aria-hidden="true"></span>Back Up to File…</button>
+    <button id="backupImport"><span class="symbol i-upload" aria-hidden="true"></span>Import Backup…</button>
     <button id="pin" aria-label="Switch to compact view">Compact view</button>
   </div>
   <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
@@ -97,6 +103,6 @@
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="task-logic.js"></script><script src="notion-sync.js"></script><script src="motion.js"></script>
-  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="notion-ui.js"></script>
+  <script src="app.js"></script><script src="day-picker.js"></script><script src="backup.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="notion-ui.js"></script>
 </body>
 </html>

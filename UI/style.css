@@ -368,3 +368,23 @@ button.group-row:hover { background: var(--hover) }
 .has-source-color .result-source::before, .card-report.has-source-color .report-head b::before {
   content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--source-color); vertical-align: 1px;
 }
+
+/* Planned days in Details: a button with the summary, and a calendar below it (F11). */
+.planned-field { display: grid; gap: 4px; margin: 10px 0 0; color: var(--secondary); font-size: 11.5px; font-weight: 500 }
+.planned-toggle { justify-content: flex-start; min-height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px }
+.planned-picker { margin-top: 8px; padding: 10px; border-radius: 10px; background: var(--control) }
+.day-picker { display: grid; gap: 8px; font-size: 12.5px }
+.day-picker-head { display: flex; align-items: center; justify-content: space-between }
+.day-picker-head button { width: 26px; height: 26px; border-radius: 50%; font-size: 16px }
+.day-picker-head button:hover { background: var(--hover) }
+.day-picker-mode { padding: 0 }
+.day-picker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center }
+.day-picker-weekday { color: var(--muted); font-size: 11px; font-weight: 600; line-height: 22px }
+.day-picker-grid button { height: 30px; border-radius: 8px; font-variant-numeric: tabular-nums }
+.day-picker-grid button:hover { background: var(--hover) }
+.day-picker-grid button.is-today { color: var(--action); font-weight: 700 }
+.day-picker-grid button[aria-pressed="true"] { background: var(--action); color: #fff; font-weight: 600 }
+.day-picker-grid button[data-anchor] { box-shadow: 0 0 0 2px var(--action) }
+.day-picker-summary { color: var(--secondary); font-weight: 500 }
+.day-picker-chosen { display: flex; flex-wrap: wrap; gap: 4px; align-items: center }
+.import-problems { margin: 8px 0 14px; padding-left: 18px; color: var(--secondary); font-size: 12.5px; line-height: 1.5 }

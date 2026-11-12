@@ -54,7 +54,7 @@ function fakeHost(seed) {
       if (seed.compact) window.setCompact(true);
       push('codex'); push('external');
       window.setAgents(state.agents);
-      window.setCapabilities({capture: !seed.lite});
+      window.setCapabilities({capture: !seed.lite, canDownloadModel: !!seed.lite, downloading: false});
       return true;
     },
     syncInboxes: () => true,
@@ -112,6 +112,18 @@ function fakeHost(seed) {
       throw Error('Unsupported connector action.');
     },
     copy: message => { state.clipboard = message.text; return true; },
+    exportBackup: message => { state.backupFile = message.text; state.backupName = message.name; return '/Users/test/Downloads/' + message.name; },
+    importBackup: () => state.importFile ?? null,
+    downloadModel: message => {
+      if (message.cancel) return true;
+      state.modelRequests = (state.modelRequests || 0) + 1;
+      window.setCapabilities({capture: false, canDownloadModel: true, downloading: true});
+      setTimeout(() => window.modelProgress({state: 'downloading', received: 558660368, total: 1117320736}), 50);
+      setTimeout(() => window.modelProgress({state: 'verifying'}), 250);
+      setTimeout(() => { window.setCapabilities({capture: true, canDownloadModel: false, downloading: false}); window.modelProgress({state: 'installed'}); }, 600);
+      return true;
+    },
+    snapshotWorkspace: () => { state.snapshots = (state.snapshots || 0) + 1; return '/Users/test/Library/Application Support/ShiShiDesk/Backups/Workspace before import.json'; },
     paste: () => state.clipboard,
     dismissAgent: message => { state.agents = state.agents.filter(agent => agent.key !== message.key); window.setAgents(state.agents); return true; },
     compact: message => { window.setCompact(!!message.value); return true; },

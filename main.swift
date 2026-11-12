@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import WebKit
+import UniformTypeIdentifiers
 
 struct Entry: Codable {
     let id, title, project, tag, priority, planned, source, quote: String
@@ -193,7 +194,17 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var storeUnreadable = false
     private let resources = Bundle.main.resourceURL!
     /// The light download leaves out the offline model, and with it task capture from messages.
-    private var hasModel: Bool { FileManager.default.fileExists(atPath:resources.appendingPathComponent("assistant.gguf").path) }
+    private let inference = Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/Inference")
+    /// The bundled model, or one downloaded and verified into Application Support by the light app.
+    private var modelURL: URL? {
+        [resources.appendingPathComponent("assistant.gguf"),ModelDownload.installed].first {FileManager.default.fileExists(atPath:$0.path)}
+    }
+    private var hasEngine: Bool { FileManager.default.isExecutableFile(atPath:inference.appendingPathComponent("llama-completion").path) }
+    private var hasModel: Bool { hasEngine && modelURL != nil }
+    private let modelDownload = ModelDownload()
+    private var capabilities: [String:Any] {
+        ["capture":hasModel,"canDownloadModel":hasEngine && modelURL == nil,"downloading":modelDownload.running]
+    }
 
     override init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -272,12 +283,24 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         if let url = action.request.url, url.isFileURL, url.lastPathComponent=="index.html" { decisionHandler(.allow) }
         else { decisionHandler(.cancel) }
     }
+    /// The About panel names the exact source commit, so a build can be matched to its documentation (F18).
+    @objc private func showAbout() {
+        let info=Bundle.main.infoDictionary ?? [:]
+        let commit=(info["ShishiSourceCommit"] as? String).map {String($0.prefix(12))} ?? "unknown"
+        let dirty=(info["ShishiSourceDirty"] as? Bool) == true ? " (with local changes)" : ""
+        let light=(info["ShishiVariant"] as? String) == "light"
+        let variant=(light ? "Light download" : "Full download")+(hasModel ? ", offline model installed" : ", no offline model")
+        let credits=NSAttributedString(string:"Source commit \(commit)\(dirty)\n\(variant)",
+            attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.secondaryLabelColor])
+        NSApp.activate(ignoringOtherApps:true)
+        NSApp.orderFrontStandardAboutPanel(options:[.credits:credits])
+    }
     private func makeMenu() {
         let bar=NSMenu()
         let appItem=NSMenuItem()
         bar.addItem(appItem)
         let appMenu=NSMenu(title:"Shishi")
-        appMenu.addItem(withTitle:"About Shishi",action:#selector(NSApplication.orderFrontStandardAboutPanel(_:)),keyEquivalent:"")
+        appMenu.addItem(withTitle:"About Shishi",action:#selector(showAbout),keyEquivalent:"")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle:"Hide Shishi",action:#selector(NSApplication.hide(_:)),keyEquivalent:"h")
         appMenu.addItem(.separator())
@@ -463,6 +486,60 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 try bytes.write(to:file,options:.atomic)
                 updateReminders(workspace)
                 reply(id,true,true)
+            case "downloadModel":
+                // Optional, only on request: fetch the pinned model, verify it, then turn on capture.
+                if body["cancel"] as? Bool == true {modelDownload.cancel();reply(id,true,true);break}
+                guard hasEngine else {throw AppIssue("This build has no inference engine, so a model cannot be used.")}
+                guard modelURL == nil else {reply(id,true,true);break}
+                modelDownload.start { [weak self] event in
+                    guard let self else {return}
+                    switch event {
+                    case .progress(let received,let total): self.tell("modelProgress",["state":"downloading","received":received,"total":total])
+                    case .verifying: self.tell("modelProgress",["state":"verifying"])
+                    case .finished: self.tell("setCapabilities",self.capabilities);self.tell("modelProgress",["state":"installed"])
+                    case .failed(let message): self.tell("modelProgress",["state":"failed","message":message]);self.tell("setCapabilities",self.capabilities)
+                    }
+                }
+                tell("setCapabilities",capabilities)
+                reply(id,true,true)
+            case "snapshotWorkspace":
+                // Keep a dated copy of the current workspace before a backup replaces it.
+                guard FileManager.default.fileExists(atPath:file.path) else {reply(id,true,"");break}
+                let folder=file.deletingLastPathComponent().appendingPathComponent("Backups",isDirectory:true)
+                try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+                let stamp=ISO8601DateFormatter.string(from:Date(),timeZone:.current,formatOptions:[.withFullDate,.withTime,.withDashSeparatorInDate]).replacingOccurrences(of:":",with:".")
+                let copy=folder.appendingPathComponent("Workspace before import "+stamp+".json")
+                try? FileManager.default.removeItem(at:copy)
+                try FileManager.default.copyItem(at:file,to:copy)
+                reply(id,true,copy.path)
+            case "exportBackup":
+                guard let text=body["text"] as? String, !text.isEmpty, text.utf8.count <= 20_000_000 else {throw AppIssue("There is nothing to back up.")}
+                let panel=NSSavePanel()
+                panel.title="Back Up Shishi"
+                panel.nameFieldStringValue=(body["name"] as? String) ?? "Shishi Backup.json"
+                panel.allowedContentTypes=[.json]
+                panel.canCreateDirectories=true
+                NSApp.activate(ignoringOtherApps:true)
+                panel.begin { [weak self] answer in
+                    guard answer == .OK, let url=panel.url else {self?.reply(id,true,"");return}
+                    do {try Data(text.utf8).write(to:url,options:.atomic);self?.reply(id,true,url.path)}
+                    catch {self?.reply(id,false,"The backup could not be saved: "+error.localizedDescription)}
+                }
+            case "importBackup":
+                let panel=NSOpenPanel()
+                panel.title="Import a Shishi Backup"
+                panel.allowedContentTypes=[.json]
+                panel.allowsMultipleSelection=false
+                panel.canChooseDirectories=false
+                NSApp.activate(ignoringOtherApps:true)
+                panel.begin { [weak self] answer in
+                    guard answer == .OK, let url=panel.url else {self?.reply(id,true,NSNull());return}
+                    guard let size=try? url.resourceValues(forKeys:[.fileSizeKey]).fileSize, size <= 20_000_000,
+                          let bytes=try? Data(contentsOf:url), let text=String(data:bytes,encoding:.utf8) else {
+                        self?.reply(id,false,"This file could not be read as a Shishi backup.");return
+                    }
+                    self?.reply(id,true,["name":url.lastPathComponent,"text":text])
+                }
             case "ready":
                 ready=true
                 if startsWithToday {
@@ -473,7 +550,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     self?.inboxQueue.async { [weak self] in self?.scanInboxes(force:true) }
                 }
                 tell("setPinned",pinned)
-                tell("setCapabilities",["capture":hasModel])
+                tell("setCapabilities",capabilities)
                 // The page pads its top edge by the title bar height because content runs underneath it.
                 tell("setChrome",["titlebar":Double(max(0,window.frame.height-window.contentLayoutRect.height)),"vibrant":vibrant] as [String:Any])
                 if CommandLine.arguments.contains("--open-inbox") {
@@ -665,14 +742,14 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 reply(id,true,choice.chosen)
             case "compact": setCompact(body["value"] as? Bool == true);reply(id,true,true)
             case "extract":
-                guard hasModel else {throw AppIssue("This light download leaves out the offline model that finds tasks in messages. Download the full version to use it.")}
+                guard hasModel, let model=modelURL else {throw AppIssue("This light download leaves out the offline model that finds tasks in messages. Download it from Connections, or use the full version.")}
                 guard !processing else{throw AppIssue("Shishi is still extracting tasks from the previous message. Try again in a moment.")}
                 guard let text=body["text"] as? String else{throw AppIssue("Enter a message first.")}
                 processing=true
                 let resources=self.resources
-                let runtime=Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/Inference")
+                let runtime=inference
                 DispatchQueue.global(qos:.userInitiated).async {
-                    let result=Result{try Engine.extract(text,resources:resources,runtime:runtime)}
+                    let result=Result{try Engine.extract(text,resources:resources,model:model,runtime:runtime)}
                     DispatchQueue.main.async {
                         self.processing=false
                         switch result {

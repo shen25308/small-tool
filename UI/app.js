@@ -32,9 +32,24 @@ function projectLabel(name) {
   return data.projects.includes('My Work') ? 'My Work (original)' : 'My Work';
 }
 const currentTitle = () => projectOfView() ? projectLabel(projectOfView()) : titles[view];
-// Planned for today, or overdue and still open. An overdue task finished today still counts toward today.
-const isToday = t => t.planned === day() || (!!t.planned && t.planned < day() && (!t.done || (t.completedAt || '').slice(0, 10) === day()));
-const taskDate = t => t.planned || t.dueDate || '';
+// A task can be planned for one day or for several (F11). plannedDates holds the list when there is more than
+// one; planned always holds the next of them (or the last, once all have passed) so older data keeps working.
+const plannedDays = t => t.plannedDates?.length ? t.plannedDates : t.planned ? [t.planned] : [];
+const nextPlanned = (t, today = day()) => { const days = plannedDays(t); return days.find(d => d >= today) || days.at(-1) || ''; };
+function planOn(task, dates) {
+  const days = [...new Set((Array.isArray(dates) ? dates : [dates]).filter(Boolean))].sort();
+  if (days.length > 1) task.plannedDates = days; else delete task.plannedDates;
+  task.planned = days.length > 1 ? nextPlanned(task) : days[0] || '';
+}
+// Planned for today, or overdue and still open. A task with a later planned day is not overdue.
+// An overdue task finished today still counts toward today.
+const isToday = t => {
+  const today = day(), days = plannedDays(t);
+  if (days.includes(today)) return true;
+  if (!days.length || days.some(d => d > today)) return false;
+  return !t.done || (t.completedAt || '').slice(0, 10) === today;
+};
+const taskDate = t => nextPlanned(t) || t.dueDate || '';
 function isOverdue(t) {
   if (t.done || !t.dueDate) return false;
   const now = stampNow();
@@ -133,8 +148,10 @@ function row(t, options = {}) {
   const title = esc(t.title);
   const addToday = !t.done && !isToday(t) && view !== 'done';
   const priority = ['P0', 'P1', 'P2'].includes(t.priority) ? t.priority.toLowerCase() : 'p2';
-  const planned = t.planned && !t.done && t.planned !== day() && !options.hideDate
-    ? '<time class="planned-day' + (t.planned < day() ? ' late' : '') + '" datetime="' + esc(t.planned) + '" title="Scheduled for ' + esc(dayLabel(t.planned)) + '">' + esc(dayLabel(t.planned)) + '</time>' : '';
+  const next = nextPlanned(t), many = plannedDays(t).length > 1;
+  const planned = next && !t.done && (next !== day() || many) && !options.hideDate
+    ? '<time class="planned-day' + (next < day() ? ' late' : '') + '" datetime="' + esc(next) + '" title="Planned: ' + esc(DayPicker.summary(plannedDays(t))) + '">' +
+      esc(many ? DayPicker.summary(plannedDays(t)) : dayLabel(next)) + '</time>' : '';
   return '<article class="row' + (t.done ? ' done' : '') + '" draggable="' + !t.done + '" data-id="' + esc(t.id) + '">' +
     '<button class="check" data-act="toggle" aria-pressed="' + !!t.done + '" aria-label="' + (t.done ? 'Reopen ' : 'Complete ') + title + '"></button>' +
     '<button class="priority ' + priority + '" data-act="priority" aria-haspopup="dialog" aria-label="Priority ' + esc(t.priority || 'P2') + ' for ' + title + '">' + esc(t.priority || 'P2') + '</button>' +
@@ -145,7 +162,12 @@ function row(t, options = {}) {
     '<button class="task-deadline' + (t.dueDate ? ' has-deadline' : ' no-deadline') + (isOverdue(t) ? ' overdue' : '') + '" data-act="deadline" aria-haspopup="dialog" aria-label="Deadline for ' + title + '" title="' + esc(t.dueDate ? 'Due ' + deadlineLabel(t) : 'Set deadline') + '">' +
     symbol('i-clock') + (t.dueDate ? esc(deadlineLabel(t)) : '') + '</button>' +
     (addToday ? '<button class="rowAction" data-act="today" title="Add to Today" aria-label="Add ' + title + ' to Today">Today</button>' : '') +
-    '</span></article>';
+    // Visible on hover and on keyboard focus, so nothing needs a right-click (F17).
+    '<span class="row-actions">' +
+    (t.done ? '' : '<button class="row-icon" data-act="schedule" aria-haspopup="dialog" title="Plan days" aria-label="Plan days for ' + title + '">' + symbol('i-calendar') + '</button>') +
+    '<button class="row-icon" data-act="edit" title="Details" aria-label="Details for ' + title + '">' + symbol('i-note') + '</button>' +
+    '<button class="row-icon" data-act="more" aria-haspopup="menu" title="More" aria-label="More actions for ' + title + '">' + symbol('i-ellipsis') + '</button>' +
+    '</span></span></article>';
 }
 
 function quickAdd(key) {
@@ -153,7 +175,7 @@ function quickAdd(key) {
     return '<button type="button" class="inline-add" data-quick="' + esc(key) + '">' + symbol('plus') + 'New Task</button>';
   }
   return '<form class="quick-add" data-quick-form="' + esc(key) + '"><span class="check" aria-hidden="true"></span>' +
-    '<input aria-label="New task" maxlength="240" autocomplete="off" placeholder="New task — try “Call Sam tomorrow 3pm #Design !p1”">' +
+    '<input aria-label="New task" maxlength="240" autocomplete="off" placeholder="New task — try “Call Sam tomorrow 3pm #Design !p1” or “明天下午3点”" title="Dates and times can be typed in English or Chinese. Type \\# to keep a # as text.">' +
     '<div class="quick-hint" aria-live="polite"></div></form>';
 }
 
@@ -240,6 +262,31 @@ function editDeadline(anchor, task) {
   form.elements.date.focus();
 }
 
+// Plan days from the row: quick choices, or a calendar for several days or a range (F11, F17).
+function editPlanned(anchor, task) {
+  const picker = document.createElement('div');
+  picker.className = 'task-picker plan-picker';
+  picker.setAttribute('aria-label', 'Plan days');
+  const today = day();
+  picker.innerHTML = '<h3>Plan days</h3><div class="quick-dates">' +
+    [['Today', today], ['Tomorrow', addDays(today, 1)], ['Next week', TaskLogic.nextWeekday(today, 1)], ['Not planned', '']].map(([label, value]) =>
+      '<button type="button" data-plan="' + value + '">' + label + '</button>').join('') + '</div>';
+  const save = dates => action(patchTask(task.id, item => planOn(item, dates)));
+  const calendar = DayPicker.create({dates: plannedDays(task), today, onChange: save});
+  picker.append(calendar.node);
+  const done = document.createElement('div');
+  done.className = 'deadline-actions';
+  done.innerHTML = '<button type="button" class="primary" data-plan-done>Done</button>';
+  picker.append(done);
+  picker.addEventListener('click', event => {
+    const quick = event.target.closest('[data-plan]');
+    if (quick) { save(quick.dataset.plan ? [quick.dataset.plan] : []); picker.hidePopover(); }
+    if (event.target.closest('[data-plan-done]')) picker.hidePopover();
+  });
+  placeTaskPicker(picker, anchor);
+  picker.querySelector('[data-plan]').focus();
+}
+
 function showTaskPicker(anchor, task, field) {
   const isTag = field === 'tag', isProject = field === 'project';
   const picker = document.createElement('div');
@@ -302,13 +349,15 @@ function showTaskPicker(anchor, task, field) {
 function upcomingMarkup(tasks) {
   const today = day(), week = addDays(today, 7);
   const open = tasks.filter(t => !t.done && taskDate(t));
+  const days = t => plannedDays(t).length ? plannedDays(t) : t.dueDate ? [t.dueDate] : [];
   const overdue = open.filter(t => taskDate(t) < today || (!t.planned && isOverdue(t) && taskDate(t) === today));
   let html = overdue.length ? dayGroup('Overdue', overdue, {overdue: true}) : '';
   for (let offset = 1; offset <= 7; offset++) {
     const date = addDays(today, offset);
-    html += dayGroup(offset === 1 ? 'Tomorrow' : longDate.format(fromISO(date)), open.filter(t => taskDate(t) === date), {date});
+    // A task planned for several days appears on each of them.
+    html += dayGroup(offset === 1 ? 'Tomorrow' : longDate.format(fromISO(date)), open.filter(t => days(t).includes(date)), {date});
   }
-  const later = open.filter(t => taskDate(t) > week).sort((a, b) => taskDate(a).localeCompare(taskDate(b)));
+  const later = open.filter(t => taskDate(t) > week && !days(t).some(d => d > today && d <= week)).sort((a, b) => taskDate(a).localeCompare(taskDate(b)));
   if (later.length) html += dayGroup('Later', later);
   return html;
 }
@@ -463,9 +512,11 @@ function taskForm(t, context = {}) {
     '<label>Priority<select id="fieldPriority">' + options(['P0', 'P1', 'P2'], t.priority) + '</select></label>' +
     '<label>Tag<input id="fieldTag" maxlength="30" list="tagChoices" value="' + esc(t.tag) + '" placeholder="None"></label></div>' +
     '<datalist id="tagChoices">' + availableTaskTags().map(name => '<option value="' + esc(name) + '">').join('') + '</datalist>' +
-    '<div class="formgrid three"><label>Scheduled<input id="fieldPlanned" type="date" value="' + esc(t.planned) + '"></label>' +
+    '<div class="formgrid three"><div class="planned-field"><span>Planned</span><button type="button" id="plannedToggle" class="secondary planned-toggle" aria-expanded="false" aria-controls="plannedPicker">' +
+      esc(DayPicker.summary(plannedDays(t))) + '</button></div>' +
     '<label>Deadline<input id="fieldDue" type="date" value="' + esc(t.dueDate || '') + '"></label>' +
     '<label>Time<input id="fieldDueTime" type="time" value="' + esc(t.dueTime || '') + '"></label></div>' +
+    '<div id="plannedPicker" class="planned-picker" hidden></div>' +
     '<label>Repeat<select id="fieldRepeat">' + options(repeats, t.repeat || '', value => value ? TaskLogic.repeatLabels[value] : 'Never') + '</select></label>' +
     '<label>Subtasks</label><div class="subtask-list" id="subtaskList"></div>' +
     (t.source ? '<details><summary class="mini-link">Show source message</summary><blockquote>' + esc(t.source) + '</blockquote></details>' : '') +
@@ -495,7 +546,8 @@ function taskForm(t, context = {}) {
     const title = $('fieldTitle').value.trim();
     const date = $('fieldDue').value, time = $('fieldDueTime').value;
     const current = data.tasks.find(x => x.id === t.id) || t;
-    const updated = {...current, title, project: $('fieldProject').value, tag: $('fieldTag').value.trim(), priority: $('fieldPriority').value, planned: $('fieldPlanned').value};
+    const updated = {...current, title, project: $('fieldProject').value, tag: $('fieldTag').value.trim(), priority: $('fieldPriority').value};
+    planOn(updated, plannedDates);
     const set = (key, value) => { if (value && (!Array.isArray(value) || value.length)) updated[key] = value; else delete updated[key]; };
     set('notes', $('fieldNotes').value.trim());
     set('dueDate', date);
@@ -568,6 +620,19 @@ function taskForm(t, context = {}) {
       .then(() => { closeDialog(true); toast('Changes reverted'); }));
   }
   dialogGuard = {close, flush};
+  // Planned days: one, several, or a range, chosen in a calendar that opens below the button (F11).
+  let plannedDates = [...plannedDays(t)];
+  const picker = DayPicker.create({dates: plannedDates, today: day(), onChange: dates => {
+    plannedDates = dates;
+    $('plannedToggle').textContent = DayPicker.summary(dates);
+    changed();
+  }});
+  $('plannedPicker').append(picker.node);
+  $('plannedToggle').onclick = () => {
+    const open = $('plannedPicker').hidden;
+    $('plannedPicker').hidden = !open;
+    $('plannedToggle').setAttribute('aria-expanded', String(open));
+  };
   drawSubtasks(false);
   state(created ? 'Saved' : '');
   $('taskForm').addEventListener('input', changed);
@@ -630,7 +695,7 @@ function toggleTask(id) {
     const today = day(), base = task.planned || task.dueDate || today;
     const nextDay = TaskLogic.nextRepeat(base, task.repeat, today);
     const next = {...structuredClone(task), id: uuid(), done: false, previous: task.id};
-    delete next.completedAt; delete next.notion; delete next.next; delete next.nextSignature;
+    delete next.completedAt; delete next.notion; delete next.next; delete next.nextSignature; delete next.plannedDates;
     if (task.planned || !task.dueDate) next.planned = nextDay;
     if (task.dueDate) next.dueDate = task.planned ? TaskLogic.nextRepeat(task.dueDate, task.repeat, today) : nextDay;
     if (next.subtasks) next.subtasks.forEach(item => { item.done = false; });
@@ -674,9 +739,14 @@ let captureToken = 0;
 function capture(source = '') {
   ++captureToken;
   if (!canCapture) {
-    dialog('Capture Tasks', '<p class="hint">Finding tasks in a message uses an offline model that this light download leaves out. Download the full version of Shishi to use it, or add the task yourself.</p>' +
-      (source ? '<blockquote>' + esc(source) + '</blockquote>' : '') + '<div class="actions"><button type="button" class="secondary" data-close>Close</button><button type="button" class="primary" id="captureManual">Add a Task</button></div>');
+    dialog('Capture Tasks', '<p class="hint">Finding tasks in a message uses an offline model that this light download leaves out. ' +
+      (capabilities.canDownloadModel ? 'You can download it once (1.1 GB). Shishi checks the file against its published checksum before using it, and it stays on this Mac.' : 'Download the full version of Shishi to use it.') + ' Or add the task yourself.</p>' +
+      (source ? '<blockquote>' + esc(source) + '</blockquote>' : '') + '<p id="modelStatus" class="hint" aria-live="polite">' + esc(modelStatusText()) + '</p>' +
+      '<div class="actions"><button type="button" class="secondary" data-close>Close</button>' +
+      (capabilities.canDownloadModel ? '<button type="button" class="secondary" id="downloadModel">' + (capabilities.downloading ? 'Cancel Download' : 'Download Model (1.1 GB)') + '</button>' : '') +
+      '<button type="button" class="primary" id="captureManual">Add a Task</button></div>');
     $('captureManual').onclick = () => manualFromText(source);
+    if ($('downloadModel')) $('downloadModel').onclick = () => action(native('downloadModel', capabilities.downloading ? {cancel: true} : {}));
     return;
   }
   dialog('Capture Tasks', '<p class="hint">Paste a chat or meeting notes. Shishi finds tasks on this Mac. Review each suggestion alongside the original message before adding it.</p><label>Message<textarea id="source" maxlength="2400" rows="5" placeholder="Paste a work message here…">' + esc(source) + '</textarea></label><div class="actions"><button id="demoText" class="mini-link">Try an example</button><span class="spacer"></span><button id="paste" class="secondary">Paste</button><button id="recognize" class="primary">Find Tasks</button></div><div id="candidates" aria-live="polite"></div>');
@@ -734,9 +804,9 @@ function schedule(id, target, before = '') {
     const t = s.tasks[i];
     if (t.done) return;
     if (target === 'today') {
-      t.planned = day();
+      planOn(t, day());
       if (before && before !== id) { s.tasks.splice(i, 1); const j = s.tasks.findIndex(x => x.id === before); s.tasks.splice(j < 0 ? s.tasks.length : j, 0, t); }
-    } else if (target.startsWith('d:')) t.planned = target.slice(2);
+    } else if (target.startsWith('d:')) planOn(t, target.slice(2));
     else if (target.startsWith('p:') && s.projects.includes(target.slice(2))) t.project = target.slice(2);
   });
 }
@@ -753,21 +823,47 @@ function quickDefaults(key) {
   }
   return fields;
 }
-function parseQuick(text) {
-  return TaskLogic.parse(text, {today: day(), projects: data.projects, tags: availableTaskTags()});
+// What the typed text was read as, kinds the person turned back into text, and the chips that show both (F10, F14).
+const ignoredKinds = input => (input.dataset.ignore || '').split(',').filter(Boolean);
+function parseQuick(text, ignore = []) {
+  return TaskLogic.parse(text, {today: day(), projects: data.projects, tags: availableTaskTags(), ignore});
+}
+const timeLabel = time => new Date('2000-01-01T' + time).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+function parseChips(found) {
+  return found.parts.map(part => {
+    const label = {
+      date: () => symbol('i-calendar') + esc(found.planned ? dayLabel(found.planned) : 'Due ' + dayLabel(found.dueDate)),
+      time: () => symbol('i-clock') + esc(timeLabel(found.dueTime)),
+      repeat: () => symbol('i-repeat') + esc(TaskLogic.repeatLabels[found.repeat]),
+      priority: () => esc(found.priority),
+      tag: () => symbol('i-tag') + esc(found.tag),
+      project: () => symbol('i-list') + esc(projectLabel(found.project))
+    }[part.kind]?.();
+    if (!label) return '';
+    return '<span class="chip" data-kind="' + part.kind + '" title="Read from “' + esc(part.text) + '”">' + label +
+      '<button type="button" class="chip-keep" data-keep="' + part.kind + '" aria-label="Keep “' + esc(part.text) + '” as text" title="Keep “' + esc(part.text) + '” as text">' + symbol('close-icon') + '</button></span>';
+  }).join('');
+}
+function showParseHint(input, hint) {
+  if (!hint) return;
+  if (!input.value.trim()) input.dataset.ignore = '';
+  hint.innerHTML = parseChips(parseQuick(input.value, ignoredKinds(input)));
 }
 function showQuickHint(input) {
-  const hint = input.closest('.quick-add')?.querySelector('.quick-hint');
-  if (!hint) return;
-  const found = parseQuick(input.value), chips = [];
-  if (found.planned) chips.push(symbol('i-calendar') + esc(dayLabel(found.planned)));
-  if (found.dueDate) chips.push(symbol('i-clock') + 'Due ' + esc(deadlineLabel(found)));
-  if (found.repeat) chips.push(symbol('i-repeat') + esc(TaskLogic.repeatLabels[found.repeat]));
-  if (found.priority) chips.push(esc(found.priority));
-  if (found.tag) chips.push(symbol('i-tag') + esc(found.tag));
-  if (found.project) chips.push(symbol('i-list') + esc(projectLabel(found.project)));
-  hint.innerHTML = chips.map(chip => '<span class="chip">' + chip + '</span>').join('');
+  showParseHint(input, input.closest('.quick-add')?.querySelector('.quick-hint'));
 }
+// The chip's button turns that piece back into plain text in the title.
+document.addEventListener('mousedown', event => { if (event.target.closest('.chip-keep')) event.preventDefault(); });
+document.addEventListener('click', event => {
+  const keep = event.target.closest('.chip-keep');
+  if (!keep) return;
+  const scope = keep.closest('.quick-add, .card-add-area');
+  const input = scope?.querySelector('input');
+  if (!input) return;
+  input.dataset.ignore = [...new Set([...ignoredKinds(input), keep.dataset.keep])].join(',');
+  showParseHint(input, scope.querySelector('.quick-hint'));
+  input.focus();
+}, true);
 function openQuick(key) {
   quickTarget = key;
   if (key.startsWith('p:')) collapsedProjects.delete(key.slice(2));
@@ -780,12 +876,14 @@ document.addEventListener('submit', event => {
   const form = event.target.closest?.('.quick-add');
   if (!form) return;
   event.preventDefault();
-  const input = form.querySelector('input'), found = parseQuick(input.value);
+  const input = form.querySelector('input'), found = parseQuick(input.value, ignoredKinds(input));
   if (!found.title) return;
   const fields = quickDefaults(form.dataset.quickForm);
   for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat']) if (found[key]) fields[key] = found[key];
   const task = newTask({...fields, title: found.title});
   input.value = '';
+  input.dataset.ignore = '';
+  showQuickHint(input);
   action(change(s => { s.tasks.push(task); }));
 });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && event.target.closest?.('.quick-add')) { event.preventDefault(); event.target.value = ''; closeQuick(); } });
@@ -822,6 +920,8 @@ document.addEventListener('click', e => {
   if (!t) return;
   if (a.dataset.act === 'edit') taskForm(t);
   if (a.dataset.act === 'deadline') editDeadline(a, t);
+  if (a.dataset.act === 'schedule') editPlanned(a, t);
+  if (a.dataset.act === 'more') taskMenu(t, a, a.closest('.row').querySelector('.task-body'));
   if (a.dataset.act === 'tag' || a.dataset.act === 'priority') showTaskPicker(a, t, a.dataset.act);
   if (a.dataset.act === 'toggle') {
     const row = a.closest('.row');
@@ -846,11 +946,32 @@ document.addEventListener('drop', e => {
 document.addEventListener('dragend', () => { dragId = ''; document.querySelectorAll('.over,.dragging').forEach(x => x.classList.remove('over', 'dragging')); });
 $('openCapture').onclick = () => capture();
 // The light download has no offline model, so it cannot find tasks in a message.
-let canCapture = true;
+// It can download the pinned model on request; the host verifies its SHA-256 before turning capture on (F18).
+let canCapture = true, capabilities = {}, modelProgress = null;
+const megabytes = bytes => Math.round(bytes / 1e6).toLocaleString('en-US') + ' MB';
+function modelStatusText() {
+  const p = modelProgress;
+  if (!p) return '';
+  if (p.state === 'downloading') return 'Downloading: ' + megabytes(p.received) + ' of ' + megabytes(p.total) + ' (' + Math.floor(p.received / p.total * 100) + '%)';
+  if (p.state === 'verifying') return 'Checking the file against its published checksum…';
+  if (p.state === 'installed') return 'The offline model is installed.';
+  return p.message || '';
+}
 window.setCapabilities = abilities => {
-  canCapture = abilities?.capture !== false;
+  capabilities = abilities || {};
+  canCapture = capabilities.capture !== false;
   $('openCapture').hidden = !canCapture;
+  $('downloadModelMenu').hidden = canCapture || !capabilities.canDownloadModel;
+  $('downloadModelMenu').lastChild.textContent = capabilities.downloading ? 'Downloading Offline Model…' : 'Download Offline Model…';
+  if ($('downloadModel')) $('downloadModel').textContent = capabilities.downloading ? 'Cancel Download' : 'Download Model (1.1 GB)';
 };
+window.modelProgress = progress => {
+  modelProgress = progress;
+  if ($('modelStatus')) $('modelStatus').textContent = modelStatusText();
+  if (progress.state === 'installed') { toast('Offline model installed. Capture Tasks is ready.'); if ($('captureManual') && !$('recognize')) { closeDialog(true); capture(); } }
+  if (progress.state === 'failed') toast(progress.message);
+};
+$('downloadModelMenu').onclick = () => capture();
 $('newProject').onclick = projectForm;
 function startNewTask() { if (view === 'done') taskForm(); else openQuick('view'); }
 $('manual').onclick = startNewTask;

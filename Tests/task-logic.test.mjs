@@ -8,10 +8,11 @@ const {plan, settle, fromNotionDate, toNotionDate} = globalThis.NotionSync;
 // 2026-11-11 is a Wednesday.
 const context = {today: '2026-11-11', projects: ['AI Task List', 'Personal'], tags: ['Design', 'This week']};
 const q = text => parse(text, context);
+const withoutParts = ({parts, ...rest}) => rest;
 
 test('plain text stays a title', () => {
-  assert.deepEqual(q('  Buy   milk '), {title: 'Buy milk', planned: '', dueDate: '', dueTime: '', priority: '', tag: '', project: '', repeat: ''});
-  assert.equal(q('Email sam@example.com about #1 priority').title, 'Email sam@example.com about #1 priority'.replace(' #1', ''));
+  assert.deepEqual(withoutParts(q('  Buy   milk ')), {title: 'Buy milk', planned: '', dueDate: '', dueTime: '', priority: '', tag: '', project: '', repeat: ''});
+  assert.equal(q('Email sam@example.com about #1 priority').title, 'Email sam@example.com about #1 priority');
 });
 
 test('dates schedule the task', () => {
@@ -46,7 +47,7 @@ test('times and "by" set a deadline', () => {
 
 test('priority, tag, project and repeat', () => {
   const full = q('Write spec tomorrow #design !p1 @ai every week');
-  assert.deepEqual(full, {title: 'Write spec', planned: '2026-11-12', dueDate: '', dueTime: '', priority: 'P1', tag: 'Design', project: 'AI Task List', repeat: 'weekly'});
+  assert.deepEqual(withoutParts(full), {title: 'Write spec', planned: '2026-11-12', dueDate: '', dueTime: '', priority: 'P1', tag: 'Design', project: 'AI Task List', repeat: 'weekly'});
   assert.equal(q('Ship it !!!').priority, 'P0');
   assert.equal(q('Ship it !high').priority, 'P0');
   assert.equal(q('Ship it !low').priority, 'P2');
@@ -133,4 +134,48 @@ test('failed changes are reported and retried', () => {
   assert.deepEqual(outcome, {sent: 0, failed: 'Notion did not accept this change.'});
   assert.equal(tasks[0].notion, undefined);
   assert.equal(plan(tasks, [], options()).changes.length, changes.length);
+});
+
+// F10: ordinary reference numbers stay text; every recognized piece can be turned back into text.
+test('reference numbers, escapes and keep-as-text', () => {
+  const r = q('Review invoice #123 and meeting @10am');
+  assert.deepEqual([r.title, r.tag, r.project, r.parts], ['Review invoice #123 and meeting @10am', '', '', []]);
+  assert.equal(q('Email \\#design team').title, 'Email #design team');
+  assert.equal(q('Email \\#design team').tag, '');
+  assert.equal(q('Ping \\@ai later').title, 'Ping @ai later');
+  const full = parse('Call bank tomorrow 3pm #Design !p1', {...context, ignore: ['date', 'time']});
+  assert.deepEqual([full.title, full.planned, full.dueTime, full.tag, full.priority], ['Call bank tomorrow 3pm', '', '', 'Design', 'P1']);
+  assert.deepEqual(q('Write spec tomorrow #design !p1').parts.map(part => part.kind + ':' + part.text), ['priority:!p1', 'tag:#design', 'date:tomorrow']);
+});
+
+// F14: Chinese dates and times, with the same chips.
+test('Chinese dates and times', () => {
+  const cases = {
+    '明天下午3点给Maya发报告': ['给Maya发报告', '2026-11-12', '2026-11-12', '15:00'],
+    '周五前提交报销': ['提交报销', '', '2026-11-13', ''],
+    '截止周五 提交报销': ['提交报销', '', '2026-11-13', ''],
+    '下周一 开会': ['开会', '2026-11-16', '', ''],
+    '星期三 复盘': ['复盘', '2026-11-18', '', ''],
+    '11月20日 交房租': ['交房租', '2026-11-20', '', ''],
+    '十一月二十号 交房租': ['交房租', '2026-11-20', '', ''],
+    '3月5号 体检': ['体检', '2027-03-05', '', ''],
+    '今晚8点半 健身': ['健身', '2026-11-11', '2026-11-11', '20:30'],
+    '今晚 健身': ['健身', '2026-11-11', '2026-11-11', '20:00'],
+    '上午9:30 晨会': ['晨会', '2026-11-11', '2026-11-11', '09:30'],
+    '明天10点15分 面试': ['面试', '2026-11-12', '2026-11-12', '10:15'],
+    '后天 搬家': ['搬家', '2026-11-13', '', ''],
+    '3天后 跟进客户': ['跟进客户', '2026-11-14', '', ''],
+  };
+  for (const [text, expected] of Object.entries(cases)) {
+    const r = q(text);
+    assert.deepEqual([r.title, r.planned, r.dueDate, r.dueTime], expected, text);
+  }
+  assert.equal(q('每周 写周报').repeat, 'weekly');
+  assert.equal(q('每个工作日 站会').repeat, 'weekdays');
+  assert.deepEqual(q('准备材料 #设计 !p1').tag, '设计');
+  // Mixed English and Chinese.
+  const mixed = q('Send the deck 明天下午2点');
+  assert.deepEqual([mixed.title, mixed.dueTime, mixed.planned], ['Send the deck', '14:00', '2026-11-12']);
+  // A plain 9:30 stays with the English rules, which also remove "at".
+  assert.equal(q('Standup at 9:30').title, 'Standup');
 });

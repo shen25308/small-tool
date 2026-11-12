@@ -37,7 +37,7 @@ enum Engine {
     []<|im_end|>
     """
 
-    static func extract(_ source: String, resources: URL, runtime: URL) throws -> [Suggestion] {
+    static func extract(_ source: String, resources: URL, model: URL, runtime: URL) throws -> [Suggestion] {
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, source.count <= 2400 else {
             throw AppIssue("Enter a message between 1 and 2,400 characters long.")
         }
@@ -72,7 +72,7 @@ enum Engine {
                 setup = "<|im_start|>system\n" + instructions + "\n<|im_end|>\n" + examples
             }
             let prompt = setup + "\n<|im_start|>user\n" + numbered + "\n<|im_end|>\n<|im_start|>assistant\n"
-            let raw = try complete(prompt, resources: resources, runtime: runtime)
+            let raw = try complete(prompt, resources: resources, model: model, runtime: runtime)
             let output = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: #"\s*\[end of text\]$"#, with: "", options: .regularExpression)
             guard let start = output.firstIndex(of: "["), let end = output.lastIndex(of: "]"), start <= end,
                   let entries = try? JSONDecoder().decode([Proposed].self, from: Data(output[start...end].utf8)) else {
@@ -122,10 +122,9 @@ enum Engine {
         return false
     }
 
-    private static func complete(_ prompt: String, resources: URL, runtime: URL) throws -> String {
+    private static func complete(_ prompt: String, resources: URL, model: URL, runtime: URL) throws -> String {
         let process = Process()
         process.executableURL = runtime.appendingPathComponent("llama-completion")
-        let model = resources.appendingPathComponent("assistant.gguf")
         let grammar = resources.appendingPathComponent("tasks.gbnf")
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("shishi-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])

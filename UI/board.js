@@ -105,7 +105,7 @@ function patchTask(id, fn) {
 
 function taskMenu(task, at, anchor) {
   const today = day();
-  const plan = date => () => action(patchTask(task.id, item => { item.planned = date; }));
+  const plan = date => () => action(patchTask(task.id, item => planOn(item, date)));
   showMenu([
     {label: task.done ? 'Mark as Open' : 'Mark as Completed', icon: 'i-check-circle', run: () => action(toggleTask(task.id))},
     {label: 'Edit Details…', icon: 'i-pencil', run: () => taskForm(task)},
@@ -114,6 +114,7 @@ function taskMenu(task, at, anchor) {
     !task.done && {label: 'Today', icon: 'i-sun', run: plan(today)},
     !task.done && {label: 'Tomorrow', icon: 'i-arrow-right', run: plan(addDays(today, 1))},
     !task.done && {label: 'Next Week', icon: 'i-calendar', run: plan(TaskLogic.nextWeekday(today, 1))},
+    !task.done && {label: 'Choose Days…', icon: 'i-calendar', run: () => editPlanned(anchor, task)},
     !task.done && task.planned && {label: 'Remove Date', icon: 'i-xmark', run: plan('')},
     !task.done && '-',
     {heading: 'Priority'},
@@ -235,8 +236,10 @@ function tasksAsMarkdown(tasks = data.tasks) {
     lines.push('## ' + projectLabel(project), '');
     for (const task of rows) {
       const facts = [task.priority !== 'P2' && task.priority, task.tag && '#' + task.tag, task.dueDate && 'due ' + task.dueDate + (task.dueTime ? ' ' + task.dueTime : ''),
-        !task.done && task.planned && 'scheduled ' + task.planned].filter(Boolean);
+        !task.done && plannedDays(task).length && 'planned ' + plannedDays(task).join(', '), task.repeat && TaskLogic.repeatLabels[task.repeat]?.toLowerCase()].filter(Boolean);
       lines.push('- [' + (task.done ? 'x' : ' ') + '] ' + task.title + (facts.length ? ' (' + facts.join(', ') + ')' : ''));
+      // Notes follow as an indented quote, one line each.
+      for (const line of (task.notes || '').split('\n').filter(Boolean)) lines.push('  > ' + line);
       for (const item of task.subtasks || []) lines.push('  - [' + (item.done ? 'x' : ' ') + '] ' + item.title);
     }
     lines.push('');
@@ -248,6 +251,8 @@ function exportTasks() {
   action(native('copy', {text: tasksAsMarkdown()}).then(() => toast('Copied ' + data.tasks.length + ' tasks as Markdown')));
 }
 $('exportTasks').onclick = exportTasks;
+$('backupExport').onclick = () => action(Backup.exportFile());
+$('backupImport').onclick = () => action(Backup.importFile());
 
 // Search and commands
 const palette = $('palette'), paletteInput = $('paletteInput'), paletteList = $('paletteList');
@@ -263,6 +268,8 @@ function paletteCommands() {
     {label: 'Wrap Up Today', icon: 'i-check-circle', run: wrapUp},
     {label: compact ? 'Open Full Workspace' : 'Floating Today List', icon: compact ? 'expand' : 'pin', run: () => $('pin').click()},
     {label: 'Copy Tasks as Markdown', icon: 'i-copy', run: exportTasks},
+    {label: 'Back Up to File', icon: 'i-download', run: () => action(Backup.exportFile())},
+    {label: 'Import Backup', icon: 'i-upload', run: () => action(Backup.importFile())},
     data.notion && {label: 'Sync with Notion', icon: 'i-link', run: () => syncNotion()}
   ].filter(Boolean);
 }
@@ -367,7 +374,7 @@ function wrapUp() {
     '<button type="button" class="secondary" id="copyWrap">Copy Summary</button><span class="spacer"></span><button class="primary" data-close>Done</button></div>');
   if ($('carryOver')) $('carryOver').onclick = () => {
     const ids = new Set(open.map(task => task.id));
-    action(change(state => { state.tasks.forEach(task => { if (ids.has(task.id)) task.planned = addDays(today, 1); }); }).then(() => { closeDialog(); toast('Moved ' + ids.size + (ids.size === 1 ? ' task' : ' tasks') + ' to tomorrow'); }));
+    action(change(state => { state.tasks.forEach(task => { if (ids.has(task.id)) planOn(task, addDays(today, 1)); }); }).then(() => { closeDialog(); toast('Moved ' + ids.size + (ids.size === 1 ? ' task' : ' tasks') + ' to tomorrow'); }));
   };
   $('copyWrap').onclick = () => {
     const list = (title, rows) => '## ' + title + '\n\n' + (rows.map(task => '- ' + task.title).join('\n') || '- None') + '\n';

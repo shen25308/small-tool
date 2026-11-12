@@ -22,6 +22,7 @@ window.Card = (() => {
       '<button class="check" data-act="toggle" aria-pressed="false" aria-label="Complete ' + title + '"></button>' +
       '<button class="task-body" data-card-open title="' + title + '"><span class="title">' + title + '</span></button>' +
       (when.text ? '<span class="card-due' + (when.late ? ' late' : '') + '">' + esc(when.text) + '</span>' : '') +
+      '<button type="button" class="card-row-more" data-card-menu title="More" aria-label="More actions for ' + title + '">' + symbol('i-ellipsis') + '</button>' +
       (task.subtasks?.length ? '<span class="card-sub" title="Subtasks">' + task.subtasks.filter(s => s.done).length + '/' + task.subtasks.length + '</span>' : '') +
       '</article>';
   }
@@ -234,12 +235,21 @@ window.Card = (() => {
     const chosen = await native('nativeMenu', {items: wire});
     runs.get(chosen)?.();
   }
+  // The same system menu opens from right-click and from the row's visible More button (F17).
+  root.addEventListener('click', event => {
+    const more = event.target.closest('[data-card-menu]');
+    if (!more) return;
+    event.stopPropagation();
+    openMenu(more.closest('.row[data-id]'));
+  }, true);
   root.addEventListener('contextmenu', event => {
     event.preventDefault();
     event.stopPropagation();
-    const taskRow = event.target.closest('.row[data-id]');
+    openMenu(event.target.closest('.row[data-id]'));
+  }, true);
+  function openMenu(taskRow) {
     const task = taskRow && data.tasks.find(item => item.id === taskRow.dataset.id);
-    const plan = date => () => action(patchTask(task.id, item => { item.planned = date; }));
+    const plan = date => () => action(patchTask(task.id, item => planOn(item, date)));
     const card = [
       {label: 'Keep Above Other Windows', checked: prefs.pinned, run: () => action(setPrefs({pinned: !prefs.pinned}))},
       {label: 'Show on All Spaces', checked: prefs.allSpaces, run: () => action(setPrefs({allSpaces: !prefs.allSpaces}))},
@@ -261,19 +271,22 @@ window.Card = (() => {
       {label: 'Delete', run: () => action(removeTask(task))},
       '-', ...card
     ] : card));
-  }, true);
+  }
 
   $('cardAdd').addEventListener('submit', event => {
     event.preventDefault();
-    const input = $('cardAddInput'), found = parseQuick(input.value);
+    const input = $('cardAddInput'), found = parseQuick(input.value, ignoredKinds(input));
     if (!found.title) return;
     const fields = {planned: day()};
     for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat']) if (found[key]) fields[key] = found[key];
     input.value = '';
+    input.dataset.ignore = '';
+    showParseHint(input, $('cardAddHint'));
     action(change(state => { state.tasks.push(newTask({...fields, title: found.title})); }).then(() => {
       if (fields.planned !== day()) toast('Added for ' + dayLabel(fields.planned));
     }));
   });
+  $('cardAddInput').addEventListener('input', event => showParseHint(event.target, $('cardAddHint')));
   $('cardAddInput').addEventListener('keydown', event => { if (event.key === 'Escape') { event.target.value = ''; event.target.blur(); } });
 
   const box = $('cardReport');

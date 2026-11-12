@@ -51,7 +51,7 @@ await check('quick add parses natural language', {}, async ({page, tasks, shot})
   await page.click('#tasks [data-quick="view"]');
   const field = page.locator('.quick-add input');
   await field.fill('Call the bank tomorrow 3pm #Finance !p1 every week');
-  assert.deepEqual(await page.locator('.quick-hint .chip').allInnerTexts(), ['Tomorrow', 'Due Tomorrow, 3:00 PM', 'Every week', 'P1', 'Finance']);
+  assert.deepEqual(await page.locator('.quick-hint .chip').allInnerTexts(), ['P1', 'Finance', 'Every week', 'Tomorrow', '3:00 PM']);
   await shot('quick-add');
   await field.press('Enter');
   await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call the bank'));
@@ -73,6 +73,39 @@ await check('quick add parses natural language', {}, async ({page, tasks, shot})
   await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy stamps'));
   const stamps = (await tasks()).find(t => t.title === 'Buy stamps');
   assert.deepEqual([stamps.project, stamps.planned], ['Personal', '']);
+});
+
+// F10, F14: parsing is visible, reversible, leaves reference numbers alone, and reads Chinese dates.
+await check('quick add chips can be kept as text', {scale: 2}, async ({page, tasks, shot}) => {
+  await page.click('#tasks [data-quick="view"]');
+  const field = page.locator('.quick-add input');
+  await field.fill('Review invoice #123 and meeting @10am');
+  assert.equal(await page.locator('.quick-hint .chip').count(), 0);
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Review invoice #123 and meeting @10am'));
+  assert.equal((await tasks()).find(t => t.title.startsWith('Review invoice')).tag, '');
+  await field.fill('Call the bank tomorrow 3pm #Finance');
+  await shot('quick-add-chips');
+  await page.click('.quick-hint .chip[data-kind="date"] .chip-keep');
+  assert.deepEqual(await page.locator('.quick-hint .chip').allInnerTexts(), ['Finance', '3:00 PM']);
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call the bank tomorrow'));
+  const kept = (await tasks()).find(t => t.title === 'Call the bank tomorrow');
+  assert.deepEqual([kept.planned, kept.dueDate, kept.dueTime, kept.tag], [day(0), day(0), '15:00', 'Finance']);
+  await field.fill('Email the \\#design channel');
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Email the #design channel'));
+});
+
+await check('Chinese dates in the card', {width: 340, height: 640, compact: true, scale: 2}, async ({page, tasks, shot}) => {
+  await page.fill('#cardAddInput', '明天下午3点 给Maya发报告');
+  assert.deepEqual(await page.locator('#cardAddHint .chip').allInnerTexts(), ['Tomorrow', '3:00 PM']);
+  await shot('card-chinese-chips');
+  await page.press('#cardAddInput', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === '给Maya发报告'));
+  const task = (await tasks()).find(t => t.title === '给Maya发报告');
+  assert.deepEqual([task.planned, task.dueDate, task.dueTime], [day(1), day(1), '15:00']);
+  assert.equal(await page.locator('#cardAddHint .chip').count(), 0);
 });
 
 // F05: repeating tasks keep their rule, and completing is reversible.
@@ -647,6 +680,24 @@ await check('light download: no task capture', {lite: true}, async ({page}) => {
   await page.waitForSelector('#taskForm');
 });
 
+await check('light download: optional verified model download', {lite: true}, async ({page, host}) => {
+  // Nothing downloads on its own. The menu offers it, and the dialog says what happens.
+  assert.equal((await host()).modelRequests, undefined);
+  await page.click('#boardMore');
+  assert.equal(await page.locator('#downloadModelMenu').isVisible(), true);
+  await page.click('#downloadModelMenu');
+  assert.match(await text(page, '#dialogBody'), /1\.1 GB[\s\S]*checksum/);
+  await page.click('#downloadModel');
+  await page.waitForFunction(() => /Downloading: 559 MB of 1,117 MB \(50%\)|Checking the file/.test(document.querySelector('#modelStatus')?.textContent || ''));
+  // Once installed and verified, Capture Tasks opens in place.
+  await page.waitForSelector('#recognize');
+  assert.equal((await host()).modelRequests, 1);
+  await page.keyboard.press('Escape');
+  await page.click('#boardMore');
+  assert.equal(await page.locator('#openCapture').isVisible(), true);
+  assert.equal(await page.locator('#downloadModelMenu').isVisible(), false);
+});
+
 await check('back to card after jumping to the workspace', {width: 340, height: 600, compact: true}, async ({page}) => {
   await page.locator('#cardTasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
   await page.waitForSelector('#taskForm');
@@ -820,6 +871,127 @@ await check('motion: agent island, completion and progress', {motion: true, scal
   assert.equal(await page.locator('.burst').count() <= 1, true);
   await page.waitForTimeout(900);
   await shot('motion-after-complete');
+});
+
+await check('plan a task on several days and a range', {}, async ({page, tasks, shot}) => {
+  const row = page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await row.hover();
+  await row.locator('[data-act="schedule"]').click();
+  const picker = page.locator('.plan-picker');
+  await picker.waitFor();
+  // Add two separate days, then a three-day range, then remove one day.
+  const pick = date => picker.locator('[data-day="' + date + '"]').click();
+  const settle = () => page.waitForTimeout(150);
+  await pick(day(2)); await settle();
+  let planned = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual(planned.plannedDates, [day(0), day(2)]);
+  assert.equal(planned.planned, day(0));
+  await shot('plan-days');
+  // Ranges that cross a month end show the next month first.
+  const pickAny = async date => {
+    for (let i = 0; i < 3 && !(await picker.locator('[data-day="' + date + '"]').count()); i++) await picker.locator('[data-month="1"]').click();
+    await pick(date); await settle();
+  };
+  await picker.locator('[data-mode="range"]').click();
+  await pickAny(day(5)); await pickAny(day(7));
+  planned = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual(planned.plannedDates, [day(0), day(2), day(5), day(6), day(7)]);
+  await picker.locator('[data-remove="' + day(6) + '"]').click(); await settle();
+  planned = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual(planned.plannedDates, [day(0), day(2), day(5), day(7)]);
+  await picker.locator('[data-plan-done]').click();
+  // Upcoming lists the task under each planned day.
+  await page.click('#nav [data-view="upcoming"]');
+  const groups = await page.locator('.day-group').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('Review the product roadmap')).length);
+  assert.equal(groups, 3, 'shown on day +2, +5 and +7');
+  // Completing it completes the whole task once, not one day at a time.
+  await page.click('#nav [data-view="today"]');
+  await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).locator('[data-act="toggle"]').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
+  assert.equal((await tasks()).filter(t => t.title === 'Review the product roadmap').length, 1);
+});
+
+await check('planned days in details, and not overdue while a day remains', {}, async ({page, tasks}) => {
+  // "Review QA feedback" was planned yesterday. Adding tomorrow keeps it off the overdue list.
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.click('#plannedToggle');
+  assert.equal(await page.getAttribute('#plannedToggle', 'aria-expanded'), 'true');
+  await page.locator('#plannedPicker [data-day="' + day(1) + '"]').click();
+  assert.match(await text(page, '#plannedToggle'), /and/);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').plannedDates?.includes(d), day(1));
+  const task = (await tasks()).find(t => t.title === 'Review QA feedback');
+  assert.deepEqual(task.plannedDates, [day(-1), day(1)]);
+  assert.equal(task.planned, day(1));
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).count(), 0, 'no longer overdue in Today');
+});
+
+await check('row actions without right-click', {}, async ({page}) => {
+  const row = page.locator('#tasks .row', {hasText: 'Organize the review notes'});
+  // Hidden until hover or keyboard focus, then visible and labelled.
+  assert.equal(await row.locator('.row-actions').evaluate(node => getComputedStyle(node).opacity), '0');
+  await row.locator('.task-body').focus();
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(200);
+  assert.equal(await row.locator('.row-actions').evaluate(node => getComputedStyle(node).opacity), '1');
+  assert.deepEqual(await row.locator('.row-icon').evaluateAll(nodes => nodes.map(n => n.getAttribute('title'))), ['Plan days', 'Details', 'More']);
+  await row.locator('[data-act="more"]').click();
+  const labels = await page.locator('.menu button').allInnerTexts();
+  assert.ok(labels.some(label => label.includes('Choose Days')), 'More offers multi-day planning');
+  assert.ok(labels.some(label => label.includes('Edit Details')));
+  await page.keyboard.press('Escape');
+  await row.locator('[data-act="edit"].row-icon').click();
+  await page.locator('#dialog[open]').waitFor();
+  assert.equal(await page.inputValue('#fieldTitle'), 'Organize the review notes');
+});
+
+await check('backup: export, preview, import and undo', {}, async ({page, host, tasks}) => {
+  await page.click('#boardMore');
+  await page.click('#backupExport');
+  await page.waitForFunction(() => window.__host.backupFile);
+  const backup = JSON.parse((await host()).backupFile);
+  assert.equal(backup.format, 'shishi-backup');
+  assert.equal(backup.version, 1);
+  assert.equal(backup.workspace.tasks.length, 18);
+  assert.doesNotMatch(JSON.stringify(backup), /token|secret|password/i);
+  // Change something, then restore the backup on top of it.
+  await page.evaluate(() => window.__host.workspace.tasks.length);
+  await page.locator('#tasks .row', {hasText: 'Organize the review notes'}).locator('[data-act="toggle"]').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Organize the review notes').done);
+  backup.workspace.tasks = backup.workspace.tasks.slice(0, 3);
+  await page.evaluate(text => { window.__host.importFile = {name: 'Shishi Backup.json', text}; }, JSON.stringify(backup));
+  await page.click('#boardMore');
+  await page.click('#backupImport');
+  await page.locator('#confirmImport').waitFor();
+  assert.match(await text(page, '#dialogBody'), /3\s*Tasks[\s\S]*replaces your current 18 tasks/);
+  await page.click('#confirmImport');
+  await page.waitForFunction(() => window.__host.workspace.tasks.length === 3);
+  assert.equal((await host()).snapshots, 1, 'a copy of the current data is saved first');
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.length === 18);
+  assert.equal((await tasks()).find(t => t.title === 'Organize the review notes').done, true, 'undo restores the data from before the import');
+});
+
+await check('backup: invalid files change nothing', {}, async ({page, tasks}) => {
+  const tries = [
+    ['not json', /not valid JSON/],
+    [JSON.stringify({format: 'something-else'}), /not a Shishi backup/],
+    [JSON.stringify({format: 'shishi-backup', version: 9, workspace: {version: 1, projects: ['A'], tasks: []}}), /newer version/],
+    [JSON.stringify({format: 'shishi-backup', version: 1, workspace: {version: 1, projects: ['A'], tasks: [{id: 'x', title: 'T', project: 'B', dueTime: '09:00'}]}}), /list that is not in the backup[\s\S]*time without a valid date/],
+    [JSON.stringify({format: 'shishi-backup', version: 1, workspace: {version: 1, projects: ['A'], tasks: [], notion: {token: 'abc'}}}), /look like credentials/]
+  ];
+  for (const [body, pattern] of tries) {
+    await page.evaluate(text => { window.__host.importFile = {name: 'bad.json', text}; }, body);
+    await page.click('#boardMore');
+    await page.click('#backupImport');
+    await page.locator('#dialog[open] .import-problems').waitFor();
+    assert.match(await text(page, '#dialogBody'), pattern);
+    assert.equal(await page.locator('#confirmImport').count(), 0);
+    await page.click('#dialog [data-close]');
+    await page.locator('#dialog[open]').waitFor({state: 'detached'}).catch(() => {});
+    await page.waitForFunction(() => !document.querySelector('#dialog').open);
+  }
+  assert.equal((await tasks()).length, 18);
 });
 
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {

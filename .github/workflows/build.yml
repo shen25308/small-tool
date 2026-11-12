@@ -51,7 +51,7 @@ jobs:
         run: |
           xcrun swiftc -typecheck -target arm64-apple-macos26.0 \
             main.swift Engine.swift CodexInbox.swift ConnectorInbox.swift \
-            ExternalProviders.swift AgentStatus.swift CornerCard.swift Mail/MailVault.swift
+            ExternalProviders.swift AgentStatus.swift CornerCard.swift ModelDownload.swift Mail/MailVault.swift
           xcrun swiftc -typecheck Tests/ci/windows.swift
       - name: Restore the pinned model and runtimes
         id: inputs
@@ -84,6 +84,10 @@ jobs:
         run: |
           python3 build.py --assets assets/release/Shishi.app --output build/Shishi.app
           /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/Shishi.app/Contents/Info.plist
+          # The bundle must name the commit this run built, so screenshots and notes match the binary.
+          stamped=$(/usr/libexec/PlistBuddy -c 'Print :ShishiSourceCommit' build/Shishi.app/Contents/Info.plist)
+          echo "Built from $stamped"
+          test "$stamped" = "$GITHUB_SHA"
       - name: Build the light app without the offline model
         run: |
           python3 build.py --lite --assets assets/release/Shishi.app --output build-lite/Shishi.app

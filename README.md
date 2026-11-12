@@ -2,7 +2,9 @@
 
 Shishi is a task list for people who work alongside AI. A small card sits in a corner of your screen, like a desktop widget: today's date, a progress ring, the tasks that are left, and a line to add one. Expand it for the full workspace, with smart lists, your own lists and tags in the sidebar. Claude Code, Codex and other agents report to a small Agents list while they work, and their finished replies wait in a quiet inbox, so a result never interrupts you while you type. The interface follows macOS: system fonts and accent color, a translucent sidebar, light and dark appearance, and a menu bar item.
 
-[Download the English macOS preview](https://github.com/shen25308/small-tool/releases/tag/v1.6.0) · [Data and permissions](Release/data-and-permissions.md)
+[Latest published release: 1.6.0](https://github.com/shen25308/small-tool/releases/tag/v1.6.0) · [Data and permissions](Release/data-and-permissions.md) · [1.7 repair notes](Release/ux-repair-1.7.md)
+
+> **Version note.** This branch is Shishi **1.7**, which has not been published as a release yet. The release link above is the last published build (1.6.0) and does not include the 1.7 changes described here. Until 1.7 is released, the 1.7 app comes from the **Build** workflow's artifacts (*Shishi-macOS-arm64* and *Shishi-lite-macOS-arm64*). Each build names its source commit under **Shishi → About Shishi**.
 
 ![Shishi workspace with smart lists, the Today list and two Claude Code sessions in the Agents list](Previews/workspace.png)
 
@@ -10,7 +12,12 @@ Shishi is a task list for people who work alongside AI. A small card sits in a c
 
 ## Run on a Mac
 
-Version 1.7 requires an Apple Silicon Mac running macOS 26 or later. Download the ZIP from the release, extract it, and open **Shishi.app**. The build workflow also produces a light download that leaves out the 1.1 GB offline model; everything works in it except finding tasks in a pasted message. The preview uses local ad-hoc signing and has not been notarized by Apple. The ZIP includes the offline model, inference engine, Python runtime, and third-party notices.
+Shishi needs an Apple Silicon Mac running macOS 26 or later. Extract the ZIP and open **Shishi.app**. There are two downloads:
+
+- **Full** includes the offline model (1.1 GB), the inference engine, the Python runtime and third-party notices.
+- **Light** leaves out only the model. Everything works except finding tasks in a pasted message. To add that later, choose **••• → Download Offline Model…**. Shishi downloads the exact file the full app ships from a pinned revision, checks its SHA-256 before using it, and keeps it in `~/Library/Application Support/ShiShiDesk/Models`. Nothing downloads unless you ask.
+
+Both are previews with local ad-hoc signing. They are not signed with a Developer ID or notarized by Apple, so macOS asks you to confirm the first launch.
 
 If you are upgrading, Shishi keeps the same local workspace, inbox, and connection preferences. If an MCP client or Grok task was configured with the previous app’s absolute path, copy its configuration again after opening Shishi.app.
 
@@ -18,21 +25,24 @@ The design reference for the Today board is [Youniverse’s work task list demo]
 
 ## Plan your day
 
-**The corner card.** Switch to the card from the title bar or with ⌘P. Drag it anywhere and let go: it glides into the nearest corner of that screen and stays on every desktop. It grows and shrinks with what it shows, keeps above other windows unless you turn that off, and never takes focus from your editor until you click into it. Check off a task, type a new one (natural language works here too), or right-click for a menu. Clicking a task, the agent capsule or **+N more** opens the full workspace.
+**The corner card.** Switch to the card from the title bar or with ⌘P. Drag the bar at its top to move it; drag its bottom-right corner to resize it, and it remembers the size. By default it glides into the nearest screen corner when you let go; turn off **Snap to Screen Corners** to leave it where you drop it. **Keep Above Other Windows** and **Show on All Spaces** are off until you turn them on (right-click the card, or **Connections → Corner card**). It never takes focus from your editor until you click into it, and there is only ever one card. Check off a task, type a new one (natural language works here too), or use a row's **•••** button. **Inbox** on the card opens every result, even when no report is showing.
 
 **The workspace.** The sidebar has four smart lists (**Today**, **Upcoming**, **All**, **Completed**), your own lists and your tags. Press ⌘1 to ⌘4 to jump between the smart lists.
 
-- **Add a task by typing.** Choose **New Task** (⌘N) and write naturally: `Send report friday 3pm #Finance !p1 @Work every week`. Shishi recognizes dates (today, tomorrow, friday, next week, in 3 days, Dec 3, 11/20), times, `!p0`–`!p2` priority, `#tag`, `@list` and repeats, and shows what it understood before you press Return. A date schedules the task. A time or the words *by* and *due* set its deadline.
-- **Work through the list.** The round checkbox completes a task. Click a priority, tag or deadline to change it in place. Right-click a task to schedule it, set its priority, move it, duplicate it or delete it (with Undo). Drag a task onto Today, a list or a day in Upcoming.
-- **Details and deadlines.** Open a task for notes, subtasks, a deadline with time, and a repeat rule. Completing a repeating task schedules the next one. A due, unfinished task creates one quiet inbox reminder when Shishi is running or reopens. Scheduling a task for Today and setting its deadline are independent.
+- **Add a task by typing.** Choose **New Task** (⌘N) and write naturally: `Send report friday 3pm #Finance !p1 @Work every week`. Shishi recognizes dates (today, tomorrow, friday, next week, in 3 days, Dec 3, 11/20), times, `!p0`–`!p2` priority, `#tag`, `@list` and repeats, and shows each one as a chip before you press Return. A date schedules the task. A time or the words *by* and *due* set its deadline. If Shishi reads something you meant literally, click the **×** on its chip to keep it as text, or type a backslash first (`\#123`, `\@home`, `\!p1`). A `#` followed only by digits, such as `#123`, always stays in the title.
+- **Input languages.** The quick-add parser understands **English** and **Simplified Chinese**: `明天下午3点 开会`, `周五前交报告`, `下周一`, `11月20日`, `今晚8点半`, `3天后`, `每周`, `每个工作日`. Other languages are kept as plain text. The interface is in English; your tasks, notes and AI replies keep their original language.
+- **Plan several days.** A task can be planned on separate days or a range: use a row's calendar button, **Choose Days…** in its **•••** menu, or **Planned** in Details. Upcoming shows it on each planned day. Completing it completes the whole task. It counts as overdue only after its last planned day passes.
+- **Work through the list.** The round checkbox completes a task. Click a priority, tag or deadline to change it in place. Each row shows **Plan days**, **Details** and **More** buttons on hover or keyboard focus; **More** (or a right-click) schedules, sets priority, moves, duplicates or deletes a task (with Undo). Drag a task onto Today, a list or a day in Upcoming.
+- **Details and deadlines.** Open a task for notes, subtasks, a deadline with time, and a repeat rule. Changes save as you type; closing asks only when something cannot be saved, such as a time without a date. Completing a repeating task schedules the next one, and reopening it removes that next one again if you have not touched it. A due, unfinished task creates one quiet inbox reminder when Shishi is running or reopens. Scheduling a task for Today and setting its deadline are independent.
 - **Upcoming** groups the next seven days, with an Overdue section. **Completed** groups finished tasks by day and can be cleared.
 - **Search and commands (⌘K).** One field finds tasks, lists and tags, jumps to a view, runs commands, or adds the text as a new task.
 - **Focus timer.** Start 15, 25 or 50 minutes on the next task. Completed minutes count toward your wrap-up.
-- **Wrap Up** shows what you finished, what is still open, your streak and a seven-day chart. It can move open tasks to tomorrow and copy a summary. **Copy Tasks as Markdown** in the ••• menu exports every list.
+- **Wrap Up** shows what you finished, what is still open, your streak and a seven-day chart. It can move open tasks to tomorrow and copy a summary. **Copy Tasks as Markdown** in the ••• menu copies every list for sharing.
+- **Back up and restore.** **••• → Back Up to File…** saves a versioned JSON file with every list, task, note, subtask, planned day, deadline, repeat and colour. **Import Backup…** checks the file first and shows what it contains; nothing changes until you choose **Replace My Data**. Shishi saves a copy of your current data in `ShiShiDesk/Backups` before replacing it, and **Undo** puts it back. Backups never contain connector tokens or account secrets; those stay in your Keychain.
 
 ## Read a result
 
-Every finished reply waits in the **Inbox** (toolbar, or the card's right-click menu) until you read it. Cards start as one-line previews: click one, or focus it and press Space, to see the summary Shishi picked from the reply (changes, checks, unresolved work and file names), then **Show reply** for the full text. **Mark All Read** clears the list, and **Add Follow-up Task** turns a result into a task for today. Some replies saved by earlier versions of Shishi contain only the first 4,000 characters. Personal tasks, project names, emails and AI replies keep their original language.
+Every finished reply waits in the **Inbox** (toolbar, or the card's **Inbox** button) until you read it. Cards start as one-line previews: click one, or focus it and press Space, to see the summary Shishi picked from the reply (changes, checks, unresolved work and file names), then **Show reply** for the full text. **Mark Read** applies only to the source you are viewing (**Mark N Claude Code Read**); **Mark All Read** asks first and says how many. Each result can be marked read or unread, or archived to the **Archived** filter, and every bulk change has **Undo**. Results unread for more than 12 hours stay in the list and in the card's count. Each connection can have its own colour (**Connections**, with presets, a custom colour and Reset). **Add Follow-up Task** turns a result into a task for today, and **Add Follow-up Task** turns a result into a task for today. Some replies saved by earlier versions of Shishi contain only the first 4,000 characters. Personal tasks, project names, emails and AI replies keep their original language.
 
 ## Connect a source
 
@@ -51,10 +61,11 @@ Open the inbox and choose **Connections…**, or press ⌘K and search for *Conn
 
 When Claude Code or Codex finishes, the corner card shows a short report so you can decide whether to switch to it now:
 
-- **A verdict.** *No need to check* (it finished, and any checks passed), *Worth a look* (checks failed or something is unresolved), or *Needs you* (it asked a question, stopped early, or is waiting for permission).
+- **A verdict.** *Needs you* (it asked for input, in English or Chinese, stopped early, or is waiting for permission), *Worth a look* (a check failed, the reply says checks pass but none ran, or something is unresolved), or *Completed*, followed by what Shishi knows about checks: *Checks passed* (it saw them run), *Checks reported passing* (only the reply says so), *No checks ran*, or *Checks not verified*. A bare “Turn finished” never reads as verified. Each report quotes the sentence or command it based the verdict on.
+- **It stays put while you read.** A newer result waits behind a *Newer result* button instead of replacing the report under your pointer. **Full reply** opens the original reply in the Inbox in one step, and **Mark Read**, **Archive** and **Undo** work per result.
 - **The essentials.** The main change, up to two supporting lines, the files it touched, whether checks passed, how long it took, and what you asked.
 - **Facts, not just words.** The hook reads the finished turn from Claude Code's own session log: which files Claude actually edited, and which test, build or lint commands it actually ran and whether they passed. If Claude says the tests pass but never ran any, or changed code without running a single check, the report says *Worth a look* and tells you why. Reading the log happens on your Mac and needs nothing from the network.
-- **One click to act.** **Open in Terminal** (or iTerm, VS Code, Cursor, Warp, Ghostty, Zed, the Claude app, or Codex) brings forward the app the session runs in. **Full reply** opens it in the workspace. **Got it** clears the report.
+- **One click to act.** **Open in Terminal** (or iTerm, VS Code, Cursor, Warp, Ghostty, Zed, the Claude app, or Codex) brings forward the app the session runs in. **Got it** clears the report.
 
 On first launch the empty card offers **Connect Claude Code** and **Try a demo**. The demo plays a pretend session in about ten seconds (working, needing you, finished) without touching your files or your inbox.
 
@@ -80,10 +91,12 @@ Install the macOS Swift command-line tools and Python 3. Extract the release ZIP
 python3 build.py --assets /path/to/Shishi.app --output build/Shishi.app
 ```
 
-Add `--lite` to leave out the offline model and its engine.
+Add `--lite` to leave out the offline model. The build stamps the source commit into `Info.plist` (`ShishiSourceCommit`), and CI fails if it does not match the commit it built.
 
 Run the tests with `python3 -m unittest discover -s Tests` and `node --test Tests/*.test.mjs`. `node Tests/ui/check.mjs [folder]` drives the interface in Chromium against a stand-in for the Mac app (it needs Playwright) and saves screenshots. GitHub Actions builds the app on macOS, launches it with sample data and publishes screenshots of the real window.
 
 If you keep the extracted app next to the source folder, `python3 build.py` uses it by default. To inspect a build, run `python3 Release/verify-release.py build/Shishi.app`. The report distinguishes bundle integrity from Developer ID distribution readiness. A publisher can provide mail OAuth client registrations in `Contents/Resources/Mail/provider-config.json` before signing.
+
+Still outside this repository: Developer ID signing and Apple notarization, and the Google and Microsoft OAuth client registrations that Gmail and Outlook need. Without them the mail connectors cannot sign in, and macOS shows a first-launch warning.
 
 [Distribution and notarization guide](Release/distribution.md) · [Historical 1.3.1 release check](Release/checks-1.3.1.json)

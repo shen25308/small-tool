@@ -112,3 +112,13 @@ body.compact #shell { display: none }
 @media (max-width: 380px) {
   .row-trail .planned-day, .row-trail .no-tag, .row-trail .rowAction { display: none }
 }
+.chip .chip-keep { display: inline-grid; place-items: center; width: 14px; height: 14px; margin: 0 -3px 0 1px; padding: 0; border-radius: 50%; color: inherit; opacity: .6 }
+.chip .chip-keep:hover { opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent) }
+.chip .chip-keep .symbol { width: 7px; height: 7px }
+/* Row actions that do not need a right-click (F17). */
+.row-actions { display: inline-flex; gap: 1px; opacity: 0; transition: opacity .15s }
+.row:hover .row-actions, .row:focus-within .row-actions { opacity: 1 }
+.row-icon { display: grid; place-items: center; width: 22px; height: 20px; border-radius: 5px; color: var(--muted) }
+.row-icon:hover, .row-icon:focus-visible { background: var(--pressed); color: var(--ink) }
+.row-icon .symbol { width: 13px; height: 13px }
+.plan-picker { width: 272px; padding: 10px 12px 12px }
