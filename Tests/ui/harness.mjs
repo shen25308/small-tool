@@ -65,6 +65,15 @@ function fakeHost(seed) {
       push(channel);
       return state.notices[channel];
     },
+    noticeState: message => {
+      const channel = message.channel || 'codex';
+      const note = state.notices[channel].find(item => item.id === message.key);
+      if (!note) throw Error('This message no longer exists.');
+      if (typeof message.read === 'boolean') note.read = message.read;
+      if (typeof message.archived === 'boolean') note.archived = message.archived;
+      push(channel);
+      return true;
+    },
     codexConnection: message => { if (typeof message.enabled === 'boolean') state.codex = message.enabled; return state.codex; },
     externalProvider: message => message.provider === 'github' ? {connected: false} : {accounts: [], configuredDefault: false, connected: false},
     appearance: message => { if (['system', 'light', 'dark'].includes(message.value)) state.appearance = message.value; return state.appearance || 'system'; },

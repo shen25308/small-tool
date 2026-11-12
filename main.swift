@@ -485,6 +485,21 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     self.scanInboxes(force:true)
                     DispatchQueue.main.async {self.reply(id,true,true)}
                 }
+            case "noticeState":
+                guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}
+                let channel=body["channel"] as? String ?? "codex"
+                let read=body["read"] as? Bool, archived=body["archived"] as? Bool
+                let codex=inbox, external=externalInbox
+                inboxQueue.async {
+                    do {
+                        let items=channel=="external" ? try ConnectorInbox.wire(external.setState(key,read:read,archived:archived))
+                                                      : try CodexInbox.wire(codex.setState(key,read:read,archived:archived))
+                        DispatchQueue.main.async {
+                            self.tell("setInbox",["channel":channel,"items":items,"error":""])
+                            self.reply(id,true,true)
+                        }
+                    } catch {DispatchQueue.main.async {self.reply(id,false,error.localizedDescription)}}
+                }
             case "readNotice":
                 guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}
                 markNotice(key,channel:body["channel"] as? String ?? "codex",request:id)

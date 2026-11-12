@@ -51,11 +51,14 @@ function native(op, payload = {}) {
 }
 window.hostReply = (id, ok, value) => { const p = pending.get(id); if (!p) return; pending.delete(id); ok ? p.resolve(value) : p.reject(Error(String(value))); };
 let toastTimer;
-function toast(msg, undo) {
+function toast(msg, undo, label = 'Undo') {
+  // Everything outside an open sheet is inert, so the message (and its Undo) goes inside the sheet.
+  const host = $('dialog').open ? $('dialog') : document.body;
+  if ($('toast').parentElement !== host) host.append($('toast'));
   $('toast').textContent = msg;
   if (undo) {
     const button = document.createElement('button');
-    button.className = 'undo'; button.textContent = 'Undo';
+    button.className = 'undo'; button.textContent = label;
     button.onclick = () => { $('toast').classList.remove('toast-show'); undo(); };
     $('toast').append(button);
   }
@@ -405,8 +408,11 @@ function renderBoard() {
 }
 
 let dialogBack = closeDialog;
+// Set by a sheet that autosaves. Closing goes through it so nothing typed is lost.
+let dialogGuard = null;
 function dialog(title, body, navigation = {}) {
   const modal = $('dialog');
+  if (dialogGuard) { dialogGuard.flush(); dialogGuard = null; }
   const backLabel = navigation.label || '';
   dialogBack = navigation.back || closeDialog;
   $('dialogBody').innerHTML = '<div class="dialog-head">' +
@@ -417,7 +423,11 @@ function dialog(title, body, navigation = {}) {
   modal.scrollTop = 0;
   if (!modal.open) modal.showModal();
 }
-function closeDialog() { if ($('dialog').open) $('dialog').close(); }
+function closeDialog(force = false) {
+  if (!force && dialogGuard) return dialogGuard.close();
+  dialogGuard = null;
+  if ($('dialog').open) $('dialog').close();
+}
 $('dialog').addEventListener('cancel', event => { event.preventDefault(); dialogBack(); });
 const options = (list, sel, label = String) => list.map(v => '<option value="' + esc(v) + '" ' + (v === sel ? 'selected' : '') + '>' + esc(label(v)) + '</option>').join('');
 
@@ -431,14 +441,17 @@ function removeTask(task) {
   });
 }
 
+// Details autosave: each edit is saved shortly after typing stops, with the state shown in the sheet.
+// Nothing is saved while the form is invalid; closing then asks how to resolve it.
 function taskForm(t, context = {}) {
-  const isNew = !t;
-  const exists = t && data.tasks.some(x => x.id === t.id);
-  t = t || newTask({project: context.project ?? projectOfView() ?? data.projects[0], planned: context.project ? '' : view === 'today' ? day() : ''});
+  const stored = t && data.tasks.find(x => x.id === t.id);
+  let created = !!stored;
+  const original = stored ? structuredClone(stored) : null;
+  t = stored ? structuredClone(stored) : t ? structuredClone(t) : newTask({project: context.project ?? projectOfView() ?? data.projects[0], planned: context.project ? '' : view === 'today' ? day() : ''});
   let subtasks = structuredClone(t.subtasks || []);
   const repeats = ['', ...Object.keys(TaskLogic.repeatLabels)];
-  dialog(isNew ? 'New Task' : 'Details', '<form id="taskForm">' +
-    '<label class="field-title"><span class="reader-only">Task</span><input id="fieldTitle" required maxlength="240" placeholder="Title" value="' + esc(t.title) + '"></label>' +
+  dialog(created ? 'Details' : 'New Task', '<form id="taskForm" novalidate>' +
+    '<label class="field-title"><span class="reader-only">Task</span><input id="fieldTitle" maxlength="240" placeholder="Title" value="' + esc(t.title) + '"></label>' +
     '<label><span class="reader-only">Notes</span><textarea id="fieldNotes" rows="2" maxlength="4000" placeholder="Notes">' + esc(t.notes || '') + '</textarea></label>' +
     '<div class="formgrid three"><label>List<select id="fieldProject">' + options(data.projects, t.project, projectLabel) + '</select></label>' +
     '<label>Priority<select id="fieldPriority">' + options(['P0', 'P1', 'P2'], t.priority) + '</select></label>' +
@@ -451,8 +464,11 @@ function taskForm(t, context = {}) {
     '<label>Subtasks</label><div class="subtask-list" id="subtaskList"></div>' +
     (t.source ? '<details><summary class="mini-link">Show source message</summary><blockquote>' + esc(t.source) + '</blockquote></details>' : '') +
     (t.notion?.id && !t.notion.gone ? '<div class="notion-line">' + symbol('i-link') + 'Synced with Notion<button type="button" class="mini-link" id="openNotionPage">Open page</button></div>' : '') +
-    '<div class="actions">' + (exists ? '<button type="button" class="mini-link danger-link" id="removeTask">Delete Task</button><span class="spacer"></span>' : '') +
-    '<button type="button" data-close class="secondary">Cancel</button><button class="primary">' + (isNew ? 'Add' : 'Done') + '</button></div></form>');
+    '<div class="close-prompt" id="closePrompt" role="alertdialog" aria-labelledby="closePromptText" hidden></div>' +
+    '<div class="actions"><button type="button" class="mini-link danger-link" id="removeTask">' + (created ? 'Delete Task' : 'Discard') + '</button>' +
+    '<span class="save-state" id="saveState" role="status" aria-live="polite"></span><span class="spacer"></span>' +
+    '<button type="button" class="secondary" id="revertTask" hidden>Revert Changes</button><button class="primary">Done</button></div></form>');
+  const state = (text, kind = '') => { const node = $('saveState'); if (node) { node.textContent = text; node.dataset.kind = kind; } };
   function drawSubtasks(focusLast) {
     const box = $('subtaskList');
     box.innerHTML = subtasks.map((item, index) => '<div class="subtask-row"><input type="checkbox" data-sub-done="' + index + '"' + (item.done ? ' checked' : '') + ' aria-label="Done">' +
@@ -468,7 +484,88 @@ function taskForm(t, context = {}) {
     drawSubtasks(true);
     return true;
   }
+  // What the form says, and why it cannot be saved yet if it cannot.
+  function collect() {
+    const title = $('fieldTitle').value.trim();
+    const date = $('fieldDue').value, time = $('fieldDueTime').value;
+    const current = data.tasks.find(x => x.id === t.id) || t;
+    const updated = {...current, title, project: $('fieldProject').value, tag: $('fieldTag').value.trim(), priority: $('fieldPriority').value, planned: $('fieldPlanned').value};
+    const set = (key, value) => { if (value && (!Array.isArray(value) || value.length)) updated[key] = value; else delete updated[key]; };
+    set('notes', $('fieldNotes').value.trim());
+    set('dueDate', date);
+    set('dueTime', date ? time : '');
+    set('repeat', $('fieldRepeat').value);
+    set('subtasks', subtasks.map(item => ({...item, title: item.title.trim()})).filter(item => item.title));
+    let problem = '';
+    if (time && !date) problem = 'time';
+    else if (!title && created) problem = 'title';
+    $('fieldDueTime').setAttribute('aria-invalid', String(problem === 'time'));
+    $('fieldTitle').setAttribute('aria-invalid', String(problem === 'title'));
+    return {updated, problem, empty: !title && !created};
+  }
+  let timer = 0, queue = Promise.resolve();
+  function changed() {
+    clearTimeout(timer);
+    $('closePrompt').hidden = true;
+    const {problem} = collect();
+    if (problem) { state(problem === 'time' ? 'Not saved: the time needs a deadline date.' : 'Not saved: a task needs a title.', 'error'); return; }
+    state('Editing…');
+    timer = setTimeout(flush, 350);
+  }
+  function flush() {
+    clearTimeout(timer);
+    const {updated, problem, empty} = collect();
+    if (problem || empty) return Promise.resolve(!problem);
+    const before = JSON.stringify(data.tasks.find(x => x.id === updated.id) || null);
+    if (before === JSON.stringify(updated)) { if (created) state('Saved'); return Promise.resolve(true); }
+    state('Saving…');
+    queue = queue.then(() => change(s => { const i = s.tasks.findIndex(x => x.id === updated.id); if (i < 0) s.tasks.push(updated); else s.tasks[i] = updated; }))
+      .then(() => {
+        created = true;
+        state('Saved');
+        if ($('removeTask')) $('removeTask').textContent = original ? 'Delete Task' : 'Discard';
+        if ($('revertTask')) $('revertTask').hidden = !original || JSON.stringify(original) === JSON.stringify(data.tasks.find(x => x.id === updated.id));
+        return true;
+      }, error => { state('Not saved: ' + error.message, 'error'); return false; });
+    return queue;
+  }
+  function prompt(message, choices) {
+    const box = $('closePrompt');
+    box.innerHTML = '<p id="closePromptText">' + esc(message) + '</p><div class="actions">' +
+      choices.map((choice, index) => '<button type="button" class="' + (index === 0 ? 'primary' : 'secondary') + '" data-choice="' + index + '">' + esc(choice.label) + '</button>').join('') + '</div>';
+    box.hidden = false;
+    box.querySelector('button').focus();
+    box.onclick = event => { const button = event.target.closest('[data-choice]'); if (button) choices[Number(button.dataset.choice)].run(); };
+  }
+  async function close() {
+    const {problem} = collect();
+    if (problem === 'time') {
+      prompt('The time ' + $('fieldDueTime').value + ' has no deadline date, so it has not been saved.', [
+        {label: 'Keep Editing', run: () => { $('closePrompt').hidden = true; $('fieldDue').focus(); }},
+        {label: 'Use Today', run: () => { $('fieldDue').value = day(); changed(); close(); }},
+        {label: 'Remove the Time', run: () => { $('fieldDueTime').value = ''; changed(); close(); }}]);
+      return;
+    }
+    if (problem === 'title') {
+      prompt('A task needs a title. Your other changes have not been saved.', [
+        {label: 'Keep Editing', run: () => { $('closePrompt').hidden = true; $('fieldTitle').focus(); }},
+        {label: 'Revert Changes', run: revert}]);
+      return;
+    }
+    if ($('subtaskNew').value.trim()) addSubtask();
+    if (await flush()) closeDialog(true);
+  }
+  function revert() {
+    clearTimeout(timer);
+    dialogGuard = null;
+    action(change(s => { const i = s.tasks.findIndex(x => x.id === original.id); if (i < 0) s.tasks.push(original); else s.tasks[i] = original; })
+      .then(() => { closeDialog(true); toast('Changes reverted'); }));
+  }
+  dialogGuard = {close, flush};
   drawSubtasks(false);
+  state(created ? 'Saved' : '');
+  $('taskForm').addEventListener('input', changed);
+  $('taskForm').addEventListener('change', changed);
   $('subtaskList').addEventListener('input', event => {
     const target = event.target;
     if (target.dataset.subTitle != null) subtasks[Number(target.dataset.subTitle)].title = target.value;
@@ -476,55 +573,83 @@ function taskForm(t, context = {}) {
   });
   $('subtaskList').addEventListener('click', event => {
     const remove = event.target.closest('[data-sub-remove]');
-    if (remove) { subtasks.splice(Number(remove.dataset.subRemove), 1); drawSubtasks(false); }
+    if (remove) { subtasks.splice(Number(remove.dataset.subRemove), 1); drawSubtasks(false); changed(); }
   });
   $('subtaskList').addEventListener('keydown', event => {
-    if (event.key === 'Enter' && event.target.closest('.subtask-row')) { event.preventDefault(); if (event.target.id === 'subtaskNew') addSubtask(); }
+    if (event.key === 'Enter' && event.target.closest('.subtask-row')) { event.preventDefault(); if (event.target.id === 'subtaskNew' && addSubtask()) changed(); }
   });
   $('fieldTitle').focus();
   if ($('openNotionPage')) $('openNotionPage').onclick = () => action(native('openNotion', {page: t.notion.id}));
-  if (exists) $('removeTask').onclick = () => { closeDialog(); action(removeTask(t)); };
-  $('taskForm').onsubmit = async e => {
-    e.preventDefault();
-    const title = $('fieldTitle').value.trim();
-    if (!title) return;
-    if ($('subtaskNew').value.trim()) addSubtask();
-    const updated = {...t, title, project: $('fieldProject').value, tag: $('fieldTag').value.trim(), priority: $('fieldPriority').value, planned: $('fieldPlanned').value};
-    const set = (key, value) => { if (value && (!Array.isArray(value) || value.length)) updated[key] = value; else delete updated[key]; };
-    set('notes', $('fieldNotes').value.trim());
-    set('dueDate', $('fieldDue').value);
-    set('dueTime', $('fieldDue').value ? $('fieldDueTime').value : '');
-    set('repeat', $('fieldRepeat').value);
-    set('subtasks', subtasks.map(item => ({...item, title: item.title.trim()})).filter(item => item.title));
-    try {
-      await change(s => { const i = s.tasks.findIndex(x => x.id === updated.id); if (i < 0) s.tasks.push(updated); else s.tasks[i] = updated; });
-      closeDialog();
-    } catch (err) { toast(err.message); }
+  $('revertTask').onclick = revert;
+  $('removeTask').onclick = () => {
+    clearTimeout(timer);
+    dialogGuard = null;
+    closeDialog(true);
+    // Deleting a saved task can be undone. Discarding a new one that was never saved needs nothing.
+    if (data.tasks.some(x => x.id === t.id)) action(removeTask(original || data.tasks.find(x => x.id === t.id)));
   };
+  $('taskForm').onsubmit = event => { event.preventDefault(); close(); };
 }
 
-// Completing a repeating task schedules its next occurrence as a new task.
+// Repeating tasks form a series. Every occurrence keeps the rule. Completing one creates its successor once;
+// reopening it removes that successor only while it is untouched, otherwise you decide (F05).
+const occurrenceSignature = task => JSON.stringify(['title', 'notes', 'project', 'tag', 'priority', 'planned', 'dueDate', 'dueTime', 'subtasks', 'repeat', 'done']
+  .map(key => task[key] ?? null));
+
 function toggleTask(id) {
-  let repeated = '';
+  let outcome = null;
   return change(s => {
     const index = s.tasks.findIndex(v => v.id === id);
     if (index < 0) return;
     const task = s.tasks[index];
     task.done = !task.done;
-    if (!task.done) { delete task.completedAt; return; }
+    const successor = task.next && s.tasks.find(item => item.id === task.next);
+    if (!task.done) {
+      delete task.completedAt;
+      if (!successor) { delete task.next; delete task.nextSignature; return; }
+      if (occurrenceSignature(successor) === task.nextSignature) {
+        s.tasks = s.tasks.filter(item => item.id !== successor.id);
+        delete task.next; delete task.nextSignature;
+        outcome = {kind: 'removed', date: successor.planned || successor.dueDate};
+      } else {
+        outcome = {kind: 'kept', successor: structuredClone(successor)};
+      }
+      return;
+    }
     task.completedAt = stampNow();
     if (!task.repeat || !TaskLogic.repeatLabels[task.repeat]) return;
+    task.series = task.series || task.id;
+    // Completing again after a reopen reuses the successor that already exists.
+    if (successor) return;
     const today = day(), base = task.planned || task.dueDate || today;
     const nextDay = TaskLogic.nextRepeat(base, task.repeat, today);
-    const next = {...structuredClone(task), id: uuid(), done: false};
-    delete next.completedAt; delete next.notion;
+    const next = {...structuredClone(task), id: uuid(), done: false, previous: task.id};
+    delete next.completedAt; delete next.notion; delete next.next; delete next.nextSignature;
     if (task.planned || !task.dueDate) next.planned = nextDay;
     if (task.dueDate) next.dueDate = task.planned ? TaskLogic.nextRepeat(task.dueDate, task.repeat, today) : nextDay;
     if (next.subtasks) next.subtasks.forEach(item => { item.done = false; });
-    delete task.repeat;
+    task.next = next.id;
+    task.nextSignature = occurrenceSignature(next);
     s.tasks.splice(index + 1, 0, next);
-    repeated = dayLabel(nextDay);
-  }).then(() => { if (repeated) toast('Next one scheduled for ' + repeated); });
+    outcome = {kind: 'created', date: next.planned || next.dueDate};
+  }).then(() => {
+    if (outcome?.kind === 'created') toast('Done. Next one scheduled for ' + dayLabel(outcome.date), () => action(toggleTask(id)));
+    if (outcome?.kind === 'removed') toast('Reopened. The next one for ' + dayLabel(outcome.date) + ' was removed.');
+    if (outcome?.kind === 'kept') {
+      const successor = outcome.successor;
+      const restore = () => action(change(state => {
+        if (!state.tasks.some(item => item.id === successor.id)) state.tasks.push(successor);
+        const original = state.tasks.find(item => item.id === id);
+        if (original) original.next = successor.id;
+      }));
+      const remove = () => action(change(state => {
+        state.tasks = state.tasks.filter(item => item.id !== successor.id);
+        const original = state.tasks.find(item => item.id === id);
+        if (original) { delete original.next; delete original.nextSignature; }
+      }).then(() => toast('Removed the next occurrence', restore)));
+      toast('Reopened. The next one was already changed, so it was kept.', remove, 'Remove It');
+    }
+  });
 }
 
 function projectForm() {
@@ -724,7 +849,7 @@ $('newProject').onclick = projectForm;
 function startNewTask() { if (view === 'done') taskForm(); else openQuick('view'); }
 $('manual').onclick = startNewTask;
 $('pin').onclick = async () => { try { await native('compact', {value: !compact}); } catch (e) { toast(e.message); } };
-$('dialog').addEventListener('close', () => { captureToken++; });
+$('dialog').addEventListener('close', () => { captureToken++; dialogGuard = null; document.body.append($('toast')); });
 window.setCompact = v => {
   compact = v;
   if (v) window.setWorkspaceReturn?.(false);

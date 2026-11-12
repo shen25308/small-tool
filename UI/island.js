@@ -12,7 +12,7 @@ window.Island = (() => {
     return parts.length > 1 ? parts.slice(1).join(' · ') : title;
   };
   const glyph = mode => '<span class="island-glyph glyph-' + mode + '" aria-hidden="true">' +
-    (mode === 'done' ? '<svg viewBox="0 0 16 16"><path d="M3.5 8.4l3 3 6-6.6"/></svg>' : '') + '</span>';
+    (mode === 'done' || mode === 'neutral' ? '<svg viewBox="0 0 16 16"><path d="M3.5 8.4l3 3 6-6.6"/></svg>' : '') + '</span>';
 
   function summary() {
     const waiting = entries.filter(entry => entry.state === 'attention');
@@ -34,7 +34,7 @@ window.Island = (() => {
       const entry = flash.entry;
       const note = entry.notice || allNotices().find(item => item.id === entry.receipt);
       const report = AgentReport.brief(note, entry);
-      const tone = flash.mode === 'attention' || report.verdict === 'blocked' ? 'attention' : report.verdict === 'review' ? 'review' : 'done';
+      const tone = flash.mode === 'attention' || report.tone === 'blocked' ? 'attention' : report.tone;
       return {mode: 'flash flash-' + tone, html: '<div class="island-flash">' + glyph(tone === 'review' ? 'attention' : tone) +
         '<span class="island-copy"><b>' + esc(place(entry)) + '<small>' + esc(report.label) + ' · ' + esc(entry.source || 'Agent') + '</small></b>' +
         '<span>' + esc(report.headline || (flash.mode === 'done' ? 'The result is in your inbox.' : 'Waiting for your answer.')) + '</span></span></div>'};

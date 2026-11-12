@@ -12,7 +12,7 @@ function inboxDate(seconds) {
   return new Intl.DateTimeFormat('en-US',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(seconds*1000));
 }
 function inboxBadge() {
-  const count=allNotices().filter(note=>!note.read).length;
+  const count=allNotices().filter(note=>!note.read&&!note.archived).length;
   $('inboxBadge').textContent=count>99?'99+':String(count);
   $('inboxBadge').hidden=!count;
   $('inboxButton').setAttribute('aria-label','Inbox, '+count+' unread');
@@ -20,6 +20,12 @@ function inboxBadge() {
 let resultLimit=30;
 const cardOptions={
   read:note=>action(readNotice(note)),
+  // Per-result state controls. Each change can be undone from the message that confirms it.
+  state:(note,fields)=>{
+    const current=allNotices().find(item=>item.id===note.id)||note;
+    const label='read' in fields?(fields.read?'Marked read':'Marked unread'):(fields.archived?'Archived':'Moved back to the inbox');
+    setStates([current],fields,label);
+  },
   open:note=>action(note.thread?native('openCodex',{thread:note.thread}):native('openConnectorLink',{key:note.id})),
   // A finished result often leaves something to check. Keep it as a task for today.
   task:note=>{
@@ -28,9 +34,26 @@ const cardOptions={
     action(change(state=>{follow.project=state.projects.includes(follow.project)?follow.project:state.projects[0];state.tasks.push(follow)}).then(()=>toast('Added to Today')));
   }
 };
-function markAllRead() {
-  const unread=allNotices().filter(note=>!note.read);
-  action(unread.reduce((chain,note)=>chain.then(()=>readNotice(note)),Promise.resolve()));
+const ARCHIVED='__archived';
+// The results the inbox currently shows: one source, all sources, or the archive.
+function noticesInView() {
+  const all=allNotices();
+  if(selectedInboxSource===ARCHIVED)return all.filter(note=>note.archived);
+  const live=all.filter(note=>!note.archived);
+  return selectedInboxSource?live.filter(note=>sourceName(note)===selectedInboxSource):live;
+}
+// Change read or archived state for some results, with Undo that restores exactly what each one was (F04).
+function setStates(notes,fields,message) {
+  if(!notes.length)return;
+  const before=notes.map(note=>({note,read:!!note.read,archived:!!note.archived}));
+  action(notes.reduce((chain,note)=>chain.then(()=>setNoticeState(note,fields)),Promise.resolve()).then(()=>{
+    toast(message,()=>action(before.reduce((chain,item)=>chain.then(()=>setNoticeState(item.note,{read:item.read,archived:item.archived})),Promise.resolve())));
+  }));
+}
+const plural=(count,word)=>count+' '+word+(count===1?'':'s');
+function markAllRead(everywhere=false) {
+  const unread=(everywhere?allNotices().filter(note=>!note.archived):noticesInView()).filter(note=>!note.read);
+  setStates(unread,{read:true},'Marked '+plural(unread.length,'result')+' read');
 }
 // Opens the inbox on one result, for example from the Agents list.
 function openNotice(id) {
@@ -45,7 +68,7 @@ function openNotice(id) {
   card.scrollIntoView({block:'start'});
 }
 function latestResult() {
-  const latest=allNotices()[0];
+  const latest=allNotices().find(note=>!note.archived);
   const slot=$('latestCard');
   const old=slot.firstElementChild;
   $('latestResult').hidden=!latest;
@@ -53,34 +76,44 @@ function latestResult() {
   if(old?.dataset.notice===latest.id){old.classList.toggle('unread',!latest.read);return}
   // Preserve an original reply while the user is reading it. The full inbox still receives new cards.
   if(old?.querySelector('[aria-expanded="true"]') && allNotices().some(n=>n.id===old.dataset.notice))return;
-  const options={...cardOptions,preview:true,previewChanged:open=>{
+  const options={...cardOptions,state:null,preview:true,previewChanged:open=>{
     if(!open)latestResult();
   }};
   slot.replaceChildren(ResultUI.card(latest,options));
 }
 function listNotices() {
   if(!$('dialog').open || !$('inboxList')){
-    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link">Mark All Read</button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Connections…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',{});
+    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link"></button><button id="readEverything" class="mini-link"></button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Connections…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',{});
     $('connectors').onclick=showConnectors;
-    $('readAll').onclick=markAllRead;
+    $('readAll').onclick=()=>markAllRead(false);
+    $('readEverything').onclick=()=>markAllRead(true);
     $('olderResults').onclick=()=>{resultLimit+=30;listNotices()};
     $('syncInbox').onclick=()=>action(native('syncInboxes').then(()=>{
       lastManualScan=new Intl.DateTimeFormat('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
       if($('dialog').open && $('inboxList'))listNotices();
     }));
   }
-  const all=allNotices();
-  const sources=[...new Set(all.map(sourceName))];
-  if(!sources.includes(selectedInboxSource))selectedInboxSource='';
-  const filtered=selectedInboxSource?all.filter(n=>sourceName(n)===selectedInboxSource):all;
-  $('inboxCount').textContent=all.filter(n=>!n.read).length+' unread'+(lastManualScan?' · Synced at '+lastManualScan:'');
-  $('readAll').hidden=!all.some(n=>!n.read);
+  const all=allNotices(), live=all.filter(note=>!note.archived), archivedCount=all.length-live.length;
+  const sources=[...new Set(live.map(sourceName))];
+  if(selectedInboxSource!==ARCHIVED&&!sources.includes(selectedInboxSource))selectedInboxSource='';
+  if(selectedInboxSource===ARCHIVED&&!archivedCount)selectedInboxSource='';
+  const filtered=noticesInView();
+  const unreadHere=filtered.filter(n=>!n.read).length, unreadAll=live.filter(n=>!n.read).length;
+  $('inboxCount').textContent=unreadAll+' unread'+(lastManualScan?' · Synced at '+lastManualScan:'');
+  // Bulk read follows the visible filter and says how many it changes. All sources is a separate action.
+  $('readAll').textContent=selectedInboxSource&&selectedInboxSource!==ARCHIVED?'Mark '+unreadHere+' '+selectedInboxSource+' Read':'Mark '+unreadHere+' Read';
+  $('readAll').hidden=!unreadHere||selectedInboxSource===ARCHIVED;
+  $('readEverything').textContent='Mark All '+unreadAll+' Read';
+  $('readEverything').hidden=!selectedInboxSource||selectedInboxSource===ARCHIVED||unreadAll===unreadHere;
   const filters=$('sourceFilters');
-  const filterKey=JSON.stringify([sources,selectedInboxSource]);
+  const filterKey=JSON.stringify([sources,selectedInboxSource,archivedCount]);
   if(filters.dataset.key!==filterKey){
     filters.dataset.key=filterKey;
-    filters.innerHTML=sources.length>1?['',...sources].map(name=>'<button data-source="'+esc(name)+'" class="'+(selectedInboxSource===name?'active':'')+'">'+esc(name||'All sources')+'</button>').join(''):'';
-    filters.hidden=sources.length<2;
+    const names=sources.length>1?['',...sources]:[];
+    if(archivedCount)names.push(ARCHIVED);
+    if(names.length&&!names.includes(''))names.unshift('');
+    filters.innerHTML=names.map(name=>'<button data-source="'+esc(name)+'" class="'+(selectedInboxSource===name?'active':'')+'">'+esc(name===ARCHIVED?'Archived ('+archivedCount+')':name||'All sources')+'</button>').join('');
+    filters.hidden=!names.length;
   }
   const warnings=$('inboxWarnings');
   warnings.textContent=[...inboxErrors.values()].filter(Boolean).join(' · ');
@@ -93,12 +126,13 @@ function listNotices() {
   for(const note of visible){
     const node=existing.get(note.id)||ResultUI.card(note,{...cardOptions,preview:true});
     node.classList.toggle('unread',!note.read);
+    ResultUI.syncState(node,note);
     if(node!==insertion)list.insertBefore(node,insertion);
     insertion=node.nextElementSibling;
     existing.delete(note.id);
   }
   for(const node of existing.values())node.remove();
-  if(!visible.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='No results yet.';list.append(empty)}
+  if(!visible.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=selectedInboxSource===ARCHIVED?'Nothing archived.':'No results yet.';list.append(empty)}
   $('olderResults').hidden=filtered.length<=resultLimit;
   if(scrolled&&before?.isConnected)$('dialog').scrollTop+=before.getBoundingClientRect().top-oldY;
 }
@@ -193,7 +227,7 @@ function showConnectors() {
 }
 // "Back to card" appears when the card sent you here, and takes you back to it.
 window.setWorkspaceReturn=visible=>{$('workspaceReturn').hidden=!visible};
-$('workspaceReturn').onclick=()=>{closeDialog();action(native('compact',{value:true}))};
+$('workspaceReturn').onclick=()=>Promise.resolve(closeDialog()).then(()=>{if(!$('dialog').open)action(native('compact',{value:true}))});
 window.openInbox=()=>listNotices();
 window.setInbox=state=>{
   const channel=state.channel||'codex';

@@ -54,15 +54,23 @@ window.Demo = (() => {
     if (!rows.length && !timers.length) at(2600, () => { renderAgents(); toast('That is the whole idea. Connect Claude Code to see your own sessions here.'); });
     return Promise.resolve([...notes.values()]);
   }
+  function setState(id, fields) {
+    const note = notes.get(id);
+    if (note) notes.set(id, {...note, ...fields});
+    if (fields.read || fields.archived) rows = rows.filter(row => row.receipt !== id);
+    publish();
+    return Promise.resolve(true);
+  }
   function dismiss(key) {
     rows = rows.filter(row => row.key !== key);
     publish();
     return Promise.resolve(true);
   }
 
-  return {start, stop, read, dismiss, rows: () => rows, running: () => rows.length > 0};
+  return {start, stop, read, dismiss, setState, rows: () => rows, running: () => rows.length > 0};
 })();
 
 // One place to mark a result read, whether it came from the app or from the demo.
 window.readNotice = note => note.channel === 'demo' ? Demo.read(note.id) : native('readNotice', {key: note.id, channel: note.channel});
+window.setNoticeState = (note, fields) => note.channel === 'demo' ? Demo.setState(note.id, fields) : native('noticeState', {key: note.id, channel: note.channel, ...fields});
 window.dismissAgentEntry = entry => entry.demo ? Demo.dismiss(entry.key) : entry.notice ? readNotice(entry.notice) : native('dismissAgent', {key: entry.key});

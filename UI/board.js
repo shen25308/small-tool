@@ -124,7 +124,7 @@ function taskMenu(task, at, anchor) {
     {label: 'Duplicate', icon: 'i-duplicate', run: () => action(change(state => {
       const index = state.tasks.findIndex(item => item.id === task.id);
       const copy = {...structuredClone(task), id: uuid(), done: false};
-      delete copy.completedAt; delete copy.notion;
+      delete copy.completedAt; delete copy.notion; delete copy.next; delete copy.nextSignature; delete copy.previous; delete copy.series;
       state.tasks.splice(index + 1, 0, copy);
     }))},
     {label: 'Copy Title', icon: 'i-copy', run: () => action(native('copy', {text: task.title}).then(() => toast('Copied')))},

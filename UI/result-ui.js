@@ -38,7 +38,7 @@ window.ResultUI = (() => {
     const state=verdict?verdict.label:info.status==='attention'?'Needs attention':'Turn finished';
     // Build titles in stored receipts may still carry an older localized conclusion.
     const failedBuild = /[·•]\s*(?:failure|failed|timed out|timeout|action required|needs attention|startup failure|failed to start|\u5931\u8d25|\u8d85\u65f6|\u9700\u8981\u5904\u7406|\u542f\u52a8\u5931\u8d25)$/i;
-    const needsAttention=isFeed&&!isMail?failedBuild.test(note.title):!isFeed&&(verdict?verdict.verdict!=='done':info.status==='attention');
+    const needsAttention=isFeed&&!isMail?failedBuild.test(note.title):!isFeed&&(verdict?verdict.action!=='none':info.status==='attention');
     top.append(element('span','result-state '+(needsAttention?'attention':isMail?'mail':''),isReminder?'Due':isMail?'New mail':isFeed?'Build result':state));
     top.append(element('span','result-source',sourceName(note)));
     const date=new Date(note.time*1000);
@@ -104,7 +104,16 @@ window.ResultUI = (() => {
       options.expanded?.(value);
     }
     button.onclick=()=>expand(original.hidden);
-    foot.append(button);details.append(foot,original);
+    foot.append(button);
+    if(options.state){
+      const readButton=element('button','mini-link result-read');readButton.type='button';readButton.dataset.stateRead='';
+      const archiveButton=element('button','mini-link result-archive');archiveButton.type='button';archiveButton.dataset.stateArchive='';
+      readButton.onclick=()=>options.state(note,{read:readButton.dataset.next==='read'});
+      archiveButton.onclick=()=>options.state(note,{archived:archiveButton.dataset.next==='archive'});
+      foot.prepend(readButton,archiveButton);
+      syncState(article,note);
+    }
+    details.append(foot,original);
     if(trigger) {
       trigger.onclick=()=>{
         const opening=details.hidden;
@@ -118,8 +127,14 @@ window.ResultUI = (() => {
     if(options.edge){button.id='edgeExpand';original.id='edgeOriginal'}
     return article;
   }
+  // Keep the state buttons of a reused card in step with the stored result.
+  function syncState(article,note) {
+    const read=article.querySelector('[data-state-read]'), archive=article.querySelector('[data-state-archive]');
+    if(read){read.dataset.next=note.read?'unread':'read';read.textContent=note.read?'Mark Unread':'Mark Read'}
+    if(archive){archive.dataset.next=note.archived?'restore':'archive';archive.textContent=note.archived?'Move to Inbox':'Archive'}
+  }
   function retain(ids) {
     for(const id of cache.keys())if(!ids.has(id))cache.delete(id);
   }
-  return {card,digest,retain,sourceName};
+  return {card,digest,retain,sourceName,syncState};
 })();

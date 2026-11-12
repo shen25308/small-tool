@@ -75,51 +75,116 @@ await check('quick add parses natural language', {}, async ({page, tasks, shot})
   assert.deepEqual([stamps.project, stamps.planned], ['Personal', '']);
 });
 
-await check('completing a repeating task schedules the next one', {}, async ({page, tasks}) => {
-  await page.locator('#tasks .row', {hasText: "Prepare Friday's update"}).locator('.check').click();
+// F05: repeating tasks keep their rule, and completing is reversible.
+await check('repeating tasks: complete, undo, reopen, edited successor', {}, async ({page, tasks}) => {
+  const series = async () => (await tasks()).filter(t => t.title === "Prepare Friday's update");
+  const complete = () => page.locator('#tasks .row:not(.done)', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  const reopen = () => page.locator('#tasks .row.done', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  await complete();
   await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
-  const [finished, next] = (await tasks()).filter(t => t.title === "Prepare Friday's update");
-  assert.equal(finished.done, true);
-  assert.match(finished.completedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d$/);
-  assert.equal(finished.repeat, undefined);
-  assert.deepEqual([next.done, next.repeat, next.planned, next.completedAt], [false, 'weekly', day(7), undefined]);
-  assert.notEqual(next.id, finished.id);
-  assert.match(await text(page, '#toast'), /Next one scheduled/);
-  // Reopening the finished one must not create another copy.
-  await page.locator('#tasks .row.done', {hasText: "Prepare Friday's update"}).locator('.check').click();
-  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update" && !t.done).length === 2);
-  assert.equal((await tasks()).filter(t => t.title === "Prepare Friday's update").length, 2);
+  let [first, next] = await series();
+  assert.deepEqual([first.done, first.repeat, first.next, next.done, next.repeat, next.planned, next.previous],
+                   [true, 'weekly', next.id, false, 'weekly', day(7), first.id], 'both keep the rule and are linked');
+  assert.match(first.completedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d$/);
+  assert.equal(first.series, first.id);
+  assert.equal(next.series, first.id);
+  // Undo from the message reopens it and removes the untouched successor.
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+  [first] = await series();
+  assert.deepEqual([first.done, first.repeat, first.next], [false, 'weekly', undefined]);
+  // Completing twice in a row creates one successor, not two.
+  await complete();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  await reopen();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+  await complete();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  // Edit the successor, then reopen the original: the edit is kept, and removing it is an explicit choice.
+  await page.evaluate(() => { const next = window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update" && !t.done); next.notes = 'Include the metrics'; data = structuredClone(window.__host.workspace); render(); });
+  await reopen();
+  await page.waitForFunction(() => /already changed, so it was kept/.test(document.getElementById('toast').textContent));
+  assert.equal((await series()).length, 2);
+  assert.equal(await text(page, '#toast .undo'), 'Remove It');
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  assert.equal((await series()).find(t => !t.done && t.notes)?.notes, 'Include the metrics');
 });
 
-await check('task details: notes, subtasks, deadline, repeat', {}, async ({page, tasks, shot}) => {
-  await page.locator('#tasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
-  await page.waitForSelector('#taskForm');
-  assert.equal(await page.inputValue('#fieldTitle'), 'Organize the review notes');
-  assert.equal(await page.locator('#subtaskList [data-sub-title]').count(), 3);
-  await shot('task-details');
-  await page.fill('#fieldNotes', 'Ask Maya first');
-  await page.fill('#subtaskNew', 'Send the summary');
-  await page.press('#subtaskNew', 'Enter');
-  await page.locator('[data-sub-remove="0"]').click();
-  await page.locator('[data-sub-done="0"]').check();
-  await page.fill('#fieldDue', day(3));
-  await page.fill('#fieldDueTime', '09:30');
-  await page.selectOption('#fieldRepeat', 'monthly');
-  await page.click('#taskForm .primary');
+// F02: what you type in Details is never lost by closing, Escape or relaunching.
+await check('details autosave survives close, escape and relaunch', {}, async ({page, host, tasks, shot}) => {
+  const open = title => page.locator('#tasks .row', {hasText: title}).locator('.task-body').click();
+  await open('Review the product roadmap');
+  await page.fill('#fieldNotes', 'Ask Maya about Q3');
+  await page.waitForFunction(() => document.getElementById('saveState').textContent === 'Saved' && window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').notes === 'Ask Maya about Q3');
+  await shot('details-saved');
+  await page.click('#dialog .dialog-head [data-close]');
+  await open('Review the product roadmap');
+  assert.equal(await page.inputValue('#fieldNotes'), 'Ask Maya about Q3');
+  // Escape right after typing still saves: closing waits for the pending save.
+  await page.fill('#fieldNotes', 'Ask Maya about Q3 and Q4');
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('dialog').open);
-  const saved = (await tasks()).find(t => t.title === 'Organize the review notes');
-  assert.deepEqual([saved.notes, saved.dueDate, saved.dueTime, saved.repeat], ['Ask Maya first', day(3), '09:30', 'monthly']);
-  assert.deepEqual(saved.subtasks.map(s => [s.title, s.done]), [['Group by theme', true], ['Share with Maya', false], ['Send the summary', false]]);
-  assert.match(await text(page, '#tasks .row:has-text("Organize the review notes") .row-meta'), /1\/3[\s\S]*Every month[\s\S]*Ask Maya first/);
-  // Clearing optional fields removes them from the saved task.
-  await page.locator('#tasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
-  await page.fill('#fieldNotes', '');
-  await page.fill('#fieldDue', '');
-  await page.selectOption('#fieldRepeat', '');
-  await page.click('#taskForm .primary');
+  assert.equal((await tasks()).find(t => t.title === 'Review the product roadmap').notes, 'Ask Maya about Q3 and Q4');
+  // Revert is explicit and restores the task as it was when Details opened.
+  await open('Review the product roadmap');
+  await page.fill('#fieldNotes', 'Scratch that');
+  await page.waitForSelector('#revertTask:not([hidden])');
+  await page.click('#revertTask');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').notes === 'Ask Maya about Q3 and Q4');
+  // A new task exists once it has a title; Discard removes it on purpose.
+  await page.keyboard.press('Meta+k'); await page.fill('#paletteInput', 'New Task'); await page.keyboard.press('Escape');
+  await page.evaluate(() => taskForm());
+  await page.fill('#fieldTitle', 'Draft the launch email');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Draft the launch email'));
+  await page.click('#removeTask');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === 'Draft the launch email'));
+  // Closing an untitled new task creates nothing.
+  await page.evaluate(() => taskForm());
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('dialog').open);
-  const cleared = (await tasks()).find(t => t.title === 'Organize the review notes');
-  assert.deepEqual(['notes', 'dueDate', 'dueTime', 'repeat'].filter(key => key in cleared), []);
+  assert.equal((await tasks()).some(t => !t.title), false);
+});
+
+await check('details survive a relaunch', {}, async ({page, host}) => {
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.fill('#fieldNotes', 'Check the iPad layout');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').notes === 'Check the iPad layout');
+  // Start the page again from exactly what the app was asked to store.
+  const again = await open(browser, {workspace: (await host()).workspace});
+  try {
+    await again.page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+    assert.equal(await again.page.inputValue('#fieldNotes'), 'Check the iPad layout');
+  } finally { await again.context.close(); }
+});
+
+// F07: a time with no date is never dropped silently.
+await check('time without a deadline date asks before closing', {}, async ({page, tasks, shot}) => {
+  await page.locator('#tasks .row', {hasText: 'Prepare Friday'}).locator('.task-body').click();
+  await page.fill('#fieldDueTime', '15:30');
+  assert.match(await text(page, '#saveState'), /Not saved: the time needs a deadline date/);
+  assert.equal(await page.getAttribute('#fieldDueTime', 'aria-invalid'), 'true');
+  await page.click('#taskForm .primary');
+  await page.waitForSelector('#closePrompt:not([hidden])');
+  assert.match(await text(page, '#closePrompt'), /15:30 has no deadline date/);
+  await shot('time-needs-date');
+  await page.click('#closePrompt [data-choice="0"]');
+  assert.equal(await page.evaluate(() => document.getElementById('dialog').open), true, 'Keep Editing keeps the sheet open');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#closePrompt:not([hidden])');
+  await page.click('#closePrompt [data-choice="1"]');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  const task = (await tasks()).find(t => t.title === "Prepare Friday's update");
+  assert.deepEqual([task.dueDate, task.dueTime], [day(0), '15:30']);
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.fill('#fieldDueTime', '09:00');
+  await page.click('#taskForm .primary');
+  await page.click('#closePrompt [data-choice="2"]');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  const other = (await tasks()).find(t => t.title === 'Review QA feedback');
+  assert.deepEqual([other.dueDate, other.dueTime], [undefined, undefined]);
 });
 
 await check('upcoming and completed views', {}, async ({page, tasks, shot}) => {
@@ -262,6 +327,41 @@ await check('agents list and inbox', {}, async ({page, host, shot}) => {
   await page.locator('.menu-item', {hasText: 'Dismiss'}).click();
   await page.waitForFunction(() => window.__host.agents.length === 1);
   assert.equal((await host()).agents[0].state, 'attention');
+});
+
+// F04: bulk read follows the visible filter, every change can be undone, and archiving keeps the reply.
+await check('inbox read state is scoped and reversible', {}, async ({page, host, shot}) => {
+  await page.click('#inboxButton');
+  await page.click('#sourceFilters [data-source="Claude Code"]');
+  assert.equal(await text(page, '#readAll'), 'Mark 1 Claude Code Read');
+  await page.click('#readAll');
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+  assert.equal((await host()).notices.codex[0].read, false, 'hidden Codex results are untouched');
+  assert.equal(await text(page, '#readEverything'), 'Mark All 1 Read');
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => !window.__host.notices.external[0].read);
+  // One result: read, unread, archive, restore.
+  await page.click('#sourceFilters [data-source=""]');
+  const card = page.locator('#inboxCards .result-card').first();
+  await card.locator('.result-preview').click();
+  await card.locator('.result-read').click();
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+  assert.equal(await card.locator('.result-read').innerText(), 'Mark Unread');
+  await card.locator('.result-read').click();
+  await page.waitForFunction(() => !window.__host.notices.external[0].read);
+  await card.locator('.result-archive').click();
+  await page.waitForFunction(() => window.__host.notices.external[0].archived);
+  assert.equal(await page.locator('#inboxCards .result-card').count(), 3);
+  assert.equal(await text(page, '#sourceFilters [data-source="__archived"]'), 'Archived (1)');
+  await page.click('#sourceFilters [data-source="__archived"]');
+  await shot('inbox-archived');
+  assert.equal(await page.locator('#inboxCards .result-card').count(), 1);
+  assert.match(await text(page, '#inboxCards'), /Updated billing/);
+  assert.ok((await host()).notices.external[0].summary.length > 20, 'archiving keeps the stored reply');
+  const archived = page.locator('#inboxCards .result-card').first();
+  await archived.locator('.result-preview').click();
+  await archived.locator('.result-archive').click();
+  await page.waitForFunction(() => !window.__host.notices.external[0].archived);
 });
 
 await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host, tasks, shot}) => {
@@ -423,7 +523,7 @@ await check('brief report: decide whether to open the agent', {width: 340, heigh
   await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
   assert.match(await page.getAttribute('#cardReport', 'class'), /verdict-done/);
   const done = await report();
-  for (const part of [/No need to check/, /Checks passed\./, /Updated billing\.py and added 12 tests/, /billing\.py/, /Checks passed/, /You asked: Refactor billing\.py/, /5 min/, /1 more result/]) assert.match(done, part);
+  for (const part of [/Completed · Checks passed/, /Checks ran and passed\./, /Updated billing\.py and added 12 tests/, /billing\.py/, /Checks passed/, /You asked: Refactor billing\.py/, /5 min/, /1 more result/]) assert.match(done, part);
   assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in iTerm');
   await page.waitForTimeout(100);
   await shot('report-done');
@@ -439,6 +539,40 @@ await check('brief report: decide whether to open the agent', {width: 340, heigh
   assert.doesNotMatch(await page.getAttribute('#card', 'class') || '', /has-report/);
 });
 
+// F03: a newer result never replaces the report under your pointer, focus or selection.
+await check('report stays put while being read', {width: 340, height: 640, compact: true}, async ({page, host}) => {
+  const head = () => text(page, '#cardReport .report-head b');
+  const arrive = (key, place) => page.evaluate(([key, place]) => {
+    window.__host.agents.push({key: key.repeat(64), source: 'Claude Code', title: 'Claude Code · ' + place, detail: 'Claude needs your permission to run git push', state: 'attention', receipt: '', time: Date.now() / 1000});
+    window.setAgents(window.__host.agents);
+  }, [key, place]);
+  assert.equal(await head(), 'web-app');
+  await page.hover('#cardReport .report-headline');
+  await arrive('9', 'payments');
+  await page.waitForSelector('#cardReport .report-newer:not([hidden])');
+  assert.equal(await head(), 'web-app', 'the report under the pointer is not replaced');
+  // Actions stay bound to the report being read.
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => !window.__host.agents.some(agent => agent.title.endsWith('web-app')));
+  assert.ok((await host()).agents.some(agent => agent.title.endsWith('payments')));
+  // Selected text also holds the report.
+  await page.mouse.move(5, 600);
+  await page.waitForFunction(() => document.querySelector('#cardReport .report-head b')?.textContent === 'payments');
+  await page.evaluate(() => { const node = document.querySelector('#cardReport .report-headline'); getSelection().selectAllChildren(node); });
+  await arrive('8', 'search');
+  await page.waitForTimeout(400);
+  assert.equal(await head(), 'payments');
+  assert.equal(await page.locator('#cardReport .report-newer').isVisible(), true);
+  await page.click('#cardReport .report-newer');
+  await page.waitForFunction(() => document.querySelector('#cardReport .report-head b')?.textContent === 'search');
+  // An idle card follows the newest result.
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await page.mouse.move(5, 600);
+  await page.waitForTimeout(1500);
+  await arrive('7', 'mobile');
+  await page.waitForFunction(() => document.querySelector('#cardReport .report-head b')?.textContent === 'mobile');
+});
+
 await check('brief report: worth a look, and the full reply', {width: 340, height: 600, compact: true}, async ({page}) => {
   await page.evaluate(() => {
     const now = Date.now() / 1000;
@@ -452,7 +586,7 @@ await check('brief report: worth a look, and the full reply', {width: 340, heigh
     window.setAgents(window.__host.agents);
   });
   await page.waitForFunction(() => /verdict-review/.test(document.getElementById('cardReport').className));
-  assert.match(await text(page, '#cardReport'), /Worth a look[\s\S]*Some checks failed[\s\S]*Checks failed/);
+  assert.match(await text(page, '#cardReport'), /Worth a look[\s\S]*The reply says checks failed[\s\S]*Reported failing/);
   assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open Claude Code');
   await page.click('#cardReport [data-report="read"]');
   await page.waitForSelector('#inboxCards .result-card');
@@ -470,7 +604,7 @@ await check('first run: connect Claude Code or watch the demo', {width: 340, hei
   await page.waitForFunction(() => /Needs you/.test(document.getElementById('cardReport').innerText), null, {timeout: 8000});
   await page.click('#cardReport [data-report="dismiss"]');
   await page.waitForFunction(() => /demo-shop/.test(document.getElementById('cardReport').innerText), null, {timeout: 9000});
-  assert.match(await text(page, '#cardReport'), /No need to check[\s\S]*refunds\.ts[\s\S]*Checks passed/);
+  assert.match(await text(page, '#cardReport'), /Completed · Checks passed[\s\S]*refunds\.ts[\s\S]*Checks ran and passed/);
   await shot('demo-report');
   await page.click('#cardReport [data-report="open"]');
   await page.waitForFunction(() => /real session/.test(document.getElementById('toast').textContent));
@@ -558,7 +692,7 @@ await check('motion: agent island, completion and progress', {motion: true, scal
     window.setAgents(window.__host.agents);
   });
   await page.waitForFunction(() => /mode-flash/.test(document.getElementById('island').className));
-  assert.match(await text(page, '#island'), /docs-site[\s\S]*No need to check[\s\S]*Rewrote the docs navigation/);
+  assert.match(await text(page, '#island'), /docs-site[\s\S]*Completed · Checks not verified[\s\S]*Rewrote the docs navigation/);
   await page.waitForTimeout(700);
   await shot('island-flash');
   await page.click('#island');

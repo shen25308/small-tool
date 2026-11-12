@@ -28,46 +28,73 @@ window.Card = (() => {
 
   // The report answers one question when an agent finishes: do I need to open it now?
   let reportShown = null;
-  function pendingReport() {
-    const entries = agentEntries(), notices = allNotices();
-    const unread = entries.filter(entry => entry.state === 'done').map(entry => {
-      const note = entry.notice || notices.find(item => item.id === entry.receipt);
-      return note && !note.read ? {entry, note} : null;
-    }).filter(Boolean);
-    const waiting = entries.find(entry => entry.state === 'attention');
-    const pick = waiting ? {entry: waiting, note: null} : unread[0];
-    return pick && {...pick, others: unread.length - (waiting ? 0 : 1)};
+  // Every result still waiting for you, most urgent first: sessions that need you, then unread replies
+  // from agents, newest first. Age changes the order, never whether a result can be found (F06).
+  const FEEDS = new Set(['Gmail', 'Outlook', 'GitHub Actions', 'Reminders']);
+  function candidates() {
+    const entries = agentEntries();
+    const waiting = entries.filter(entry => entry.state === 'attention').map(entry => ({entry, note: null}));
+    const unread = allNotices().filter(note => !note.read && !note.archived && !FEEDS.has(note.source)).map(note => {
+      const entry = entries.find(item => item.receipt === note.id || item.notice?.id === note.id) ||
+        {key: 'note:' + note.id, source: sourceName(note), title: note.title, time: note.time, state: 'done', receipt: note.id,
+         notice: note.channel === 'codex' ? note : null, demo: note.channel === 'demo'};
+      return {entry, note};
+    });
+    return [...waiting, ...unread];
+  }
+  const sameReport = shown => item => item.entry.key === shown.entry.key && (item.note?.id || '') === (shown.note?.id || '');
+
+  // While you read, select or use the report, it stays put; later arrivals wait behind "New result" (F03).
+  let touched = 0, forceNext = false;
+  function engaged() {
+    const box = $('cardReport'), selection = getSelection();
+    return box.matches(':hover') || box.contains(document.activeElement) || Date.now() - touched < 1200 ||
+      (!!selection && !selection.isCollapsed && box.contains(selection.anchorNode));
   }
   function reportMarkup({entry, note, others}) {
     const report = AgentReport.brief(note, entry);
     const place = (entry.title || '').split(' · ').slice(1).join(' · ') || entry.title || 'Agent';
     const app = entry.notice ? 'Codex' : AgentReport.appName(entry.app);
-    const glyph = {done: 'i-check', review: 'i-flag', blocked: 'i-bolt'}[report.verdict];
+    const glyph = {done: 'i-check', neutral: 'i-check', review: 'i-flag', blocked: 'i-bolt'}[report.tone];
     const meta = [entry.source || 'Agent', report.took].filter(Boolean).join(' · ');
-    return '<div class="report-head"><b>' + esc(place) + '</b><span>' + esc(meta) + '</span><time>' + agentAge(entry.time) + '</time>' +
+    return '<button type="button" class="report-newer" data-report="newer" hidden>' + symbol('i-arrow-right') + 'New result</button>' +
+      '<div class="report-head"><b>' + esc(place) + '</b><span>' + esc(meta) + '</span><time>' + agentAge(entry.time) + '</time>' +
       '<button type="button" class="report-close" data-report="dismiss" title="Dismiss" aria-label="Dismiss">' + symbol('close-icon') + '</button></div>' +
-      '<div class="report-verdict"><span class="verdict-badge">' + symbol(glyph) + esc(report.label) + '</span><span>' + esc(report.reason) + '</span></div>' +
+      '<div class="report-verdict"><span class="verdict-badge">' + symbol(glyph) + esc(report.label) + '</span></div>' +
+      '<p class="report-reason">' + esc(report.reason) + '</p>' +
+      // The exact sentence or observed command behind the verdict.
+      (report.evidence && report.evidence !== report.headline ? '<blockquote class="report-evidence selectable">' + esc(report.evidence) + '</blockquote>' : '') +
       '<p class="report-headline">' + esc(report.headline) + '</p>' +
       (report.points.length ? '<ul class="report-points">' + report.points.map(point => '<li>' + esc(point) + '</li>').join('') + '</ul>' : '') +
       (report.files.length || report.tests ? '<div class="report-chips">' + report.files.slice(0, 3).map(file => '<code>' + esc(file) + '</code>').join('') +
         (report.moreFiles ? '<code class="more-files">+' + report.moreFiles + '</code>' : '') +
         (report.tests ? '<span class="test-chip ' + report.tests + '"' + (report.checked ? ' title="' + esc(report.checked) + '"' : '') + '>' +
-          ({passed: 'Checks passed', failed: 'Checks failed', none: 'No checks ran'})[report.tests] + '</span>' : '') + '</div>' : '') +
+          ({passed: 'Checks ran and passed', failed: report.verified ? 'A check failed' : 'Reported failing', none: 'No checks ran', claimed: 'Reported passing'})[report.tests] + '</span>' : '') + '</div>' : '') +
       (report.asked ? '<p class="report-asked" title="' + esc(report.asked) + '">You asked: ' + esc(report.asked) + '</p>' : '') +
-      '<div class="report-actions"><button type="button" class="' + (report.verdict === 'done' ? 'secondary' : 'primary') + '" data-report="open">' +
+      '<div class="report-actions"><button type="button" class="' + (report.action === 'none' ? 'secondary' : 'primary') + '" data-report="open">' +
         esc(app ? 'Open in ' + app : 'Open Claude Code') + '</button>' +
         (note ? '<button type="button" class="secondary" data-report="read">Full reply</button>' : '') +
-        '<button type="button" class="' + (report.verdict === 'done' ? 'primary' : 'mini-link') + '" data-report="dismiss">Got it</button></div>' +
+        '<button type="button" class="' + (report.action === 'none' ? 'primary' : 'mini-link') + '" data-report="dismiss">Got it</button></div>' +
       (others > 0 ? '<button type="button" class="report-more" data-report="inbox">' + others + ' more ' + (others === 1 ? 'result' : 'results') + ' in the inbox</button>' : '');
   }
   function renderReport() {
-    const pick = pendingReport(), box = $('cardReport');
-    const key = pick ? pick.entry.key + '|' + pick.entry.state + '|' + (pick.note?.id || '') + '|' + pick.others : '';
+    const list = candidates(), box = $('cardReport');
+    const top = list[0];
+    const pick = top && {...top, others: list.length - 1};
+    root.classList.toggle('has-report', !!pick || !!reportShown);
+    // Keep the report being read in place while it still needs attention. Show that something newer is waiting.
+    if (reportShown && !forceNext && engaged() && list.some(sameReport(reportShown))) {
+      const newer = box.querySelector('.report-newer');
+      if (newer) newer.hidden = !pick || sameReport(reportShown)(pick);
+      return;
+    }
+    forceNext = false;
     root.classList.toggle('has-report', !!pick);
     if (!pick) { box.hidden = true; box.replaceChildren(); reportShown = null; return; }
+    const key = pick.entry.key + '|' + pick.entry.state + '|' + (pick.note?.id || '') + '|' + pick.others;
     if (reportShown?.key === key) return;
     const report = AgentReport.brief(pick.note, pick.entry);
-    box.className = 'card-report verdict-' + report.verdict;
+    box.className = 'card-report verdict-' + report.tone;
     box.innerHTML = reportMarkup(pick);
     const appeared = box.hidden || reportShown?.entry.key !== pick.entry.key;
     box.hidden = false;
@@ -79,6 +106,7 @@ window.Card = (() => {
     if (!pick) return;
     const {entry, note} = pick;
     const markRead = () => note ? readNotice(note) : dismissAgentEntry(entry);
+    if (kind === 'newer') { forceNext = true; renderReport(); return; }
     if (kind === 'dismiss') { action(markRead()); return; }
     if (kind === 'inbox') { inWorkspace(() => $('inboxButton').click()); return; }
     if (kind === 'read') { inWorkspace(() => openNotice(note.id)); return; }
@@ -222,6 +250,12 @@ window.Card = (() => {
     }));
   });
   $('cardAddInput').addEventListener('keydown', event => { if (event.key === 'Escape') { event.target.value = ''; event.target.blur(); } });
+
+  const box = $('cardReport');
+  box.addEventListener('pointerdown', () => { touched = Date.now(); });
+  const later = () => setTimeout(() => { if (!engaged()) renderReport(); }, 1300);
+  box.addEventListener('mouseleave', later);
+  box.addEventListener('focusout', later);
 
   window.setPinned = value => { pinnedNow = !!value; render(); };
   // Agents and results change often. Refresh only the parts they affect, not the task list.

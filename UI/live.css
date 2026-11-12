@@ -120,6 +120,9 @@ main::before {
 .glyph-working { border: 2px solid rgba(10,132,255,.28); border-top-color: #0a84ff; animation: spin .85s linear infinite }
 .glyph-attention { background: #ff9f0a; transform: scale(.72); animation: ping 1.5s ease-out infinite }
 .glyph-done { background: #30d158 }
+.glyph-neutral { background: #8e8e93 }
+.glyph-neutral svg { width: 100%; height: 100% }
+.glyph-neutral path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 .glyph-done svg { width: 100%; height: 100% }
 .glyph-done path { fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; animation: draw-check .45s ease-out .1s both }
 .glyph-panel { display: none }

@@ -8,6 +8,8 @@ struct CodexNotice: Codable {
     var summary: String
     var time: Double
     var read: Bool = false
+    // Older inbox files have no archive flag; a missing value means not archived.
+    var archived: Bool? = nil
 }
 
 private struct RolloutCursor: Codable, Equatable {
@@ -143,12 +145,23 @@ final class CodexInbox {
     }
 
     func markRead(_ key:String) throws -> [CodexNotice] {
+        try setState(key,read:true,archived:nil)
+    }
+
+    /// Read and archived are flags on the stored notice. Changing them never removes the reply.
+    func setState(_ key:String, read:Bool?, archived:Bool?) throws -> [CodexNotice] {
         var state=try load()
         guard let index=state.notices.firstIndex(where:{$0.id==key}) else {throw AppIssue("This message no longer exists.")}
-        if !state.notices[index].read {state.notices[index].read=true;try commit(state)}
+        var notice=state.notices[index]
+        if let read {notice.read=read}
+        if let archived {notice.archived=archived}
+        if notice.read != state.notices[index].read || (notice.archived ?? false) != (state.notices[index].archived ?? false) {
+            state.notices[index]=notice
+            try commit(state)
+        }
         return state.notices
     }
     static func wire(_ notices:[CodexNotice]) -> [[String:Any]] {
-        notices.map{["id":$0.id,"thread":$0.thread,"title":$0.title,"summary":$0.summary,"time":$0.time,"read":$0.read]}
+        notices.map{["id":$0.id,"thread":$0.thread,"title":$0.title,"summary":$0.summary,"time":$0.time,"read":$0.read,"archived":$0.archived ?? false]}
     }
 }
