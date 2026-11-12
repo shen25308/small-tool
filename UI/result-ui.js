@@ -26,6 +26,7 @@ window.ResultUI = (() => {
     const info=digest(note);
     const article=element('article','result-card');
     article.dataset.notice=note.id;
+    window.SourceColors?.apply(article,sourceName(note));
     article.classList.toggle('unread',!note.read);
     const isMail=['Gmail','Outlook'].includes(note.source);
     const isReminder=note.source==='Reminders';

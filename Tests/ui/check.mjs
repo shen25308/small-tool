@@ -466,8 +466,8 @@ await check('corner card', {width: 340, height: 420, compact: true}, async ({pag
   assert.match(await text(page, '#cardReport'), /web-app[\s\S]*Needs you[\s\S]*Claude needs your permission to use Bash/);
   // The card tells the app how tall it needs to be.
   await page.waitForFunction(() => window.__host.cardHeight > 150);
-  const natural = await page.evaluate(() => Math.ceil(document.querySelector('.card-inner').getBoundingClientRect().height));
-  assert.equal((await host()).cardHeight, natural);
+  const shown = await page.evaluate(() => Math.ceil(document.querySelector('.card-inner').getBoundingClientRect().height));
+  assert.ok((await host()).cardHeight >= shown);
 
   await page.fill('#cardAddInput', 'Stretch at 5pm');
   await page.press('#cardAddInput', 'Enter');
@@ -647,6 +647,106 @@ await check('back to card after jumping to the workspace', {width: 340, height: 
   await page.click('#workspaceReturn');
   await page.waitForFunction(() => compact && document.getElementById('workspaceReturn').hidden);
 });
+
+// F06: the inbox is reachable from the card in every state, with its count.
+await check('card inbox button in every state', {width: 340, height: 640, compact: true, empty: true, workspace: null}, async ({page}) => {
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  assert.equal(await page.locator('#cardInbox').isVisible(), true, 'first run');
+  assert.equal(await text(page, '#cardInboxCount'), '');
+  await page.evaluate(() => {
+    window.__host.notices.codex = [{id: 'old/1', thread: '11111111-1111-4111-8111-111111111111', title: 'Codex · api', time: Date.now() / 1000 - 30 * 3600, read: false, summary: 'Fixed the export.'}];
+    window.setInbox({channel: 'codex', items: window.__host.notices.codex, error: ''});
+  });
+  assert.equal(await text(page, '#cardInboxCount'), '1');
+  // A day-old unread result is still offered, not hidden by its age.
+  await page.waitForFunction(() => /api/.test(document.getElementById('cardReport').innerText));
+  await page.click('#cardInbox');
+  await page.waitForSelector('#inboxCards .result-card');
+  assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
+});
+
+// F08: at 340 × 430 everything essential stays reachable; long parts scroll inside the card.
+await check('compact card at a constrained height', {width: 340, height: 430, compact: true, scale: 2}, async ({page, host, shot}) => {
+  const add = await page.locator('#cardAddInput').boundingBox();
+  assert.ok(add.y + add.height <= 430, 'the add field is on screen: ' + (add.y + add.height));
+  assert.equal(await page.locator('#cardInbox').isVisible(), true);
+  const scrolls = await page.evaluate(() => ['#cardTasks', '#cardReport'].map(id => { const node = document.querySelector(id); return node.scrollHeight > node.clientHeight + 1 && getComputedStyle(node).overflowY === 'auto'; }));
+  assert.ok(scrolls.some(Boolean), 'something scrolls inside the card');
+  await page.waitForFunction(() => window.__host.cardHeight > 430);
+  await shot('card-430');
+  const before = await page.evaluate(() => document.getElementById('cardReport').scrollHeight);
+  await page.click('#cardReport .report-fold');
+  assert.match(await page.getAttribute('#cardReport', 'class'), /folded/);
+  const after = await page.evaluate(() => document.getElementById('cardReport').scrollHeight);
+  assert.ok(after < before, 'folding the report frees room: ' + before + ' -> ' + after);
+  await page.fill('#cardAddInput', 'Still reachable');
+  await page.press('#cardAddInput', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Still reachable'));
+});
+
+// F09: Full reply opens the stored reply in one action and keeps where you were.
+await check('full reply opens the original reply', {width: 340, height: 640, compact: true}, async ({page}) => {
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
+  await page.click('#cardReport [data-report="read"]');
+  await page.waitForSelector('#inboxCards .result-original:not([hidden])');
+  assert.match(await text(page, '#inboxCards .result-original:not([hidden])'), /Next step: review the migration before deploying/);
+  assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
+  // A source filter that shows the result is kept.
+  await page.click('#sourceFilters [data-source="Claude Code"]');
+  assert.equal(await text(page, '#dialog .dialog-back'), 'Card');
+  await page.click('#dialog .dialog-back');
+  await page.waitForFunction(() => compact);
+  await page.click('#cardInbox');
+  await page.waitForSelector('#sourceFilters [data-source="Claude Code"].active');
+});
+
+// F12: each connection can have its own colour; status colours stay separate, and text stays readable.
+for (const dark of [false, true]) {
+  await check('connection colours' + (dark ? ', dark' : ''), {dark, scale: 2}, async ({page, host, shot}) => {
+    await page.click('#boardMore');
+    await page.click('#openConnectors');
+    await page.click('#claudeRow .source-swatch');
+    await page.click('.color-picker [title="Purple"]');
+    await page.waitForFunction(() => window.__host.workspace.sourceColors?.['Claude Code'] === '#af52de');
+    await page.click('#codexRow .source-swatch');
+    await page.fill('.color-picker input[type=color]', '#30d158');
+    await page.waitForFunction(() => window.__host.workspace.sourceColors?.Codex === '#30d158');
+    if (!dark) await shot('connections-colours');
+    await page.click('#dialog [data-close]');
+    await page.click('#inboxButton');
+    const claude = page.locator('#inboxCards .result-card', {hasText: 'Claude Code'}).first();
+    assert.match(await claude.getAttribute('class'), /has-source-color/);
+    assert.match(await claude.getAttribute('style'), /--source-color: #af52de/);
+    const github = page.locator('#inboxCards .result-card', {hasText: 'GitHub Actions'}).first();
+    assert.doesNotMatch(await github.getAttribute('class'), /has-source-color/);
+    await shot('inbox-colours' + (dark ? '-dark' : ''));
+    // Contrast of the headline over the tinted card, for every preset.
+    const ratios = await page.evaluate(presets => {
+      const card = document.querySelector('#inboxCards .result-card.has-source-color'), head = card.querySelector('.result-headline');
+      const rgb = value => value.match(/[\d.]+/g).map(Number);
+      const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+      const mix = (a, b, t) => a.map((v, i) => v * (1 - t) + b[i] * t);
+      const probe = document.createElement('i'); probe.style.background = 'var(--paper)'; document.body.append(probe);
+      const paper = rgb(getComputedStyle(probe).backgroundColor); probe.remove();
+      const [r, g, b, a = 1] = rgb(getComputedStyle(head).color);
+      return presets.map(([, hex]) => {
+        const tint = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+        const back = mix(paper, tint, .07), text = mix(back, [r, g, b], a);
+        const [x, y] = [lum(text), lum(back)].sort((p, q) => q - p);
+        return (x + .05) / (y + .05);
+      });
+    }, await page.evaluate(() => SourceColors.presets));
+    assert.ok(Math.min(...ratios) >= 7, 'headline contrast over every tint: ' + ratios.map(r => r.toFixed(1)).join(', '));
+    // Reset removes the colour.
+    await page.click('#dialog [data-close]');
+    await page.click('#boardMore');
+    await page.click('#openConnectors');
+    await page.click('#claudeRow .source-swatch');
+    await page.click('.color-picker [data-color=""]');
+    await page.waitForFunction(() => !window.__host.workspace.sourceColors?.['Claude Code']);
+  });
+}
 
 await check('corner card when everything is done', {width: 340, height: 420, compact: true}, async ({page}) => {
   for (let i = 0; i < 5; i++) {

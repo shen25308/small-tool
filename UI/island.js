@@ -115,7 +115,7 @@ window.Island = (() => {
     if (flash) {
       const entry = flash.entry;
       flash = null; clearTimeout(flashTimer);
-      if (entry.receipt && allNotices().some(note => note.id === entry.receipt)) { paint(); Card.inWorkspace(() => openNotice(entry.receipt)); return; }
+      if (entry.receipt && allNotices().some(note => note.id === entry.receipt)) { paint(); Card.inWorkspace(() => openNotice(entry.receipt, {original: true})); return; }
     }
     open = true;
     paint();

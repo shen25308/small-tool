@@ -22,7 +22,7 @@ const ProviderUI = (() => {
       const list=accounts.filter(a=>a.provider===provider);
       const state=provider==='github'?(git?.connected?git.repo:git?'Not connected':'Check status'):(list.length?list.map(a=>a.email).join(', '):mail?'Not connected':'Check status');
       const badge=provider==='github'?'var(--purple)':provider==='gmail'?'var(--red)':'var(--action)';
-      return '<button type="button" class="group-row provider-row" data-provider="'+provider+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(provider==='github'?'i-bolt':'i-note')+'</span><span class="row-text"><b>'+esc(name)+'</b><small>'+esc(state)+'</small></span>'+symbol('i-chevron-right chev')+'</button>';
+      return '<div class="provider-line">'+'<button type="button" class="group-row provider-row" data-provider="'+provider+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(provider==='github'?'i-bolt':'i-note')+'</span><span class="row-text"><b>'+esc(name)+'</b><small>'+esc(state)+'</small></span>'+symbol('i-chevron-right chev')+'</button>'+SourceColors.swatch(name)+'</div>';
     });
     mount.innerHTML=entries.join('');
     mount.onclick=e=>{const button=e.target.closest('[data-provider]');if(!button)return;

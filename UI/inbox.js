@@ -16,6 +16,9 @@ function inboxBadge() {
   $('inboxBadge').textContent=count>99?'99+':String(count);
   $('inboxBadge').hidden=!count;
   $('inboxButton').setAttribute('aria-label','Inbox, '+count+' unread');
+  $('cardInboxCount').textContent=count?(count>99?'99+':String(count)):'';
+  $('cardInbox').setAttribute('aria-label','Inbox, '+count+' unread');
+  $('cardInbox').title=count?'Inbox · '+count+' unread':'Inbox';
 }
 let resultLimit=30;
 const cardOptions={
@@ -55,16 +58,25 @@ function markAllRead(everywhere=false) {
   const unread=(everywhere?allNotices().filter(note=>!note.archived):noticesInView()).filter(note=>!note.read);
   setStates(unread,{read:true},'Marked '+plural(unread.length,'result')+' read');
 }
-// Opens the inbox on one result, for example from the Agents list.
-function openNotice(id) {
-  selectedInboxSource='';
-  const position=allNotices().findIndex(note=>note.id===id);
+// Opens the inbox on one result. With original, the stored reply itself is open and in view (F09).
+// The source filter stays as it was when it already shows this result.
+function openNotice(id,{original=false}={}) {
+  const note=allNotices().find(item=>item.id===id);
+  if(note){
+    if(note.archived)selectedInboxSource=ARCHIVED;
+    else if(selectedInboxSource&&(selectedInboxSource===ARCHIVED||sourceName(note)!==selectedInboxSource))selectedInboxSource='';
+  }
+  const position=noticesInView().findIndex(item=>item.id===id);
   if(position>=resultLimit)resultLimit=position+1;
   listNotices();
   const card=[...document.querySelectorAll('#inboxCards .result-card')].find(node=>node.dataset.notice===id);
   if(!card)return;
   const preview=card.querySelector('.result-preview');
   if(preview?.getAttribute('aria-expanded')==='false')preview.click();
+  if(original){
+    const show=card.querySelector('.result-expand');
+    if(show&&show.getAttribute('aria-expanded')!=='true')show.click();
+  }
   card.scrollIntoView({block:'start'});
 }
 function latestResult() {
@@ -143,18 +155,18 @@ function updateItems(channel,items) {
   latestResult();
   window.renderAgents?.();
 }
-function connectorRow(id,badge,icon,title,detail,extra='') {
-  return '<div class="group-row" id="'+id+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(icon)+'</span><span class="row-text"><b>'+title+'</b><small data-state>'+detail+'</small></span>'+extra+'</div>';
+function connectorRow(id,badge,icon,title,detail,extra='',colorKey='') {
+  return '<div class="group-row" id="'+id+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(icon)+'</span><span class="row-text"><b>'+title+'</b><small data-state>'+detail+'</small></span>'+(colorKey?SourceColors.swatch(colorKey):'')+extra+'</div>';
 }
 function showConnectors() {
   const fromGrok=allNotices().filter(n=>sourceName(n)==='Grok Bot');
   const receipt=fromGrok.length?'Last received '+inboxDate(fromGrok[0].time):'Sends a summary when a task finishes';
   dialog('Connections','<div class="connector-list">'+
     '<h3>Coding agents</h3><div class="group-box">'+
-    connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>')+
-    connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>')+
-    connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>')+
-    connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>')+
+    connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>','Claude Code')+
+    connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>','Codex')+
+    connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>','Grok Bot')+
+    connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
     '</div><p>Claude Code and Codex show up under Agents while they work. Each finished turn leaves its reply in the inbox, without a notification.</p>'+
     '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
     '<details class="more-sources"><summary>More sources: Gmail, Outlook and GitHub Actions</summary>'+
@@ -227,7 +239,7 @@ function showConnectors() {
 }
 // "Back to card" appears when the card sent you here, and takes you back to it.
 window.setWorkspaceReturn=visible=>{$('workspaceReturn').hidden=!visible};
-$('workspaceReturn').onclick=()=>Promise.resolve(closeDialog()).then(()=>{if(!$('dialog').open)action(native('compact',{value:true}))});
+$('workspaceReturn').onclick=returnToCard;
 window.openInbox=()=>listNotices();
 window.setInbox=state=>{
   const channel=state.channel||'codex';

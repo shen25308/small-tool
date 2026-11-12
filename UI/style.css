@@ -349,3 +349,22 @@ button.group-row:hover { background: var(--hover) }
 [aria-invalid="true"] { box-shadow: 0 0 0 1px var(--danger), 0 0 0 3.5px color-mix(in srgb, var(--danger) 25%, transparent) }
 .close-prompt { margin-top: 14px; padding: 10px 12px; border-radius: 9px; background: color-mix(in srgb, var(--orange) 12%, transparent); font-size: 12.5px }
 .close-prompt .actions { margin-top: 8px; justify-content: flex-start }
+
+/* Connection colours: a swatch in Connections, then a stripe and a dot on that source's results. */
+.source-swatch { flex: none; width: 18px; height: 18px; margin: 0 6px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1.5px var(--line) }
+.source-swatch:not(.chosen) { background: conic-gradient(#0a84ff, #34c759, #ff9f0a, #ff375f, #af52de, #0a84ff); opacity: .35 }
+.source-swatch:hover { opacity: 1 }
+.provider-line { display: flex; align-items: center }
+.provider-line .provider-row { flex: 1; min-width: 0 }
+.provider-line + .provider-line { border-top: .5px solid var(--hairline) }
+.color-picker { width: 212px; padding: 10px 12px 8px }
+.color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 2px 0 10px }
+.color-grid button { aspect-ratio: 1; border-radius: 50%; background: var(--swatch) }
+.color-grid button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--swatch) }
+.color-custom { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; font-size: 12px }
+.color-custom input { width: 44px; min-height: 22px; padding: 0 2px }
+.has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 7%, transparent) }
+.result-card.has-source-color { background: linear-gradient(var(--source-tint), var(--source-tint)), var(--paper); box-shadow: inset 3px 0 0 var(--source-color) }
+.has-source-color .result-source::before, .card-report.has-source-color .report-head b::before {
+  content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--source-color); vertical-align: 1px;
+}

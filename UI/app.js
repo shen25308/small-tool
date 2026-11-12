@@ -188,7 +188,8 @@ function placeTaskPicker(picker, anchor) {
     picker.remove();
     if (anchor.isConnected && document.activeElement === document.body) anchor.focus();
   });
-  document.body.append(picker);
+  // Inside an open sheet, the picker must belong to the sheet or it cannot be clicked.
+  ($('dialog').open ? $('dialog') : document.body).append(picker);
   picker.showPopover();
   const pos = anchor.getBoundingClientRect();
   const rect = picker.getBoundingClientRect();
@@ -413,8 +414,10 @@ let dialogGuard = null;
 function dialog(title, body, navigation = {}) {
   const modal = $('dialog');
   if (dialogGuard) { dialogGuard.flush(); dialogGuard = null; }
-  const backLabel = navigation.label || '';
-  dialogBack = navigation.back || closeDialog;
+  // Everything outside an open sheet is inert, so a sheet opened from the card offers the way back itself.
+  const fromCard = !$('workspaceReturn').hidden;
+  const backLabel = navigation.label || (fromCard ? 'Card' : '');
+  dialogBack = navigation.back || (fromCard ? returnToCard : closeDialog);
   $('dialogBody').innerHTML = '<div class="dialog-head">' +
     (backLabel ? '<button type="button" class="dialog-back" aria-label="' + esc(backLabel) + '">' + symbol('back') + esc(backLabel) + '</button>' : '<span></span>') +
     '<h2 id="dialogTitle">' + esc(title) + '</h2><button type="button" class="close" data-close title="Close" aria-label="Close">' + symbol('close-icon') + '</button></div>' + body;
@@ -422,6 +425,9 @@ function dialog(title, body, navigation = {}) {
   if (back) back.onclick = () => dialogBack();
   modal.scrollTop = 0;
   if (!modal.open) modal.showModal();
+}
+function returnToCard() {
+  return Promise.resolve(closeDialog()).then(() => { if (!$('dialog').open) action(native('compact', {value: true})); });
 }
 function closeDialog(force = false) {
   if (!force && dialogGuard) return dialogGuard.close();

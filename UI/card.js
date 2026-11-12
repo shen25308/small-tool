@@ -27,7 +27,7 @@ window.Card = (() => {
   }
 
   // The report answers one question when an agent finishes: do I need to open it now?
-  let reportShown = null;
+  let reportShown = null, reportFolded = false;
   // Every result still waiting for you, most urgent first: sessions that need you, then unread replies
   // from agents, newest first. Age changes the order, never whether a result can be found (F06).
   const FEEDS = new Set(['Gmail', 'Outlook', 'GitHub Actions', 'Reminders']);
@@ -59,6 +59,7 @@ window.Card = (() => {
     const meta = [entry.source || 'Agent', report.took].filter(Boolean).join(' · ');
     return '<button type="button" class="report-newer" data-report="newer" hidden>' + symbol('i-arrow-right') + 'New result</button>' +
       '<div class="report-head"><b>' + esc(place) + '</b><span>' + esc(meta) + '</span><time>' + agentAge(entry.time) + '</time>' +
+      '<button type="button" class="report-fold" data-report="fold" aria-expanded="' + !reportFolded + '" title="' + (reportFolded ? 'Show details' : 'Show less') + '" aria-label="' + (reportFolded ? 'Show details' : 'Show less') + '">' + symbol('i-chevron-down') + '</button>' +
       '<button type="button" class="report-close" data-report="dismiss" title="Dismiss" aria-label="Dismiss">' + symbol('close-icon') + '</button></div>' +
       '<div class="report-verdict"><span class="verdict-badge">' + symbol(glyph) + esc(report.label) + '</span></div>' +
       '<p class="report-reason">' + esc(report.reason) + '</p>' +
@@ -94,7 +95,8 @@ window.Card = (() => {
     const key = pick.entry.key + '|' + pick.entry.state + '|' + (pick.note?.id || '') + '|' + pick.others;
     if (reportShown?.key === key) return;
     const report = AgentReport.brief(pick.note, pick.entry);
-    box.className = 'card-report verdict-' + report.tone;
+    box.className = 'card-report verdict-' + report.tone + (reportFolded ? ' folded' : '');
+    SourceColors.apply(box, pick.entry.source || sourceName(pick.note || {}));
     box.innerHTML = reportMarkup(pick);
     const appeared = box.hidden || reportShown?.entry.key !== pick.entry.key;
     box.hidden = false;
@@ -107,9 +109,18 @@ window.Card = (() => {
     const {entry, note} = pick;
     const markRead = () => note ? readNotice(note) : dismissAgentEntry(entry);
     if (kind === 'newer') { forceNext = true; renderReport(); return; }
+    if (kind === 'fold') {
+      reportFolded = !reportFolded;
+      const box = $('cardReport'), fold = box.querySelector('.report-fold');
+      box.classList.toggle('folded', reportFolded);
+      fold.setAttribute('aria-expanded', String(!reportFolded));
+      fold.title = reportFolded ? 'Show details' : 'Show less';
+      fold.setAttribute('aria-label', fold.title);
+      return;
+    }
     if (kind === 'dismiss') { action(markRead()); return; }
     if (kind === 'inbox') { inWorkspace(() => $('inboxButton').click()); return; }
-    if (kind === 'read') { inWorkspace(() => openNotice(note.id)); return; }
+    if (kind === 'read') { inWorkspace(() => openNotice(note.id, {original: true})); return; }
     if (entry.demo) { toast('In a real session, this brings forward the app Claude Code runs in.'); action(markRead()); return; }
     const opening = entry.notice ? native('openCodex', {thread: entry.notice.thread}) : native('openAgentApp', {app: entry.app || ''});
     action(opening.then(() => { if (note) return markRead(); }));
@@ -166,14 +177,24 @@ window.Card = (() => {
   }
 
   // The window follows the content: the page measures itself and the app resizes the card.
+  // The height the card would need to show everything. Parts that scroll inside the card report their
+  // full content height, so a short window can still grow when the screen allows it (F08).
+  function naturalHeight() {
+    const style = getComputedStyle(inner);
+    const parts = [...inner.children].filter(node => node.getClientRects().length);
+    const content = parts.reduce((sum, node) => sum + Math.max(node.scrollHeight, node.getBoundingClientRect().height), 0);
+    return Math.ceil(content + (parseFloat(style.rowGap) || 0) * Math.max(0, parts.length - 1) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom));
+  }
   function report() {
     if (!compact) return;
-    const height = Math.ceil(inner.getBoundingClientRect().height);
+    const height = naturalHeight();
     if (!height || height === reported) return;
     reported = height;
     native('cardSize', {height}).catch(() => {});
   }
-  new ResizeObserver(() => requestAnimationFrame(report)).observe(inner);
+  const measure = () => requestAnimationFrame(report);
+  new ResizeObserver(measure).observe(inner);
+  new MutationObserver(measure).observe(inner, {childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class']});
 
   function inWorkspace(next) {
     if (!compact) { next(); return; }
@@ -193,6 +214,7 @@ window.Card = (() => {
     }
     if (event.target.closest('#cardMore')) inWorkspace(() => go('today'));
     if (event.target.closest('#cardExpand')) inWorkspace(() => {});
+    if (event.target.closest('#cardInbox')) inWorkspace(() => $('inboxButton').click());
     if (event.target.closest('#cardPin')) action(native('pin', {value: !pinnedNow}).then(value => { pinnedNow = value; render(); }));
   });
 

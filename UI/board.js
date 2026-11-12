@@ -89,7 +89,7 @@ function showMenu(items, at) {
   document.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); close(); } }, {signal: lifetime.signal});
   window.addEventListener('blur', close, {signal: lifetime.signal});
   window.addEventListener('resize', close, {signal: lifetime.signal});
-  document.body.append(menu);
+  ($('dialog').open ? $('dialog') : document.body).append(menu);
   menu.showPopover();
   const box = menu.getBoundingClientRect();
   const anchor = at instanceof Element ? at.getBoundingClientRect() : null;

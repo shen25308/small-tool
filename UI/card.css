@@ -3,11 +3,15 @@
 @media (prefers-color-scheme: dark) { :root { --card-surface: rgba(38,38,40,.95) } }
 #card { display: none }
 body.compact { background: transparent }
-body.compact #card { display: block; position: fixed; inset: 0; overflow: hidden }
+body.compact #card { display: flex; flex-direction: column; position: fixed; inset: 0; overflow: hidden }
 html:not(.vibrant) body.compact #card { background: var(--card-surface) }
 html.vibrant body.compact #card { background: color-mix(in srgb, var(--paper) 22%, transparent) }
 
-.card-inner { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 10px }
+.card-inner { display: flex; flex: 1 1 auto; flex-direction: column; gap: 10px; min-height: 0; max-height: 100vh; padding: 14px 14px 10px }
+/* When space is short the report and the task list scroll inside the card; the header and footer stay put (F08). */
+.card-inner > * { flex: none }
+.card-inner > .card-report { flex: 0 1 auto; min-height: 72px; overflow-y: auto; overscroll-behavior: contain }
+.card-inner > .card-tasks { flex: 1 1 auto; min-height: 40px; overflow-y: auto; overscroll-behavior: contain }
 .card-island-slot { display: flex; justify-content: center; margin-top: -2px }
 .card-island-slot:empty, .card-island-slot:has(.island.mode-idle) { display: none }
 #card .island { position: relative; left: auto; top: auto; transform: none }
@@ -21,7 +25,7 @@ html.vibrant body.compact #card { background: color-mix(in srgb, var(--paper) 22
 .card-ring .ring-track, .card-ring .ring-fill { stroke-width: 3.6 }
 .card-ring .ring-label { position: absolute; color: var(--secondary); font: 700 10.5px var(--rounded); font-variant-numeric: tabular-nums }
 
-.card-tasks { display: grid }
+.card-tasks { display: grid; align-content: start }
 #card .row { align-items: center; gap: 10px; min-height: 32px; margin: 0 -8px; padding: 6px 8px; border-radius: 10px }
 #card .row::after { display: none }
 #card .row:hover { background: color-mix(in srgb, var(--ink) 6%, transparent) }
@@ -113,3 +117,15 @@ html.vibrant .card-welcome { background: color-mix(in srgb, var(--action) 12%, c
 }
 .report-newer .symbol { width: 11px; height: 11px; transform: rotate(-90deg) }
 .report-newer:not([hidden]) { animation: menu-in .25s ease-out }
+
+.report-fold { display: grid; place-items: center; width: 18px; height: 18px; flex: none; align-self: center; border-radius: 50%; color: var(--muted) }
+.report-fold:hover { background: var(--control); color: var(--ink) }
+.report-fold .symbol { width: 10px; height: 10px; transition: transform .2s }
+.card-report.folded .report-fold .symbol { transform: rotate(-90deg) }
+.card-report.folded > :not(.report-head):not(.report-verdict):not(.report-actions):not(.report-newer) { display: none }
+/* The inbox is always one click away, with its unread count (F06). */
+.card-inbox { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 7px; border-radius: 999px; color: var(--secondary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums }
+.card-inbox:hover { background: var(--control); color: var(--ink) }
+.card-inbox .symbol { width: 15px; height: 15px }
+.card-inbox:has(#cardInboxCount:not(:empty)) { color: var(--action) }
+.card-report.has-source-color { box-shadow: inset 3px 0 0 var(--source-color), inset 0 0 0 .5px color-mix(in srgb, var(--tone) 35%, transparent) }
