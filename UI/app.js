@@ -44,6 +44,13 @@ const titles = {inbox: 'Inbox', today: 'Today', upcoming: 'Plan', projects: 'Pro
 // Views drawn by their own module in place of the task list.
 const altViews = new Set(['inbox', 'projects']);
 // Things-style "When": This Evening keeps a task in Today but after the rest; Someday parks it without a date.
+// Moving a task between Today, This Evening and Someday says what happened and can be undone (U07).
+function moveWhen(id, when, label) {
+  const before = structuredClone(data.tasks.find(task => task.id === id));
+  return (when === 'today' ? patchTask(id, task => { planOn(task, day()); delete task.evening; }) : setWhen(id, when)).then(() => {
+    if (before) toast(label, () => action(change(state => { const i = state.tasks.findIndex(task => task.id === id); if (i >= 0) state.tasks[i] = before; })));
+  });
+}
 function setWhen(id, when) {
   return patchTask(id, task => {
     if (when === 'evening') { planOn(task, day()); task.evening = true; }
@@ -1228,8 +1235,8 @@ document.addEventListener('keydown', e => {
   } else if (e.metaKey && ['t', 'e', 'o'].includes(e.key.toLowerCase())) {
     e.preventDefault();
     const key = e.key.toLowerCase();
-    action((key === 't' ? patchTask(id, task => { planOn(task, day()); delete task.evening; }) : setWhen(id, key === 'e' ? 'evening' : 'someday'))
-      .then(() => { toast(key === 't' ? 'Planned for today' : key === 'e' ? 'Moved to This Evening' : 'Moved to Someday'); focusRow(id); }));
+    action(moveWhen(id, key === 't' ? 'today' : key === 'e' ? 'evening' : 'someday', key === 't' ? 'Planned for today' : key === 'e' ? 'Moved to This Evening' : 'Moved to Someday')
+      .then(() => focusRow(id)));
   }
 });
 setInterval(() => { if (lastDay !== day()) { lastDay = day(); render(); } }, 30000);

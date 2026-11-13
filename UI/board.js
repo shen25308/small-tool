@@ -114,9 +114,9 @@ function taskMenu(task, at, anchor) {
     !task.done && {segment: [['Today', today], ['Tomorrow', addDays(today, 1)], ['Next Week', TaskLogic.nextWeekday(today, 1)]].map(([label, date]) =>
       ({label, pressed: plannedDays(task).length === 1 && plannedDays(task)[0] === date, run: plan(date)}))},
     !task.done && {label: 'Choose Days…', icon: 'i-calendar', run: () => editPlanned(anchor, task)},
-    !task.done && (task.evening ? {label: 'Move Out of This Evening', icon: 'i-sun', run: () => action(setWhen(task.id, ''))}
-      : {label: 'This Evening', icon: 'i-moon', hint: '⌘E', run: () => action(setWhen(task.id, 'evening'))}),
-    !task.done && !task.someday && {label: 'Someday', icon: 'i-someday', hint: '⌘O', run: () => action(setWhen(task.id, 'someday'))},
+    !task.done && (task.evening ? {label: 'Move Out of This Evening', icon: 'i-sun', run: () => action(moveWhen(task.id, '', 'Moved out of This Evening'))}
+      : {label: 'This Evening', icon: 'i-moon', hint: '⌘E', run: () => action(moveWhen(task.id, 'evening', 'Moved to This Evening'))}),
+    !task.done && !task.someday && {label: 'Someday', icon: 'i-someday', hint: '⌘O', run: () => action(moveWhen(task.id, 'someday', 'Moved to Someday'))},
     !task.done && task.planned && {label: 'Remove Date', icon: 'i-xmark', run: plan('')},
     !task.done && '-',
     {heading: 'Priority'},

@@ -227,6 +227,14 @@ await check('UX-N05/N08: Someday keeps the deadline; quick add in Someday stays 
   await page.waitForFunction(id => !window.__host.workspace.tasks.find(t => t.id === id).someday, id);
   task = (await tasks()).find(t => t.id === id);
   assert.equal(task.dueDate, before.dueDate, 'and coming back keeps it too');
+  // From the menu, a move to Someday can be undone, restoring the planned days exactly (U07).
+  const planned = (await tasks()).find(t => !t.done && t.planned && !t.someday);
+  await page.evaluate(id => action(moveWhen(id, 'someday', 'Moved to Someday')), planned.id);
+  await page.waitForFunction(id => window.__host.workspace.tasks.find(t => t.id === id).someday, planned.id);
+  await page.click('#toast .undo');
+  await page.waitForFunction(id => !window.__host.workspace.tasks.find(t => t.id === id).someday, planned.id);
+  const back = (await tasks()).find(t => t.id === planned.id);
+  assert.deepEqual([back.planned, back.plannedDates, back.dueDate], [planned.planned, planned.plannedDates, planned.dueDate]);
   // Quick add while looking at Someday.
   await page.click('#nav [data-view="someday"]');
   await page.evaluate(() => openQuick('view'));
