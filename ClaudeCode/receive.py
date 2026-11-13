@@ -39,6 +39,69 @@ def host_app():
     return TERMINALS.get(os.environ.get("TERM_PROGRAM", ""), "")
 
 
+SHELLS = {"sh", "bash", "zsh", "dash", "fish", "env"}
+
+
+def agent_pid():
+    """The Claude Code process that ran this hook, so Shishi can tell when a session dies without saying so.
+
+    The hook may run under a shell, so walk up a few parents and skip shells."""
+    pid = os.getppid()
+    for _ in range(4):
+        if pid <= 1:
+            return 0
+        try:
+            out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)], capture_output=True, text=True, timeout=2).stdout.split(None, 1)
+        except (OSError, subprocess.TimeoutExpired):
+            return 0
+        if len(out) != 2:
+            return 0
+        if Path(out[1].strip()).name not in SHELLS:
+            return pid
+        pid = int(out[0])
+    return 0
+
+
+def activity(event):
+    """A short, local description of the tool that just ran, such as "Edit billing.py" or "Bash: pytest -q"."""
+    tool = text(event.get("tool_name"))[:40]
+    data = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
+    target = text(data.get("file_path")) or text(data.get("notebook_path")) or text(data.get("path"))
+    if target:
+        return tool + " " + Path(target).name[:80]
+    if tool == "Bash":
+        command = " ".join(text(data.get("command")).split())
+        return "Bash: " + (command[:77] + "…" if len(command) > 78 else command)
+    if tool in ("Task", "Agent"):
+        return "Subagent: " + " ".join(text(data.get("description")).split())[:70]
+    for field in ("pattern", "query", "url"):
+        if text(data.get(field)):
+            return tool + " " + " ".join(text(data[field]).split())[:70]
+    return tool
+
+
+LOG_LINES = 200
+
+
+def log_delivery(event, outcome):
+    """Keep the last few hook deliveries for Shishi's Diagnostics. No prompt, reply or tool content is kept."""
+    try:
+        path = agents.directory().parent / "HookLog.jsonl"
+        session = text(event.get("session_id")) if isinstance(event, dict) else ""
+        row = {"time": round(time.time(), 3), "source": SOURCE,
+               "event": text(event.get("hook_event_name"))[:40] if isinstance(event, dict) else "",
+               "session": hashlib.sha256(session.encode("utf-8")).hexdigest()[:8] if session else "",
+               "outcome": outcome[:160]}
+        lines = path.read_text(encoding="utf-8").splitlines()[-(LOG_LINES - 1):] if path.is_file() else []
+        lines.append(json.dumps(row, ensure_ascii=False))
+        agents.directory().parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+        pending = path.with_name(".HookLog.pending")
+        pending.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(pending, path)
+    except OSError:
+        pass
+
+
 def title_for(event, previous):
     name = text(event.get("session_title")).strip() or text(previous.get("label")).strip()
     folder = Path(text(event.get("cwd"))).name
@@ -193,15 +256,23 @@ def receive(event):
         keep["app"] = app
     if isinstance(previous.get("started"), (int, float)):
         keep["started"] = previous["started"]
+    # A resumed session runs in a new process, so each prompt looks again; other events only fill a gap.
+    pid = agent_pid() if name == "UserPromptSubmit" or (name in ("Notification", "PostToolUse") and not previous.get("pid")) else 0
+    if pid or isinstance(previous.get("pid"), int):
+        keep["pid"] = pid or previous["pid"]
 
     if name == "UserPromptSubmit":
         prompt = agents.clean(event.get("prompt"), "detail", required=False)
         agents.write(SOURCE, session, "working", title, prompt, {**keep, "task": prompt, "started": time.time()})
     elif name == "PostToolUse":
-        # A tool ran, so a pending permission request has been answered.
-        if previous.get("state") == "attention":
-            task = text(previous.get("task"))
-            agents.write(SOURCE, session, "working", title, task, {**keep, "task": task})
+        # A tool ran: the session is working (a pending permission request has been answered), and this is
+        # what it is doing now. A late tool event never reopens a finished turn.
+        if previous.get("state") == "done":
+            return
+        task = text(previous.get("task"))
+        tools = previous.get("tools") if isinstance(previous.get("tools"), int) else 0
+        agents.write(SOURCE, session, "working", title, task,
+                     {**keep, "task": task, "activity": activity(event), "tools": tools + 1})
     elif name == "Notification":
         if text(event.get("notification_type")) not in NEEDS_USER:
             return
@@ -232,9 +303,13 @@ def receive(event):
 
 
 if __name__ == "__main__":
+    event = None
     try:
-        receive(json.load(sys.stdin))
+        event = json.load(sys.stdin)
+        receive(event)
+        log_delivery(event, "delivered")
     except (OSError, ValueError, TypeError, AttributeError, RuntimeError, subprocess.TimeoutExpired) as problem:
         print(f"Shishi connector: {problem}", file=sys.stderr)
+        log_delivery(event, "problem: " + str(problem))
         # Exit status 2 would ask Claude to keep working. A delivery problem must never do that.
         sys.exit(1)

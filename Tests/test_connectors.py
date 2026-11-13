@@ -99,6 +99,39 @@ class ClaudeCodeHook(Sandbox):
         state, = self.states()
         self.assertEqual((state["state"], state["detail"]), ("working", "Deploy the site"))
 
+    def test_tool_activity_and_process_are_recorded(self):
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Refactor billing")
+        self.assertEqual(self.states()[0]["pid"], os.getpid(), "the process that ran the hook")
+        self.hook(hook_event_name="PostToolUse", tool_name="Edit", tool_input={"file_path": "/Users/me/code/small-tool/billing.py", "old_string": "secret"})
+        self.hook(hook_event_name="PostToolUse", tool_name="Bash", tool_input={"command": "pytest  -q\n tests/test_billing.py"})
+        state, = self.states()
+        self.assertEqual((state["state"], state["activity"], state["tools"]), ("working", "Bash: pytest -q tests/test_billing.py", 2))
+        self.hook(hook_event_name="PostToolUse", tool_name="Task", tool_input={"description": "Review the migration"})
+        self.assertEqual(self.states()[0]["activity"], "Subagent: Review the migration")
+        # A late tool event never reopens a finished turn, and a new prompt starts the count again.
+        self.hook(hook_event_name="Stop", last_assistant_message="Done.")
+        self.hook(hook_event_name="PostToolUse", tool_name="Read", tool_input={"file_path": "/x/a.py"})
+        self.assertEqual(self.states()[0]["state"], "done")
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Next")
+        self.assertNotIn("tools", self.states()[0])
+
+    def test_delivery_log_keeps_no_content(self):
+        self.hook(hook_event_name="UserPromptSubmit", prompt="My private prompt about payroll")
+        self.hook(hook_event_name="PostToolUse", tool_name="Bash", tool_input={"command": "cat salaries.csv"})
+        result = self.run_script(RECEIVE, stdin="not json")
+        self.assertEqual(result.returncode, 1)
+        log = (self.base / "HookLog.jsonl").read_text()
+        rows = [json.loads(line) for line in log.splitlines()]
+        self.assertEqual([row["event"] for row in rows], ["UserPromptSubmit", "PostToolUse", ""])
+        self.assertEqual(rows[0]["outcome"], "delivered")
+        self.assertTrue(rows[2]["outcome"].startswith("problem:"))
+        self.assertNotIn("payroll", log)
+        self.assertNotIn("salaries", log)
+        self.assertNotIn("s-1", log)
+        for _ in range(3):
+            self.hook(hook_event_name="SessionEnd")
+        self.assertLessEqual(len((self.base / "HookLog.jsonl").read_text().splitlines()), 200)
+
     def test_other_notifications_and_subagents_are_ignored(self):
         self.hook(hook_event_name="Notification", notification_type="auth_success", message="Signed in")
         self.hook(hook_event_name="Stop", agent_id="a-1", last_assistant_message="Subagent result")

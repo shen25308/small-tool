@@ -19,7 +19,7 @@ window.Island = (() => {
     const working = entries.filter(entry => entry.state === 'working');
     const done = entries.filter(entry => entry.state === 'done');
     if (waiting.length) return {mode: 'attention', text: waiting.length > 1 ? waiting.length + ' need you' : place(waiting[0]) + ' needs you'};
-    if (working.length) return {mode: 'working', text: working.length > 1 ? working.length + ' agents working' : place(working[0])};
+    if (working.length) return {mode: 'working', text: working.length > 1 ? working.length + ' agents working' : place(working[0]) + (working[0].activity ? ' · ' + working[0].activity : '')};
     if (done.length) return {mode: 'done', text: done.length > 1 ? done.length + ' results' : place(done[0]) + ' finished'};
     return {mode: 'idle', text: 'Agents'};
   }

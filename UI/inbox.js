@@ -161,6 +161,16 @@ function updateItems(channel,items) {
   latestResult();
   window.renderAgents?.();
 }
+function showHookLog(){
+  action(native('hookLog').then(rows=>{
+    const box=$('hookLog');
+    if(!box)return;
+    box.innerHTML=rows.length?rows.slice(0,40).map(row=>'<div class="group-row"><span class="row-text"><b>'+esc(row.event||'Unreadable event')+'</b><small>'+
+      esc(new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit'}).format(new Date(row.time*1000)))+
+      (row.session?' · session '+esc(row.session):'')+'</small></span><span class="hook-outcome'+(row.outcome==='delivered'?'':' problem')+'">'+esc(row.outcome)+'</span></div>').join('')
+      :'<div class="group-row"><span class="row-text"><small>No deliveries yet. Send Claude Code a prompt after connecting.</small></span></div>';
+  }));
+}
 function connectorRow(id,badge,icon,title,detail,extra='',colorKey='') {
   return '<div class="group-row" id="'+id+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(icon)+'</span><span class="row-text"><b>'+title+'</b><small data-state>'+detail+'</small></span>'+(colorKey?SourceColors.swatch(colorKey):'')+extra+'</div>';
 }
@@ -174,6 +184,7 @@ function showConnectors() {
     connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>','Grok Bot')+
     connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
     '</div><p>Claude Code and Codex show up under Agents while they work. Each finished turn leaves its reply in the inbox, without a notification.</p>'+
+    '<details class="more-sources" id="hookLogBox"><summary>Diagnostics: recent hook deliveries</summary><p>The last deliveries from the Claude Code hook: event, time and outcome. Prompts, replies and commands are never kept.</p><div class="group-box hook-log" id="hookLog"><div class="group-row"><span class="row-text"><small>Open to load…</small></span></div></div></details>'+
     '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
     '<details class="more-sources"><summary>More sources: Gmail, Outlook and GitHub Actions</summary>'+
     '<p>Mail needs a Google or Microsoft app registration of your own. GitHub Actions works with any public repository.</p>'+
@@ -187,6 +198,8 @@ function showConnectors() {
     '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
       [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show status in the menu bar</b><small>Agent progress and unread results stay visible after the window closes.</small></span><input type="checkbox" id="menuBarChoice" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Keyboard shortcuts in every app</b><small id="hotkeyNote">⌃⌥Space shows or hides the card. ⌃⌥N adds a task.</small></span><input type="checkbox" data-setting="hotkeys" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Keep the Mac awake while an agent works</b><small>Lets the Mac sleep again when every agent has finished or is waiting for you.</small></span><input type="checkbox" data-setting="keepAwake" disabled></label>'+
     '</div></div>',{label:'Inbox',back:listNotices});
   ProviderUI.rows();
   const bind=(box,op)=>{
@@ -201,6 +214,15 @@ function showConnectors() {
   const showPrefs=value=>cardBoxes.forEach(box=>{box.checked=!!value[box.dataset.cardPref];box.disabled=false});
   action(native('cardPrefs').then(showPrefs));
   cardBoxes.forEach(box=>{box.onchange=()=>action(Card.setPrefs({[box.dataset.cardPref]:box.checked}).then(showPrefs).catch(error=>{box.checked=!box.checked;throw error}))});
+  const settingBoxes=[...document.querySelectorAll('[data-setting]')];
+  const showSettings=value=>{
+    settingBoxes.forEach(box=>{box.checked=!!value[box.dataset.setting];box.disabled=false});
+    if($('hotkeyNote'))$('hotkeyNote').textContent=(value.hotkeyLabels||['⌃⌥Space','⌃⌥N']).join(' shows or hides the card. ')+' adds a task.'+
+      (value.takenShortcuts?.length?' Another app already uses '+value.takenShortcuts.join(' and ')+'.':'');
+  };
+  action(native('settings').then(showSettings));
+  settingBoxes.forEach(box=>{box.onchange=()=>action(native('settings',{[box.dataset.setting]:box.checked}).then(showSettings).catch(error=>{box.checked=!box.checked;throw error}))});
+  $('hookLogBox').addEventListener('toggle',()=>{if($('hookLogBox').open)showHookLog()});
   const appearance=$('appearanceChoice');
   const showAppearance=value=>appearance.querySelectorAll('[data-appearance]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.appearance===value)));
   action(native('appearance').then(showAppearance));

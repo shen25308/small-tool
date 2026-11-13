@@ -300,3 +300,6 @@ window.Card = (() => {
   const refresh = () => { if (compact) { renderReport(); renderWelcome(); } };
   return {render, report, inWorkspace, refresh, setPrefs, prefs: () => prefs};
 })();
+
+// ⌃⌥N from any app: the card comes forward with the add field ready.
+window.focusQuickAdd = () => { const input = document.getElementById('cardAddInput'); input?.focus(); input?.select(); };

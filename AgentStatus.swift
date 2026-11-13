@@ -27,9 +27,12 @@ struct AgentFacts: Equatable {
 }
 
 struct AgentState: Equatable {
-    let key, source, title, detail, state, receipt, task, app: String
+    let key, source, title, detail, state, receipt, task, app, activity: String
     let time, started: Double
+    let tools: Int
     let facts: AgentFacts?
+    /// The session's process exited without a final reply, for example when its terminal was closed.
+    let ended: Bool
 }
 
 /// Reads the one-file-per-session states that local agent hooks publish. All calls run on the inbox queue.
@@ -84,12 +87,22 @@ final class AgentBoard {
             let receipt = Self.line(object["receipt"], limit: 80)
             let app = object["app"] as? String ?? ""
             let started = (object["started"] as? Double).flatMap { $0.isFinite && $0 > 0 && $0 <= time ? $0 : nil } ?? 0
+            // A working session whose process is gone will never report again. Show that it stopped, then let it go.
+            let pid = (object["pid"] as? Int).flatMap { $0 > 1 && $0 < Int(Int32.max) ? pid_t($0) : nil }
+            var ended = false
+            if (state == "working" || state == "attention"), let pid, kill(pid, 0) == -1, errno == ESRCH {
+                if age > 3600 { try? manager.removeItem(at: file); continue }
+                ended = true
+            }
             rows.append(AgentState(key: key, source: Self.line(object["source"], limit: 100),
                                    title: title.isEmpty ? "Agent" : title,
-                                   detail: Self.line(object["detail"], limit: 400), state: state,
+                                   detail: ended ? "The session ended without a final reply." : Self.line(object["detail"], limit: 400),
+                                   state: ended ? "idle" : state,
                                    receipt: receipt.hasPrefix("connector/") ? receipt : "",
                                    task: Self.line(object["task"], limit: 400), app: Self.validBundle(app) ? app : "",
-                                   time: time, started: started, facts: AgentFacts(object["facts"])))
+                                   activity: ended ? "" : Self.line(object["activity"], limit: 120),
+                                   time: time, started: started, tools: max(0, min(object["tools"] as? Int ?? 0, 1_000_000)),
+                                   facts: AgentFacts(object["facts"]), ended: ended))
         }
         rows.sort { $0.time == $1.time ? $0.key < $1.key : $0.time > $1.time }
         let changed = !initialized || rows != last
@@ -107,7 +120,8 @@ final class AgentBoard {
         rows.map { row in
             var wire: [String: Any] = ["key": row.key, "source": row.source, "title": row.title, "detail": row.detail,
                                        "state": row.state, "receipt": row.receipt, "time": row.time, "task": row.task,
-                                       "app": row.app, "started": row.started]
+                                       "app": row.app, "started": row.started, "activity": row.activity, "tools": row.tools,
+                                       "ended": row.ended]
             if let facts = row.facts { wire["facts"] = facts.wire }
             return wire
         }

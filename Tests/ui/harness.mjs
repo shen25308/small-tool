@@ -38,7 +38,7 @@ function fakeHost(seed) {
       {key: 'e'.repeat(64), source: 'Claude Code', title: 'Claude Code · web-app', detail: 'Claude needs your permission to use Bash', state: 'attention', receipt: '', time: now - 50,
        task: 'Deploy the preview build', started: now - 400, app: 'com.apple.Terminal'},
       {key: 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', detail: 'Refactor the billing module and add tests', state: 'working', receipt: '', time: now - 95,
-       task: 'Refactor the billing module and add tests', started: now - 95, app: 'com.microsoft.VSCode'},
+       task: 'Refactor the billing module and add tests', started: now - 95, app: 'com.microsoft.VSCode', activity: 'Edit billing.py', tools: 14},
       {key: 'f'.repeat(64), source: 'Claude Code', title: 'Claude Code · small-tool', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: 'connector/' + 'a'.repeat(64), time: now - 240,
        task: 'Refactor billing.py and add tests for refunds', started: now - 540, app: 'com.googlecode.iterm2',
        facts: {files: ['billing.py', 'tests/test_billing.py'], fileCount: 2, commands: 3, failedTools: 0, tests: 'passed', testCommand: 'pytest -q'}}
@@ -112,6 +112,14 @@ function fakeHost(seed) {
       throw Error('Unsupported connector action.');
     },
     copy: message => { state.clipboard = message.text; return true; },
+    settings: message => {
+      state.settings = {hotkeys: true, keepAwake: false, hotkeyLabels: ['⌃⌥Space', '⌃⌥N'], takenShortcuts: [], keepingAwake: false, ...state.settings, ...message};
+      return state.settings;
+    },
+    hookLog: () => [
+      {time: now - 30, source: 'Claude Code', event: 'PostToolUse', session: '1a2b3c4d', outcome: 'delivered'},
+      {time: now - 90, source: 'Claude Code', event: '', session: '', outcome: 'problem: Expecting value: line 1 column 1 (char 0)'}
+    ],
     exportBackup: message => { state.backupFile = message.text; state.backupName = message.name; return '/Users/test/Downloads/' + message.name; },
     importBackup: () => state.importFile ?? null,
     downloadModel: message => {

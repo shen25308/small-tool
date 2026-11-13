@@ -64,6 +64,30 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var web: WKWebView!
     private var compact = false
     private lazy var card = CornerCard()
+    private lazy var hotkeys = GlobalHotkeys { [weak self] action in self?.hotkey(action) }
+    private let keepAwake = KeepAwake()
+    private var hotkeysOn: Bool { UserDefaults.standard.object(forKey:"ShiShiHotkeys") as? Bool ?? true }
+    private var keepAwakeOn: Bool { UserDefaults.standard.bool(forKey:"ShiShiKeepAwake") }
+    private var takenShortcuts: [String] = []
+    private var agentsWorking = false
+    /// ⌃⌥Space shows or hides the card from any app; ⌃⌥N shows it with the add field ready, without
+    /// taking focus from the app you were in until you type.
+    private func hotkey(_ action: GlobalHotkeys.Action) {
+        switch action {
+        case .toggleCard:
+            if compact && card.panel.isVisible { card.panel.orderOut(nil) }
+            else if compact { card.show(pinned:pinned) }
+            else { setCompact(true) }
+        case .quickAdd:
+            if !compact { setCompact(true) } else if !card.panel.isVisible { card.show(pinned:pinned) }
+            card.panel.makeKeyAndOrderFront(nil)
+            tell("focusQuickAdd",true)
+        }
+    }
+    private func settingsState() -> [String:Any] {
+        ["hotkeys":hotkeysOn,"hotkeyLabels":GlobalHotkeys.labels.sorted {$0.key.rawValue < $1.key.rawValue}.map(\.value),
+         "takenShortcuts":takenShortcuts,"keepAwake":keepAwakeOn,"keepingAwake":keepAwake.holding]
+    }
     private var mainBackdrop: NSVisualEffectView!
     // Off unless chosen: a window that floats above everything is a deliberate preference.
     private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? false
@@ -166,7 +190,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         let update=agentBoard.scan()
         guard force || update.changed else {return}
         let rows=AgentBoard.wire(update.items)
+        let working=update.items.contains {$0.state=="working"}
         DispatchQueue.main.async {
+            self.agentsWorking=working
+            self.keepAwake.update(working:working && self.keepAwakeOn)
             self.menuBar.update(agents:update.items)
             self.tell("setAgents",rows)
         }
@@ -261,6 +288,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         window.setFrameAutosaveName("ShiShiTallWorkspace")
         NSApplication.shared.servicesProvider = self
         makeMenu()
+        takenShortcuts=hotkeys.setEnabled(hotkeysOn)
         let ui = resources.appendingPathComponent("UI",isDirectory:true)
         web.loadFileURL(ui.appendingPathComponent("index.html"),allowingReadAccessTo: ui)
         if !startsWithToday {
@@ -718,6 +746,25 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             case "cardSize":
                 if let height=body["height"] as? Double, height.isFinite {card.setContentHeight(CGFloat(height))}
                 reply(id,true,true)
+            case "settings":
+                if let on=body["hotkeys"] as? Bool {
+                    UserDefaults.standard.set(on,forKey:"ShiShiHotkeys")
+                    takenShortcuts=hotkeys.setEnabled(on)
+                }
+                if let on=body["keepAwake"] as? Bool {
+                    UserDefaults.standard.set(on,forKey:"ShiShiKeepAwake")
+                    keepAwake.update(working:on && agentsWorking)
+                }
+                reply(id,true,settingsState())
+            case "hookLog":
+                // The last hook deliveries, newest first: event names and outcomes only, never content.
+                let log=file.deletingLastPathComponent().appendingPathComponent("HookLog.jsonl")
+                let lines=((try? String(contentsOf:log,encoding:.utf8)) ?? "").split(separator:"\n").suffix(100)
+                let rows=lines.reversed().compactMap { (try? JSONSerialization.jsonObject(with:Data($0.utf8))) as? [String:Any] }
+                    .map { row in ["time":row["time"] as? Double ?? 0,"source":String((row["source"] as? String ?? "").prefix(40)),
+                                   "event":String((row["event"] as? String ?? "").prefix(40)),"session":String((row["session"] as? String ?? "").prefix(8)),
+                                   "outcome":String((row["outcome"] as? String ?? "").prefix(160))] as [String:Any] }
+                reply(id,true,rows)
             case "cardPrefs":
                 // Window behaviour of the card is a set of explicit choices.
                 if let snap=body["snap"] as? Bool {card.snapsToCorners=snap}

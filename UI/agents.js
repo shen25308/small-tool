@@ -26,12 +26,18 @@ function agentEntries() {
   return entries.sort((a, b) => agentOrder[a.state] - agentOrder[b.state] || b.time - a.time);
 }
 
+// What a working session is doing now, from its last tool: "Edit billing.py · 14 tools".
+function agentActivity(entry) {
+  if (entry.state !== 'working' || !entry.activity) return '';
+  return entry.activity + (entry.tools > 1 ? ' · ' + entry.tools + ' tools' : '');
+}
 function agentMarkup(entry) {
-  const state = agentWords[entry.state] || 'Idle';
+  const state = entry.ended ? 'Stopped' : agentWords[entry.state] || 'Idle';
+  const detail = agentActivity(entry) || entry.detail;
   return '<button type="button" class="agent-row" data-agent="' + esc(entry.key) + '" title="' + esc(entry.title + (entry.detail ? '\n' + entry.detail : '')) + '">' +
-    '<span class="agent-dot ' + esc(entry.state) + '" aria-hidden="true"></span><span class="agent-title">' + esc(entry.title) + '</span>' +
+    '<span class="agent-dot ' + esc(entry.ended ? 'ended' : entry.state) + '" aria-hidden="true"></span><span class="agent-title">' + esc(entry.title) + '</span>' +
     '<span class="agent-time">' + agentAge(entry.time) + '</span>' +
-    '<span class="agent-detail"><span class="agent-state ' + esc(entry.state) + '">' + state + '</span>' + (entry.detail ? ' · ' + esc(entry.detail) : '') + '</span></button>';
+    '<span class="agent-detail"><span class="agent-state ' + esc(entry.ended ? 'ended' : entry.state) + '">' + state + '</span>' + (detail ? ' · ' + esc(detail) : '') + '</span></button>';
 }
 
 function dismissAgent(entry) {

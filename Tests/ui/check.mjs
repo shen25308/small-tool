@@ -1049,6 +1049,34 @@ await check('native capture flags open the right sheets', {}, async ({page}) => 
   await page.locator('.color-picker').waitFor();
 });
 
+await check('agents: current tool, stopped sessions, settings and diagnostics', {}, async ({page, host}) => {
+  // A working session shows what it is doing now; a session whose process died shows Stopped.
+  assert.match(await text(page, '#agentList'), /Working · Edit billing\.py · 14 tools/);
+  await page.evaluate(() => {
+    const rows = window.__host.agents.map(row => row.state === 'working' ? {...row, state: 'idle', ended: true, activity: '', detail: 'The session ended without a final reply.'} : row);
+    window.setAgents(rows);
+  });
+  assert.match(await text(page, '#agentList'), /Stopped · The session ended without a final reply\./);
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  const hotkeys = page.locator('[data-setting="hotkeys"]'), awake = page.locator('[data-setting="keepAwake"]');
+  await page.waitForFunction(() => !document.querySelector('[data-setting="hotkeys"]').disabled);
+  assert.deepEqual([await hotkeys.isChecked(), await awake.isChecked()], [true, false]);
+  assert.match(await text(page, '#hotkeyNote'), /⌃⌥Space shows or hides the card\. ⌃⌥N adds a task\./);
+  await awake.check();
+  await page.waitForFunction(() => window.__host.settings.keepAwake === true);
+  await hotkeys.uncheck();
+  await page.waitForFunction(() => window.__host.settings.hotkeys === false);
+  await page.click('#hookLogBox summary');
+  await page.locator('#hookLog .hook-outcome').first().waitFor();
+  assert.match(await text(page, '#hookLog'), /PostToolUse[\s\S]*session 1a2b3c4d[\s\S]*delivered[\s\S]*Unreadable event[\s\S]*problem:/);
+});
+
+await check('global shortcut focuses the card add field', {width: 340, height: 600, compact: true}, async ({page}) => {
+  await page.evaluate(() => window.focusQuickAdd());
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'cardAddInput');
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);
