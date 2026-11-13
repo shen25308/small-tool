@@ -1,155 +1,119 @@
-.result-card {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--paper);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-  font-family: var(--sans);
-}
+/* Result cards, status glyphs and evidence. Shared by the inbox, the latest-result
+   shelf and the desktop result panel, so it depends only on tokens.css and icons.css. */
 
+/* Status glyph: one 16px mark per state. Shape and fill differ as well as colour.
+     working    spinning ring       something is running
+     attention  filled amber bang   waiting for you
+     done       outlined check      the agent finished; nothing checked by Shishi
+     passed     filled green check  a run Shishi observed succeeded
+     failed     filled red cross    a run Shishi observed failed
+     build      outlined play       an observed run with another conclusion
+     reported   dashed check        the agent says it verified something
+     mail, due  plain icons */
+.status-glyph { position: relative; display: inline-grid; place-items: center; flex: none; width: 16px; height: 16px; border-radius: 50%; color: var(--ink-3) }
+.status-glyph::after { content: ""; width: 100%; height: 100%; background: currentColor; -webkit-mask: var(--glyph, var(--i-check-circle)) center / contain no-repeat; mask: var(--glyph, var(--i-check-circle)) center / contain no-repeat }
+.status-glyph[data-state="attention"] { background: var(--warn-fill); color: var(--warn-on); --glyph: var(--i-alert) }
+.status-glyph[data-state="passed"] { background: var(--ok-fill); color: #fff; --glyph: var(--i-check) }
+.status-glyph[data-state="failed"] { background: var(--bad-fill); color: #fff; --glyph: var(--i-x) }
+.status-glyph:is([data-state="attention"], [data-state="passed"], [data-state="failed"])::after { width: 11px; height: 11px }
+.status-glyph[data-state="build"] { --glyph: var(--i-run) }
+.status-glyph[data-state="mail"] { --glyph: var(--i-envelope) }
+.status-glyph[data-state="due"] { color: var(--warn); --glyph: var(--i-clock) }
+.status-glyph[data-state="reported"] { border: 1.25px dashed var(--ink-3); --glyph: var(--i-check) }
+.status-glyph[data-state="reported"]::after { width: 9px; height: 9px }
+.status-glyph[data-state="working"] { border: 1.75px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: status-spin .9s linear infinite }
+.status-glyph[data-state="working"]::after { display: none }
+@keyframes status-spin { to { transform: rotate(1turn) } }
+@media (prefers-reduced-motion: reduce) { .status-glyph[data-state="working"] { animation: none; border-style: dotted; border-color: var(--accent) } }
+
+.result-card { min-width: 0; padding: 12px; border-radius: var(--radius-lg); background: var(--raised); color: var(--ink); box-shadow: var(--shadow-slip); overflow-wrap: anywhere; font-family: var(--font-sans) }
 .result-card.has-preview { padding: 0 }
 .result-meta, .result-footer, .result-shelf-head { display: flex; align-items: center; gap: 8px }
-.result-meta {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.result-source {
-  order: -1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 600;
-  color: var(--secondary);
-}
-.result-state, .result-meta time { flex: none }
-.result-state.attention { color: var(--warning); font-weight: 600 }
+.result-meta { min-width: 0; color: var(--ink-3); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap }
+.result-source { order: -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 650; color: var(--ink-2) }
+.result-state { flex: none }
+.result-source { flex: 0 0 auto; max-width: 50% }
+.result-meta time { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis }
+.result-state.attention { color: var(--warn); font-weight: 650 }
+.result-state.passed { color: var(--ok); font-weight: 600 }
+.result-state.failed { color: var(--bad); font-weight: 650 }
 .result-meta time { margin-left: auto }
-.result-headline {
-  margin: 5px 0;
-  color: var(--ink);
-  font: 600 15px/1.45 var(--sans);
-}
+.result-headline { margin: 5px 0; color: var(--ink); font: 600 var(--text-lg)/1.45 var(--font-sans) }
 
+/* Collapsed preview: glyph, source and state, then one line of the result. */
 .result-preview {
-  display: grid;
-  grid-template-columns: 6px minmax(0, 1fr) 8px;
-  grid-template-areas: "unread meta arrow" "unread headline arrow";
-  column-gap: 8px;
-  width: 100%;
-  min-height: 42px;
-  box-sizing: border-box;
-  padding: 5px 12px 5px 10px;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) 14px; grid-template-areas: "glyph meta arrow" "glyph headline arrow";
+  column-gap: 11px; align-items: center; width: 100%; min-height: 50px; padding: 7px 12px 8px 13px;
+  border: 0; border-radius: inherit; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer;
 }
-.unread .result-preview::before {
-  content: "";
-  grid-area: unread;
-  align-self: center;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blue);
-}
-.result-preview .result-meta { grid-area: meta; gap: 7px; font-size: 10.5px; line-height: 13px }
-.result-preview .result-headline {
-  grid-area: headline;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin: 1px 0 0;
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 550;
-}
-.result-chevron {
-  grid-area: arrow;
-  align-self: center;
-  justify-self: center;
-  width: 6px;
-  height: 6px;
-  border: solid var(--muted);
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(-45deg);
-}
-.result-preview[aria-expanded=true] { padding-top: 9px }
-.result-preview[aria-expanded=true] .result-chevron { transform: rotate(45deg) }
-.result-preview[aria-expanded=true] .result-headline {
-  overflow: visible;
-  white-space: normal;
-  margin-top: 4px;
-  font-weight: 600;
-  font-size: 15px;
-  line-height: 1.45;
-}
+.result-preview > .status-glyph { grid-area: glyph }
+.result-preview .result-meta { grid-area: meta; gap: 7px; line-height: 15px }
+.result-preview .result-headline { grid-area: headline; min-width: 0; margin: 2px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: var(--text-md); line-height: 19px; font-weight: 450 }
+.unread .result-preview .result-headline { color: var(--ink); font-weight: 600 }
+.unread .result-source::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--seal-fill); vertical-align: 1px }
+.result-chevron { grid-area: arrow; justify-self: end; width: 14px; height: 14px; background: var(--ink-4); -webkit-mask: var(--i-chevron-right) center / contain no-repeat; mask: var(--i-chevron-right) center / contain no-repeat; transition: transform var(--quick) var(--ease) }
+.result-preview:hover .result-chevron { background: var(--ink-2) }
+.result-preview[aria-expanded="true"] { align-items: start; padding-top: 11px }
+.result-preview[aria-expanded="true"] > .status-glyph { margin-top: 1px }
+.result-preview[aria-expanded="true"] .result-chevron { transform: rotate(90deg) }
+.result-preview[aria-expanded="true"] .result-headline { overflow: visible; white-space: normal; margin-top: 5px; color: var(--ink); font: 600 17px/1.4 var(--font-display); letter-spacing: -.005em }
 .result-preview:hover, .result-expand:hover { background-color: var(--hover) }
-.result-preview:focus-visible, .result-expand:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
-}
-.result-details:not([hidden]) { display: block; padding: 0 12px 9px 24px }
-.result-files { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 }
-.result-files code {
-  min-width: 0;
-  max-width: 100%;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--control);
-  color: var(--secondary);
-  overflow-wrap: anywhere;
-  font: 11px/1.5 ui-monospace, "SFMono-Regular", monospace;
-}
-.result-points { margin: 7px 0; padding-left: 17px; font: 13px/1.6 var(--sans) }
-.result-points li::marker { color: var(--muted) }
-.result-context, .result-quote {
-  margin: 7px 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: 13px/1.55 var(--sans);
-}
-.result-quote {
-  border-left: 2px solid var(--line);
-  padding-left: 9px;
-  color: var(--secondary);
-}
-.result-footer { justify-content: space-between; margin-top: 8px }
-.result-thread { min-width: 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.result-expand {
-  flex: none;
-  margin-left: auto;
-  padding: 3px 5px;
-  border: 0;
-  border-radius: 5px;
-  color: var(--blue);
-  background: transparent;
-  font: 500 12px/1.5 var(--sans);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.result-original { border-top: 1px solid var(--line); margin-top: 7px; padding-top: 2px }
-.result-original p { font: 13px/1.65 var(--sans); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; margin: 8px 0 }
+.result-preview:active { background-color: var(--press) }
+.result-preview:focus-visible, .result-expand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px }
+.result-preview[aria-expanded="true"]:hover { background: none }
 
-#latestResult { margin-bottom: 14px }
+/* Expanded digest */
+.result-details:not([hidden]) { display: block; padding: 0 14px 12px 40px }
+.result-files { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 10px }
+.result-files code { min-width: 0; max-width: 100%; padding: 1px 7px; border-radius: var(--radius-sm); background: var(--sunken); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); overflow-wrap: anywhere; font: var(--text-xs)/1.6 var(--font-mono) }
+.result-points { margin: 8px 0; padding: 0; list-style: none; font: var(--text-md)/1.55 var(--font-sans) }
+.result-points li { position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 9px; padding: 5px 0 }
+.result-points li::before { content: ""; width: 5px; height: 5px; margin: 8px auto 0; border-radius: 50%; background: var(--ink-4) }
+.result-points li:has(> .status-glyph)::before { display: none }
+.result-points li > .status-glyph { margin-top: 2.5px }
+.result-points .point-kind { display: block; margin-bottom: 1px; font-size: var(--text-2xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3) }
+.result-points li[data-kind="concern"] .point-kind { color: var(--warn) }
+.result-context, .result-quote { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--text-md)/1.6 var(--font-sans) }
+.result-context { color: var(--ink-2) }
+.result-quote { max-height: none; padding: 2px 0 2px 12px; border-left: 2px solid var(--line-strong); border-radius: 0; background: none; color: var(--ink-2); font-style: italic }
+
+/* Evidence. Observed: Shishi fetched the outcome itself — solid border, filled glyph.
+   Reported: the agent's own statement — dashed border, hollow glyph, and it says so. */
+.evidence { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 9px; align-items: start; margin: 8px 0; padding: 9px 11px; border-radius: var(--radius-md); font: var(--text-sm)/1.5 var(--font-sans); color: var(--ink-2) }
+.evidence .status-glyph { margin-top: 1px }
+.evidence b { display: block; color: var(--ink); font-weight: 650 }
+.evidence.observed { background: var(--ok-wash); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok-fill) 45%, transparent) }
+.evidence.observed.failed { background: var(--bad-wash); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad-fill) 45%, transparent) }
+.evidence.observed.neutral { background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line-strong) }
+.evidence.reported { background: none; border: 1px dashed var(--line-strong) }
+.evidence.attention { background: var(--warn-wash); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn-fill) 55%, transparent) }
+
+.result-footer { justify-content: space-between; margin-top: 10px }
+.result-thread { min-width: 0; color: var(--ink-3); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.result-expand { flex: none; margin-left: auto; padding: 3px 10px; border: 0; border-radius: var(--radius-pill); color: var(--accent); background: var(--accent-wash); font: 550 var(--text-xs)/1.6 var(--font-sans); white-space: nowrap; cursor: pointer }
+.result-expand:hover { background: color-mix(in srgb, var(--accent-wash) 86%, var(--accent)) }
+
+/* Reading: the stored reply, set for comfortable long-form reading and selection. */
+.result-original { margin-top: 12px; padding: 12px 14px 12px; border-radius: var(--radius-md); background: var(--paper); box-shadow: inset 0 0 0 1px var(--line) }
+.result-original::before { content: "Stored reply"; display: block; margin-bottom: 4px; color: var(--ink-3); font: 650 var(--text-2xs)/1.5 var(--font-sans); letter-spacing: .06em; text-transform: uppercase }
+.result-original p { max-width: 68ch; margin: 6px 0 8px; font: 14px/var(--leading-read) var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text }
+.result-original .mini-link { margin-left: -7px; padding: 3px 7px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--accent); font: 550 var(--text-sm)/1.5 var(--font-sans); cursor: pointer }
+.result-original .mini-link:hover { background: var(--accent-wash) }
+
+/* Shelf and lists */
+#latestResult { margin-bottom: var(--space-4) }
 .result-shelf-head { justify-content: space-between; margin: 0 0 6px }
-.result-shelf-head h2 { margin: 0; color: var(--secondary); font: 600 13px/17px var(--sans) }
+.result-shelf-head h2 { margin-right: auto; color: var(--ink-3); font: 600 var(--text-2xs)/1.5 var(--font-sans); letter-spacing: .06em; text-transform: uppercase }
 .result-cards { display: grid; min-width: 0 }
-#inboxCards:has(.result-card) {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
+#inboxCards:has(.result-card) { border-radius: var(--radius-lg); overflow: hidden; background: var(--raised); box-shadow: var(--shadow-slip) }
+#inboxCards .result-card { border-radius: 0; box-shadow: none; background: none }
+#inboxCards .result-card + .result-card { border-top: 1px solid var(--line) }
+#inboxCards .result-card.details-open { background: color-mix(in srgb, var(--accent-wash) 30%, transparent) }
+#inboxList #olderResults:not([hidden]) { display: flex; margin: var(--space-3) auto 0 }
+
+/* Narrow sheets drop the timestamp from collapsed rows so source and state stay whole. */
+#dialogBody { container-type: inline-size }
+@container (max-width: 400px) {
+  .result-preview[aria-expanded="false"] time { display: none }
+  .result-details:not([hidden]) { padding-left: 14px }
 }
-#inboxCards .result-card { border: 0; border-radius: 0 }
-#inboxCards .result-card + .result-card { border-top: 1px solid var(--hairline) }
-#inboxList #olderResults:not([hidden]) { display: block; margin: 12px auto }
-.inbox-tools { flex-wrap: wrap }

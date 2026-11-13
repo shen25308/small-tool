@@ -33,30 +33,39 @@ const cardOptions={
   read:note=>action(native('readNotice',{key:note.id,channel:note.channel})),
   open:note=>action(note.thread?native('openCodex',{thread:note.thread}):native('openConnectorLink',{key:note.id}))
 };
-function latestResult() {
+function latestResult(force=false) {
   const latest=allNotices()[0];
   const slot=$('latestCard');
   const old=slot.firstElementChild;
   $('latestResult').hidden=!latest;
   if(!latest){slot.replaceChildren();return}
-  if(old?.dataset.notice===latest.id){old.classList.toggle('unread',!latest.read);return}
-  // Preserve an original reply while the user is reading it. The full inbox still receives new cards.
-  if(old?.querySelector('[aria-expanded="true"]') && allNotices().some(n=>n.id===old.dataset.notice))return;
+  const newer=$('newerResult');
+  if(old?.dataset.notice===latest.id){old.classList.toggle('unread',!latest.read);newer.hidden=true;return}
+  // Keep the card someone is reading or has focused. A quiet control offers the newer one instead;
+  // the full inbox still receives every card.
+  const engaged=old && (old.querySelector('[aria-expanded="true"]') || old.contains(document.activeElement));
+  if(!force && engaged && allNotices().some(n=>n.id===old.dataset.notice)){newer.hidden=false;return}
+  newer.hidden=true;
   const options={...cardOptions,preview:true,previewChanged:open=>{
     if(compact)action(native('latestSize',{expanded:open}));
     if(!open)latestResult();
   }};
   slot.replaceChildren(ResultUI.card(latest,options));
 }
+$('newerResult').onclick=()=>{latestResult(true);$('latestCard').querySelector('.result-preview')?.focus()};
 function listNotices() {
   if(!$('dialog').open || !$('inboxList')){
     dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="syncInbox" class="mini-link">Sync now</button><button id="connectors" class="secondary">Manage connectors</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',inboxFromEdge?{label:'Back to panel',back:returnToEdge}:{label:'Back to workspace',back:closeDialog});
     $('connectors').onclick=showConnectors;
     $('olderResults').onclick=()=>{resultLimit+=30;listNotices()};
-    $('syncInbox').onclick=()=>action(native('syncInboxes').then(()=>{
-      lastManualScan=new Intl.DateTimeFormat('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
-      if($('dialog').open && $('inboxList'))listNotices();
-    }));
+    $('syncInbox').onclick=()=>{
+      const button=$('syncInbox');
+      button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Syncing…';
+      action(native('syncInboxes').then(()=>{
+        lastManualScan=new Intl.DateTimeFormat('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
+        if($('dialog').open && $('inboxList'))listNotices();
+      }).finally(()=>{button.disabled=false;button.removeAttribute('aria-busy');button.textContent='Sync now'}));
+    };
   }
   const all=allNotices();
   const sources=[...new Set(all.map(sourceName))];
@@ -86,7 +95,8 @@ function listNotices() {
     existing.delete(note.id);
   }
   for(const node of existing.values())node.remove();
-  if(!visible.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='No results yet.';list.append(empty)}
+  list.querySelector('.empty')?.remove();
+  if(!visible.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=selectedInboxSource?'No results from this source.':'No results yet. Finished agent turns, builds and mail collect here.';list.append(empty)}
   $('olderResults').hidden=filtered.length<=resultLimit;
   if(scrolled&&before?.isConnected)$('dialog').scrollTop+=before.getBoundingClientRect().top-oldY;
 }
@@ -100,7 +110,7 @@ function showConnectors() {
   const fromGrok=allNotices().filter(n=>sourceName(n)==='Grok Bot');
   const receipt=fromGrok.length?'Last received '+inboxDate(fromGrok[0].time):'Awaiting first result';
   const status=inboxErrors.get('codex')?'Temporarily unavailable':'Checking…';
-  dialog('Connectors','<div class="connector-list"><section><h3>Mail and build updates</h3><div id="providerRows">Checking connections…</div><label class="toggle-label"><input type="checkbox" id="showEdgeMail" disabled>Show new mail in the result panel</label></section><section><h3>Codex <small id="codexState">'+status+'</small></h3><p>Shishi reads Codex sessions on this Mac and saves the final reply from each new turn. Your inbox keeps those replies after you disconnect.</p><button id="codexConnection" class="secondary" disabled>Check connection</button></section><section><h3>Grok Bot <small>'+esc(receipt)+'</small></h3><p>Copy the instructions into Grok Bot on your Mac. It can then run a local command to send a summary when a task finishes.</p><button id="copyGrok" class="secondary">Copy Grok Bot instructions</button></section><section><h3>Other AI apps (MCP)</h3><p>Add Shishi to an app that supports local MCP servers, then ask it to send the result when its task finishes.</p><button id="copyMCP" class="secondary">Copy MCP configuration</button></section></div>',{label:'Back to inbox',back:listNotices});
+  dialog('Connectors','<div class="connector-list"><section><h3>Mail and build updates</h3><div id="providerRows"><span class="hint is-working">Checking connections…</span></div><label class="toggle-label"><input type="checkbox" id="showEdgeMail" disabled>Show new mail in the result panel</label></section><section><h3>Codex <small id="codexState">'+status+'</small></h3><p>Shishi reads Codex sessions on this Mac and saves the final reply from each new turn. Your inbox keeps those replies after you disconnect.</p><button id="codexConnection" class="secondary" disabled>Check connection</button></section><section><h3>Grok Bot <small>'+esc(receipt)+'</small></h3><p>Copy the instructions into Grok Bot on your Mac. It can then run a local command to send a summary when a task finishes.</p><button id="copyGrok" class="secondary">Copy Grok Bot instructions</button></section><section><h3>Other AI apps (MCP)</h3><p>Add Shishi to an app that supports local MCP servers, then ask it to send the result when its task finishes.</p><button id="copyMCP" class="secondary">Copy MCP configuration</button></section></div>',{label:'Back to inbox',back:listNotices});
   ProviderUI.rows();
   const mailChoice=$('showEdgeMail');
   action(native('edgeMailPreference').then(value=>{

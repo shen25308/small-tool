@@ -1,0 +1,146 @@
+/*
+  Shishi design tokens — "Paper & Indigo".
+
+  One source for colour, type, shape, depth and motion. Every stylesheet in UI/
+  reads these names; nothing else should hard-code a colour. Each colour is a
+  light-dark() pair so both appearances are tuned side by side.
+
+  Roles, from back to front:
+    canvas  the desk: sidebar and window chrome
+    paper   the sheet you work on
+    raised  slips resting on the sheet: cards, menus, dialogs, selected items
+    sunken  wells cut into the sheet: quotes, code, quiet controls
+*/
+:root {
+  color-scheme: light dark;
+
+  /* Type. Headings use the system serif (New York on macOS) with a Songti
+     fallback so Chinese headings keep the same voice. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", Inter, system-ui, sans-serif;
+  --font-display: ui-serif, "New York", "Iowan Old Style", Charter, "Bitstream Charter", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  --text-2xs: 10.5px;
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-md: 13.5px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-display: 27px;
+  --leading-tight: 1.3;
+  --leading: 1.5;
+  --leading-read: 1.7;
+
+  /* Space: a 4px rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 36px;
+
+  /* Shape. Small things are softly squared, floating things are rounder. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  --control-height: 28px;
+
+  /* Surfaces */
+  --canvas: light-dark(#f1ece3, #17181b);
+  --paper: light-dark(#fbf8f3, #1e1f23);
+  --raised: light-dark(#fffdfa, #292a30);
+  --sunken: light-dark(#f3eee6, #17181b);
+  --field: light-dark(#fffdfa, #18191c);
+
+  /* Ink */
+  --ink: light-dark(#22252c, #ece8e0);
+  --ink-2: light-dark(#454852, #cbc7bf);
+  --ink-3: light-dark(#66676d, #a3a09a);
+  --ink-4: light-dark(#8a887f, #77767a);
+
+  /* Lines */
+  --line: light-dark(#e6dfd3, #303137);
+  --line-strong: light-dark(#d3cab9, #44454d);
+
+  /* Indigo: the one working accent. Links, focus, selection, primary actions,
+     and "something is in progress". */
+  --accent: light-dark(#2c4c96, #a9c0f5);
+  --accent-fill: light-dark(#2f52a3, #4368be);
+  --accent-on: #fff;
+  --accent-wash: light-dark(#e7ecf6, #262d40);
+
+  /* Cinnabar: the seal. Reserved for what is new or urgent — unread, P0, overdue. */
+  --seal: light-dark(#b93a26, #f29078);
+  --seal-fill: light-dark(#c2412d, #c4513d);
+  --seal-wash: light-dark(#f8e5df, #40251f);
+
+  /* Status. Each one is also carried by a shape and a word, never colour alone. */
+  --ok: light-dark(#2a6a4f, #8fd0ad);
+  --ok-fill: light-dark(#2f7558, #33795c);
+  --ok-wash: light-dark(#e2efe7, #1f3229);
+  --warn: light-dark(#7d4e05, #edc47c);
+  --warn-fill: light-dark(#e2a63a, #e0ab4c);
+  --warn-on: #2b1e02;
+  --warn-wash: light-dark(#f8ecd0, #3a2f17);
+  --bad: light-dark(#a2332a, #f4978a);
+  --bad-fill: light-dark(#b23c31, #b9483c);
+  --bad-wash: light-dark(#f8e4e0, #3f2320);
+
+  /* Interaction */
+  --hover: light-dark(rgba(72, 58, 30, .065), rgba(236, 232, 224, .07));
+  --press: light-dark(rgba(72, 58, 30, .12), rgba(236, 232, 224, .12));
+  --focus-ring: light-dark(rgba(47, 82, 163, .55), rgba(169, 192, 245, .7));
+  --overlay: light-dark(rgba(46, 40, 30, .28), rgba(0, 0, 0, .5));
+
+  /* Depth: warm, low shadows. A slip barely lifts; a dialog clearly floats. */
+  --shadow-slip: 0 0 0 1px light-dark(rgba(70, 56, 30, .09), rgba(255, 255, 255, .07)),
+                 0 1px 2px light-dark(rgba(70, 56, 30, .1), rgba(0, 0, 0, .4));
+  --shadow-float: 0 0 0 1px light-dark(rgba(70, 56, 30, .1), rgba(255, 255, 255, .09)),
+                  0 10px 30px -6px light-dark(rgba(70, 56, 30, .24), rgba(0, 0, 0, .6)),
+                  0 2px 6px light-dark(rgba(70, 56, 30, .08), rgba(0, 0, 0, .3));
+  --shadow-modal: 0 0 0 1px light-dark(rgba(70, 56, 30, .1), rgba(255, 255, 255, .09)),
+                  0 28px 70px -12px light-dark(rgba(60, 46, 20, .38), rgba(0, 0, 0, .75)),
+                  0 4px 12px light-dark(rgba(70, 56, 30, .1), rgba(0, 0, 0, .35));
+
+  /* Selected item in the sidebar: a slip lifted off the desk. */
+  --selected-bg: var(--raised);
+  --selected-ink: var(--ink);
+  --selected-shadow: var(--shadow-slip);
+
+  /* Tag dyes: muted natural tones that sit quietly next to the ink. */
+  --tone-0: light-dark(#8a573c, #e6b598);
+  --tone-1: light-dark(#98415c, #eaa0b3);
+  --tone-2: light-dark(#3b6289, #a3c8e6);
+  --tone-3: light-dark(#775b15, #e6c684);
+  --tone-4: light-dark(#665788, #c9bdea);
+  --tone-5: light-dark(#326b59, #98cfbe);
+  --tone-6: light-dark(#7f4a65, #e2a8c1);
+
+  /* Cover: paper sky, cinnabar sun, indigo ridgelines fading into mist. */
+  --sky-top: light-dark(#f4eadb, #1d2233);
+  --sky-bottom: light-dark(#dfe5ee, #2a3350);
+  --sun: light-dark(#d2543c, #e9dfc9);
+  --ridge-far: light-dark(#b7c4dc, #36436a);
+  --ridge-mid: light-dark(#7f95bf, #2a3558);
+  --ridge-near: light-dark(#3f568f, #1c2440);
+
+  /* Motion */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --quick: .12s;
+  --calm: .22s;
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --line: light-dark(#8d8676, #8b8c94);
+    --line-strong: var(--ink-2);
+    --ink-3: var(--ink-2);
+    --focus-ring: var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --quick: 0s; --calm: 0s }
+}

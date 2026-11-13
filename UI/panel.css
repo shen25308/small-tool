@@ -1,66 +1,27 @@
-:root {
-  color-scheme: light dark;
-  --sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --paper: #fff;
-  --panel: #f2f3f6;
-  --ink: #202126;
-  --muted: #60636c;
-  --secondary: #434750;
-  --line: #dedfe5;
-  --control: #f3f4f7;
-  --hover: rgba(100,105,121,.09);
-  --blue: #075fd5;
-  --warning: #86540a;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #202124;
-    --panel: #292a2e;
-    --ink: #f1f1f4;
-    --muted: #aaaeb7;
-    --secondary: #d1d2d9;
-    --line: #43454c;
-    --control: #33353a;
-    --hover: rgba(212,218,239,.09);
-    --blue: #81b6ff;
-    --warning: #f0bf73;
-  }
-}
+/* Desktop result panel: one result on a small floating sheet. Sizes are set by the
+   host (292×80 preview, 372×272 details, 410×430 stored reply). */
 * { box-sizing: border-box }
-html, body { height: 100%; margin: 0; font: 13px/1.45 var(--sans); color: var(--ink); background: var(--paper) }
+[hidden] { display: none !important }
+html, body { height: 100%; margin: 0; font: var(--text-md)/var(--leading) var(--font-sans); color: var(--ink); background: var(--paper) }
 body { display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased }
-#edgeResult {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-top: 4px;
-}
-#edgeResult .result-card { border: 0; border-radius: 0 }
-#edgeResult .result-preview { padding-right: 13px }
-#edgeResult .result-points, #edgeResult .result-quote { font-size: 12px; line-height: 1.55 }
-.edge-empty { margin: 10px 14px; color: var(--muted); font-size: 12px }
+button { font: inherit; color: inherit; cursor: pointer }
+#edgeResult { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin }
+#edgeResult .result-card { border-radius: 0; background: none; box-shadow: none }
+#edgeResult .result-preview { min-height: 48px; padding: 6px 12px 6px 12px; column-gap: 10px }
+#edgeResult .result-details:not([hidden]) { padding: 0 14px 12px 38px }
+#edgeResult .result-points, #edgeResult .result-quote, #edgeResult .result-context { font-size: var(--text-sm) }
+#edgeResult .result-preview[aria-expanded="true"] .result-headline { font-size: 16px }
+#edgeResult .result-original p { font-size: var(--text-md) }
+.edge-empty { display: flex; align-items: center; gap: 9px; margin: 15px 14px; color: var(--ink-3); font-size: var(--text-sm) }
 
-#edgeBottom {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  min-height: 26px;
-  padding: 2px 7px;
-  border-top: 1px solid var(--line);
-  background: var(--panel);
-}
-#edgeBottom button, .mini-link {
-  padding: 2px 5px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--blue);
-  font: 500 11px/16px var(--sans);
-  cursor: pointer;
-}
-#edgeBottom button:hover, .mini-link:hover { background-color: var(--hover) }
-button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px }
-#workspace { margin-right: auto }
+#edgeBottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px; min-height: 28px; padding: 2px 6px; border-top: 1px solid var(--line); background: var(--canvas) }
+#edgeBottom button, .mini-link { display: inline-flex; align-items: center; gap: 2px; padding: 2px 7px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--accent); font: 550 var(--text-xs)/18px var(--font-sans); white-space: nowrap }
+#edgeBottom button:hover, .mini-link:hover { background-color: var(--accent-wash) }
+#edgeBottom button:active { background-color: var(--press) }
+#edgeBottom .symbol { width: 12px; height: 12px }
+button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px }
+#workspace { margin-right: auto; padding-left: 3px }
+#newer { color: var(--accent-on); background: var(--accent-fill); border-radius: var(--radius-pill) }
+#newer:hover { background: color-mix(in srgb, var(--accent-fill) 88%, #000) }
+#edgeResult { container-type: inline-size }
+@container (max-width: 330px) { .result-preview[aria-expanded="false"] time { display: none } }

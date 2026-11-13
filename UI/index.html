@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'">
-  <link rel="stylesheet" href="symbols.css">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="icons.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="results.css">
   <link rel="stylesheet" href="board.css">
@@ -25,22 +26,23 @@
     <main>
       <div class="content">
         <header class="mountain-cover">
-          <div class="mountain-art" aria-hidden="true"><i class="back-range"></i><i class="middle-range"></i><i class="front-hills"></i></div>
+          <div class="mountain-art" aria-hidden="true"><i class="sun"></i><i class="back-range"></i><i class="middle-range"></i><i class="front-hills"></i></div>
           <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button>
           <div class="cover-tools">
-            <button id="inboxButton" title="Open inbox"><span>Inbox</span><span id="inboxBadge" hidden></span></button>
-            <button id="searchTasks" aria-label="Search tasks" title="Search tasks (⌘F)"><span class="search-icon" aria-hidden="true"></span></button>
-            <button id="boardMore" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span aria-hidden="true">•••</span></button>
+            <button id="inboxButton" title="Open inbox"><span class="symbol inbox" aria-hidden="true"></span><span>Inbox</span><span id="inboxBadge" hidden></span></button>
+            <button id="searchTasks" aria-label="Search tasks" title="Search tasks (⌘F)"><span class="symbol search-glyph" aria-hidden="true"></span></button>
+            <button id="boardMore" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span class="symbol more-glyph" aria-hidden="true"></span></button>
           </div>
         </header>
         <div class="board-content">
           <section class="page-heading">
             <div class="heading-line"><span id="viewIcon" aria-hidden="true"></span><h1 id="pageTitle">Today</h1></div>
             <div id="dateline"></div>
+            <div id="dayProgress" hidden><span class="progress-track" aria-hidden="true"><i></i></span><span id="dayProgressLabel"></span></div>
             <button id="wrapUp" title="Review today's tasks">Wrap up</button>
           </section>
-          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result">×</button></div><div id="latestCard"></div></section></div>
-          <div class="listhead"><div class="reader-only"><h2 id="sectionTitle"></h2><span id="count"></span></div><label class="sort-menu"><span aria-hidden="true">⇅</span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual order</option><option value="priority">Priority</option><option value="deadline">Deadline</option></select></label></div>
+          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="newerResult" class="mini-link" hidden>Show newer result</button><button id="closePeek" class="icon-button" aria-label="Hide latest result" title="Hide latest result"><span class="symbol close-icon" aria-hidden="true"></span></button></div><div id="latestCard"></div></section></div>
+          <div class="listhead"><div class="reader-only"><h2 id="sectionTitle"></h2><span id="count"></span></div><label class="sort-menu"><span class="symbol sort-glyph" aria-hidden="true"></span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual order</option><option value="priority">Priority</option><option value="deadline">Deadline</option></select></label></div>
           <div id="tasks"></div><div id="pool"></div>
         </div>
       </div>

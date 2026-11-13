@@ -153,7 +153,8 @@ window.ShishiDigest = (() => {
     const quote = rest.find(row => !picked.includes(row) && row.original.length >= 8);
     return {
       headline,
-      details: picked.map(row=>shorten(row.text,115)),
+      // kind tells the card whether a line is unresolved work, a check the agent reports, a next step or a change.
+      details: picked.map(row=>({text:shorten(row.text,115), kind:row.concern?'concern':row.check?'check':row.next?'next':'change'})),
       excerpt: quote ? shorten(quote.original,125) : '',
       files: files.slice(0,3),
       status: rows.some(row=>row.concern) ? 'attention' : 'reply'

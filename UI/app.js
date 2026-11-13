@@ -75,8 +75,8 @@ function row(t) {
     '<button class="task-body" data-act="edit" title="' + title + '"><span class="title">' + title + '</span></button>' +
     '<button class="task-tag ' + (t.tag ? taskTagColor(t.tag) : 'no-tag') + '" data-act="tag" aria-haspopup="dialog" aria-label="Edit tag for ' + title + '" title="' + esc(tagLabel) + '">' + esc(tagLabel) + '</button>' +
     planned +
-    '<button class="task-deadline' + (t.dueDate ? ' has-deadline' : ' no-deadline') + '" data-act="deadline" aria-haspopup="dialog" aria-label="Edit deadline for ' + title + '" title="' + esc(deadlineLabel(t)) + '">' +
-    (t.dueDate ? esc(deadlineLabel(t)) : '<span class="clock-mark" aria-hidden="true"></span>') + '</button>' +
+    '<button class="task-deadline' + (t.dueDate ? ' has-deadline' : ' no-deadline') + (isOverdue(t) ? ' overdue' : '') + '" data-act="deadline" aria-haspopup="dialog" aria-label="Edit deadline for ' + title + '" title="' + (isOverdue(t) ? 'Overdue · ' : '') + esc(deadlineLabel(t)) + '">' +
+    (t.dueDate ? deadlineMarkup(t) : '<span class="symbol clock-mark" aria-hidden="true"></span>') + '</button>' +
     (addToday ? '<button class="rowAction" data-act="today" title="Add to Today" aria-label="Add ' + title + ' to Today">+ Today</button>' : '') +
     '</article>';
 }
@@ -103,6 +103,18 @@ function deadlineLabel(task) {
   if (!task.dueTime) return date;
   const time = new Date(task.dueDate + 'T' + task.dueTime);
   return Number.isNaN(time.getTime()) ? date : date + ' ' + time.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+}
+
+// The time is a separate span so the compact card can show the date alone.
+function deadlineMarkup(task) {
+  const label = deadlineLabel(task), date = plannedDateLabel(task.dueDate);
+  return label.startsWith(date + ' ') ? esc(date) + '<span class="due-time"> ' + esc(label.slice(date.length + 1)) + '</span>' : esc(label);
+}
+
+function isOverdue(task) {
+  if (!task.dueDate || task.done) return false;
+  if (task.dueDate !== day()) return task.dueDate < day();
+  return !!task.dueTime && new Date(task.dueDate + 'T' + task.dueTime) < new Date();
 }
 
 function placeTaskPicker(picker, anchor) {
@@ -228,6 +240,10 @@ function render(){
   $('dateline').textContent=new Intl.DateTimeFormat('en-US',{month:'long',day:'numeric',weekday:'long'}).format(new Date());
   $('pageTitle').textContent=tag || currentTitle();
   $('wrapUp').hidden=view!=='today';
+  const finished=today.filter(t=>t.done).length;
+  $('dayProgress').hidden=view!=='today'||!today.length;
+  $('dayProgress').style.setProperty('--done',(today.length?Math.round(finished/today.length*100):0)+'%');
+  $('dayProgressLabel').textContent=finished===today.length?'All '+today.length+' done':finished+' of '+today.length+' done';
   renderBoardTags();
   const pin=$('pin');
   pin.innerHTML=symbol(compact?'expand':'pin')+'<span class="tool-label">'+(compact?'Expand workspace':'Compact view')+'</span>';
@@ -255,7 +271,7 @@ function render(){
   let groups = '';
   if (view === 'today') {
     const waiting = tasks.filter(t => !isToday(t));
-    groups = data.projects.map((name, index) => projectGroup(name, waiting.filter(t => t.project === name), index)).join('') +
+    groups = '<div class="plan-head"><h2>Plan</h2><p>Drag a task up into Today, or use its + Today action.</p></div>' + data.projects.map((name, index) => projectGroup(name, waiting.filter(t => t.project === name), index)).join('') +
       '<button type="button" class="inline-add new-group" data-new-group><span aria-hidden="true">+</span>New project</button>';
   }
   $('pool').innerHTML = groups;
@@ -305,20 +321,20 @@ function capture(source=''){
   ++captureToken;
   dialog('Capture tasks','<p class="hint">Paste a chat or meeting notes. Shishi finds tasks on this Mac. Review each suggestion alongside the original message before adding it.</p><label>Message<textarea id="source" maxlength="2400" rows="5" placeholder="Paste a work message here…">'+esc(source)+'</textarea></label><div class="actions"><button id="demoText" class="mini-link">Try an example</button><button id="paste" class="secondary">Paste message</button><button id="recognize" class="primary">Find tasks</button></div><div id="candidates" aria-live="polite"></div>');
   $('source').focus();
-  const reset=()=>{captureToken++;$('candidates').innerHTML='';$('recognize').disabled=false;$('recognize').textContent='Find tasks'};
+  const reset=()=>{captureToken++;$('candidates').innerHTML='';$('recognize').disabled=false;$('recognize').removeAttribute('aria-busy');$('recognize').textContent='Find tasks'};
   $('source').oninput=reset;
   $('demoText').onclick=()=>{$('source').value=example;reset()};
   $('paste').onclick=async()=>{try{const v=await native('paste');if(v.length>2400){toast('This message is over 2,400 characters. Paste it in shorter sections.');return}if(v){$('source').value=v;reset()}else toast('The clipboard has no text.')}catch(e){toast(e.message)}};
   $('recognize').onclick=async()=>{
     const text=$('source').value.trim();if(!text){$('source').focus();toast('Enter a message first.');return}
-    const stamp=++captureToken,button=$('recognize');button.disabled=true;button.textContent='Finding tasks…';$('candidates').innerHTML='<p class="hint">Qwen is running on this Mac. The first run may take a few seconds.</p>';
+    const stamp=++captureToken,button=$('recognize');button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Finding tasks…';$('candidates').innerHTML='<p class="hint is-working">Qwen is running on this Mac. The first run may take a few seconds.</p>';
     try{
       const suggestions=await native('extract',{text});
       if(stamp!==captureToken||!$('dialog').open)return;
       if(!suggestions.length){$('candidates').innerHTML='<p class="hint">No clear tasks found. Add more context or enter a task manually.</p><button id="useManual" class="secondary">Add a task</button>';$('useManual').onclick=()=>manualFromText(text);return}
       review(text,suggestions);
     }catch(e){if(stamp===captureToken&&$('dialog').open){$('candidates').innerHTML='<p class="feedback">'+esc(e.message)+'</p><button id="useManual" class="secondary">Add a task</button>';$('useManual').onclick=()=>manualFromText(text)}}
-    finally{if(stamp===captureToken&&button.isConnected){button.disabled=false;button.textContent='Find tasks again'}}
+    finally{if(button.isConnected)button.removeAttribute('aria-busy');if(stamp===captureToken&&button.isConnected){button.disabled=false;button.textContent='Find tasks again'}}
   };
 }
 function manualFromText(text){
@@ -395,4 +411,4 @@ window.showWorkspaceHome=()=>{
 window.openMessage=text=>{capture(text||'')};
 document.addEventListener('keydown',e=>{if(e.metaKey&&e.key==='n'){e.preventDefault();taskForm()}});
 setInterval(()=>{if(lastDay!==day()){lastDay=day();render()}},30000);
-document.addEventListener('DOMContentLoaded',async()=>{try{const s=await native('load');if(s)data=s;render();await native('ready')}catch(e){locked=true;render();$('tasks').textContent='Shishi could not load your lists. Saving is paused to protect your data. '+e.message}});
+document.addEventListener('DOMContentLoaded',async()=>{try{const s=await native('load');if(s)data=s;render();await native('ready')}catch(e){locked=true;render();$('tasks').innerHTML='<div class="load-error" role="alert"><b>Shishi could not load your lists.</b>Saving is paused to protect your data. '+esc(e.message)+'</div>'}});

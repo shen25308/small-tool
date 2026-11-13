@@ -1,0 +1,43 @@
+/* Exploration B — "Dusk Glass". Not shipped. Cool violet-blue, translucent layers,
+   large radii, tight heavy sans headings, glowing accent. Overrides tokens.css only,
+   plus a few structural rules that tokens cannot express. */
+:root {
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Display", Inter, system-ui, sans-serif;
+  --radius-xs: 6px; --radius-sm: 8px; --radius-md: 11px; --radius-lg: 16px; --radius-xl: 22px;
+  --canvas: light-dark(#e6e8f4, #0f1120);
+  --paper: light-dark(#f5f6fc, #161829);
+  --raised: light-dark(#ffffff, #23263d);
+  --sunken: light-dark(#eaecf7, #101222);
+  --field: light-dark(#ffffff, #101222);
+  --ink: light-dark(#191b2e, #eef0ff);
+  --ink-2: light-dark(#3c4060, #c6c9e6);
+  --ink-3: light-dark(#63678a, #9a9ec2);
+  --ink-4: light-dark(#9a9dba, #666a8c);
+  --line: light-dark(#dfe1f0, #2a2d47);
+  --line-strong: light-dark(#c9cce3, #3d4163);
+  --accent: light-dark(#5b3fd6, #b7a8ff);
+  --accent-fill: light-dark(#6246ea, #6d55f0);
+  --accent-wash: light-dark(#ebe7ff, #2a2550);
+  --seal: light-dark(#d02c6b, #ff8fbd);
+  --seal-fill: light-dark(#e0337a, #d83f85);
+  --seal-wash: light-dark(#ffe3ef, #45203a);
+  --hover: light-dark(rgba(60, 50, 140, .07), rgba(200, 200, 255, .08));
+  --shadow-slip: 0 0 0 1px light-dark(rgba(60, 60, 130, .1), rgba(255, 255, 255, .08)), 0 2px 8px light-dark(rgba(70, 60, 160, .12), rgba(0, 0, 0, .45));
+  --sky-top: light-dark(#c9c4ff, #1a1446);
+  --sky-bottom: light-dark(#ffd9ec, #3a1f5c);
+  --sun: light-dark(#fff4d6, #ffd7f0);
+  --ridge-far: light-dark(#b9a8f5, #4a3aa0);
+  --ridge-mid: light-dark(#8f7cf0, #35297c);
+  --ridge-near: light-dark(#6246ea, #231a58);
+}
+aside { background: linear-gradient(170deg, color-mix(in srgb, var(--accent-fill) 14%, var(--canvas)), var(--canvas) 55%) }
+.side-title, .heading-line h1, #dialog .dialog-head h2, .plan-head h2 { font-weight: 750; letter-spacing: -.035em }
+.result-preview[aria-expanded="true"] .result-headline { font-weight: 700; letter-spacing: -.02em }
+nav button { border-radius: var(--radius-pill) }
+nav button.active, nav button.active:hover { background: var(--accent-fill); color: #fff; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-fill) 45%, transparent) }
+nav button.active .symbol, nav button.active .num, nav button.active .day-star { color: #fff }
+main { border-radius: var(--radius-xl) 0 0 0 }
+.row .check { border-radius: 50% }
+.priority { border-radius: var(--radius-pill) }
+.progress-track i { background: linear-gradient(90deg, var(--accent-fill), var(--seal-fill)) }
+.primary { background: linear-gradient(135deg, var(--accent-fill), color-mix(in srgb, var(--accent-fill) 60%, var(--seal-fill))); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-fill) 40%, transparent) }

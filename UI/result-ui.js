@@ -35,8 +35,16 @@ window.ResultUI = (() => {
     const state=info.status==='attention'?'Needs attention':'Turn finished';
     // Build titles in stored receipts may still carry an older localized conclusion.
     const failedBuild = /[·•]\s*(?:failure|failed|timed out|timeout|action required|needs attention|startup failure|failed to start|\u5931\u8d25|\u8d85\u65f6|\u9700\u8981\u5904\u7406|\u542f\u52a8\u5931\u8d25)$/i;
-    const needsAttention=isFeed&&!isMail?failedBuild.test(note.title):!isFeed&&info.status==='attention';
-    top.append(element('span','result-state '+(needsAttention?'attention':isMail?'mail':''),isReminder?'Due':isMail?'New mail':isFeed?'Build result':state));
+    const passedBuild = /[·•]\s*(?:succeeded|success|passed|\u6210\u529f|\u901a\u8fc7)$/i;
+    const isBuild=isFeed&&!isMail&&!isReminder;
+    // One state per card. A build conclusion is something Shishi read from the service itself;
+    // an agent reply is only ever "finished" or "needs attention", whatever it says about its own checks.
+    const kind=isReminder?'due':isMail?'mail':isBuild?(failedBuild.test(note.title)?'failed':passedBuild.test(note.title)?'passed':'build'):info.status==='attention'?'attention':'done';
+    const stateLabel={due:'Due',mail:'New mail',failed:'Run failed',passed:'Run passed',build:'Build result',attention:'Needs attention',done:state}[kind];
+    article.dataset.state=kind;
+    const glyph=element('span','status-glyph');
+    glyph.dataset.state=kind;glyph.setAttribute('aria-hidden','true');
+    top.append(element('span','result-state '+kind,stateLabel));
     top.append(element('span','result-source',sourceName(note)));
     const date=new Date(note.time*1000);
     const time=element('time','',new Intl.DateTimeFormat('en-US',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(date));
@@ -56,7 +64,7 @@ window.ResultUI = (() => {
       details.hidden=true;
       trigger.setAttribute('aria-expanded','false');
       trigger.setAttribute('aria-controls',details.id);
-      trigger.append(top,headline,arrow);
+      trigger.append(glyph,top,headline,arrow);
       article.append(trigger,details);
     } else {
       article.append(top,headline);
@@ -66,11 +74,27 @@ window.ResultUI = (() => {
       info.files.forEach(file=>{const code=element('code','',file.label);code.title=file.path;tags.append(code)});details.append(tags);
     }
     if(isFeed) {
+      if(isBuild) {
+        const proof=element('div','evidence observed'+(kind==='failed'?' failed':kind==='passed'?'':' neutral'));
+        const mark=element('span','status-glyph');mark.dataset.state=kind;mark.setAttribute('aria-hidden','true');
+        const text=element('span');
+        text.append(element('b','','Observed by Shishi'),'Read directly from GitHub Actions when the run finished. This is the service’s own conclusion.');
+        proof.append(mark,text);details.append(proof);
+      }
       if(note.summary)details.append(element('p','result-context',note.summary));
     } else {
       if(info.details.length){
+        const labels={concern:'Unresolved',check:'Reported by agent · not observed',next:'Next step'};
+        const marks={concern:'attention',check:'reported'};
         const points=element('ul','result-points');
-        info.details.forEach(line=>points.append(element('li','',line)));details.append(points);
+        info.details.forEach(line=>{
+          const item=element('li');item.dataset.kind=line.kind;
+          if(marks[line.kind]){const mark=element('span','status-glyph');mark.dataset.state=marks[line.kind];mark.setAttribute('aria-hidden','true');item.append(mark)}
+          const text=element('span');
+          if(labels[line.kind])text.append(element('span','point-kind',labels[line.kind]));
+          text.append(line.text);item.append(text);points.append(item);
+        });
+        details.append(points);
       }
       if(info.excerpt)details.append(element('blockquote','result-quote',info.excerpt));
     }

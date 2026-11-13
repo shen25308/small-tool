@@ -1,0 +1,46 @@
+/* Exploration C — "Moss & Clay". Not shipped. Sage-tinted neutrals, terracotta accent,
+   rounded sans throughout, chunky soft blocks instead of hairlines. */
+:root {
+  --font-sans: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", Inter, system-ui, sans-serif;
+  --font-display: ui-rounded, "SF Pro Rounded", -apple-system, "Inter Display", Inter, system-ui, sans-serif;
+  --radius-xs: 7px; --radius-sm: 9px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 20px;
+  --canvas: light-dark(#e3e8dc, #171b17);
+  --paper: light-dark(#f4f6ef, #1d221d);
+  --raised: light-dark(#fcfdf9, #293029);
+  --sunken: light-dark(#e9eee2, #161a16);
+  --field: light-dark(#fcfdf9, #161a16);
+  --ink: light-dark(#222a22, #e9eee4);
+  --ink-2: light-dark(#434d42, #c6cec2);
+  --ink-3: light-dark(#627061, #9ca89a);
+  --ink-4: light-dark(#98a396, #687366);
+  --line: light-dark(#dbe2d2, #2e362e);
+  --line-strong: light-dark(#c3cdb9, #445044);
+  --accent: light-dark(#a3441f, #f0a784);
+  --accent-fill: light-dark(#b9512a, #b85a35);
+  --accent-wash: light-dark(#f6e4d9, #3d281d);
+  --seal: light-dark(#a3441f, #f0a784);
+  --seal-fill: light-dark(#b9512a, #b85a35);
+  --seal-wash: light-dark(#f6e4d9, #3d281d);
+  --hover: light-dark(rgba(50, 70, 40, .08), rgba(220, 235, 215, .08));
+  --shadow-slip: none;
+  --selected-bg: light-dark(#cfd9c4, #323c32);
+  --selected-shadow: none;
+  --sky-top: light-dark(#f3e6c8, #1f2a24);
+  --sky-bottom: light-dark(#dfe9d4, #2b3a30);
+  --sun: light-dark(#e58b4c, #f1e3bd);
+  --ridge-far: light-dark(#b9cba8, #3a4f3f);
+  --ridge-mid: light-dark(#8fac7f, #2d3f33);
+  --ridge-near: light-dark(#5f8257, #1f2c24);
+}
+.side-title, .heading-line h1, #dialog .dialog-head h2, .plan-head h2 { font-weight: 700; letter-spacing: -.02em }
+.result-preview[aria-expanded="true"] .result-headline { font-weight: 650 }
+.row { background: var(--raised); margin-block: 4px; min-height: 40px; padding-inline: 12px }
+.row:hover, .row:focus-within { background: color-mix(in srgb, var(--raised) 90%, var(--ink)) }
+.row .check { border-radius: 50%; width: 19px; height: 19px }
+.priority { border-radius: var(--radius-pill) }
+.priority.p0 { background: var(--accent-fill) }
+.secondary, #wrapUp, .cover-tools button { box-shadow: none; background: var(--sunken) }
+.cover-tools button { background: var(--raised) }
+#inboxCards:has(.result-card), .result-card { box-shadow: none }
+#inboxCards:has(.result-card) { background: var(--raised) }
+dialog { background: var(--paper) }

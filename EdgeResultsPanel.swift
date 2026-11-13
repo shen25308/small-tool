@@ -37,10 +37,10 @@ final class EdgeResultsPanel: NSObject, WKScriptMessageHandler, WKNavigationDele
         super.init()
         config.userContentController.add(self,name:"edge")
         web.navigationDelegate=self
-        web.underPageBackgroundColor = .windowBackgroundColor
+        web.underPageBackgroundColor = ShishiSurface.paper
         panel.delegate=self
         panel.title="Shishi · Desktop Results"
-        panel.backgroundColor = .windowBackgroundColor
+        panel.backgroundColor = ShishiSurface.paper
         panel.titlebarSeparatorStyle = .none
         panel.isReleasedWhenClosed=false
         panel.isFloatingPanel=true

@@ -198,13 +198,13 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         config.userContentController.add(self, name: "host")
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
-        web.underPageBackgroundColor = .windowBackgroundColor
+        web.underPageBackgroundColor = ShishiSurface.paper
         let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable]
         let display = NSScreen.main?.visibleFrame.size ?? NSSize(width:760,height:800)
         let frame=NSRect(x:0,y:0,width:min(760,display.width),height:min(800,display.height))
         window = NSWindow(contentRect:NSWindow.contentRect(forFrameRect:frame,styleMask:style),styleMask:style,backing:.buffered,defer:false)
         window.title = "My Notes"
-        window.backgroundColor = .windowBackgroundColor
+        window.backgroundColor = ShishiSurface.canvas
         window.titlebarSeparatorStyle = .none
         window.minSize = NSSize(width: 635,height: 420)
         window.isReleasedWhenClosed = false
@@ -616,3 +616,15 @@ app.setActivationPolicy(.regular)
 let host=Host()
 app.delegate=host
 app.run()
+
+// Window chrome matches the --canvas and --paper tokens in UI/tokens.css in both appearances,
+// so the title bar and any overscroll area continue the page instead of framing it.
+enum ShishiSurface {
+    private static func pair(_ light:NSColor,_ dark:NSColor)->NSColor {
+        NSColor(name:nil) { $0.bestMatch(from:[.aqua,.darkAqua]) == .darkAqua ? dark : light }
+    }
+    static let canvas = pair(NSColor(srgbRed:0xf1/255,green:0xec/255,blue:0xe3/255,alpha:1),
+                             NSColor(srgbRed:0x17/255,green:0x18/255,blue:0x1b/255,alpha:1))
+    static let paper = pair(NSColor(srgbRed:0xfb/255,green:0xf8/255,blue:0xf3/255,alpha:1),
+                            NSColor(srgbRed:0x1e/255,green:0x1f/255,blue:0x23/255,alpha:1))
+}
