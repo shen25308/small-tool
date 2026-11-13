@@ -412,3 +412,6 @@ button.group-row:hover { background: var(--hover) }
 .sub-row select { padding: 0 4px; font-size: 11.5px }
 .quiet-hours { display: inline-flex; align-items: center; gap: 4px; flex: none }
 .quiet-hours input { width: 92px; padding: 2px 6px; font-size: 12px }
+.agent-usage { display: grid; gap: 2px; margin: 6px 4px 0; color: var(--muted); font-size: 11px; line-height: 1.35 }
+.usage-row b { color: var(--secondary); font-weight: 600 }
+.usage-row.high { color: var(--warning) }

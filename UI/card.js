@@ -125,8 +125,13 @@ window.Card = (() => {
     if (kind === 'inbox') { inWorkspace(() => $('inboxButton').click()); return; }
     if (kind === 'read') { inWorkspace(() => openNotice(note.id, {original: true})); return; }
     if (entry.demo) { toast('In a real session, this brings forward the app Claude Code runs in.'); action(markRead()); return; }
-    const opening = entry.notice ? native('openCodex', {thread: entry.notice.thread}) : native('openAgentApp', {app: entry.app || ''});
-    action(opening.then(() => { if (note) return markRead(); }));
+    const opening = entry.notice ? native('openCodex', {thread: entry.notice.thread})
+      : native('openAgentApp', {app: entry.app || '', terminal: entry.terminal || {}, cwd: entry.cwd || ''});
+    action(opening.then(result => {
+      // Say so when only the app could be brought forward, so nobody hunts for the right tab without knowing.
+      if (result?.found === 'app' && (entry.terminal?.iterm || entry.terminal?.tty)) toast('Opened ' + result.app + '. Allow Shishi to control it in System Settings → Privacy → Automation to jump to the exact tab.');
+      if (note) return markRead();
+    }));
   }
 
   let claude = null, askedClaude = false;

@@ -102,3 +102,45 @@ for (const id of ['agentList']) {
   });
 }
 setInterval(renderAgents, 30000);
+
+// Usage and limits, from the agents' own files on this Mac (Connectors/agent_usage.py). Refreshed every 5 minutes.
+window.Usage = (() => {
+  let report = null, enabled = true;
+  const compactNumber = new Intl.NumberFormat('en-US', {notation: 'compact', maximumFractionDigits: 1});
+  const clock = new Intl.DateTimeFormat('en-US', {hour: 'numeric', minute: '2-digit'});
+  const day = new Intl.DateTimeFormat('en-US', {weekday: 'short', hour: 'numeric', minute: '2-digit'});
+  const windowName = minutes => !minutes ? 'limit' : minutes % 1440 === 0 ? (minutes / 1440 === 7 ? 'weekly' : minutes / 1440 + '-day') + ' limit' : minutes / 60 + '-hour limit';
+  const resets = at => !at ? '' : ', resets ' + (at - Date.now() / 1000 < 20 * 3600 ? clock : day).format(new Date(at * 1000));
+  function lines() {
+    const out = [];
+    const claude = report?.claude;
+    if (claude && claude.week.replies) {
+      out.push({source: 'Claude Code', text: compactNumber.format(claude.fiveHours.tokens) + ' tokens in 5 hours · ' + compactNumber.format(claude.week.tokens) + ' this week',
+                title: 'Input, output and cache-write tokens from Claude Code\'s own session files. ' + compactNumber.format(claude.week.cacheRead) +
+                  ' cache-read tokens this week are not included. Anthropic keeps plan limits on its servers, so Shishi shows counts, not a percentage.'});
+    }
+    const codex = report?.codex;
+    for (const name of ['primary', 'secondary']) {
+      const limit = codex?.[name];
+      if (limit) out.push({source: 'Codex', text: Math.round(limit.usedPercent) + '% of ' + windowName(limit.windowMinutes) + resets(limit.resetsAt),
+                           title: 'From the latest rate-limit snapshot Codex wrote to its session files (' + clock.format(new Date(codex.observedAt * 1000)) + ').',
+                           high: limit.usedPercent >= 80});
+    }
+    return out;
+  }
+  function render() {
+    const box = document.getElementById('agentUsage');
+    if (!box) return;
+    const rows = enabled ? lines() : [];
+    box.hidden = !rows.length;
+    box.innerHTML = rows.map(row => '<div class="usage-row' + (row.high ? ' high' : '') + '" title="' + esc(row.title) + '"><b>' + esc(row.source) + '</b> ' + esc(row.text) + '</div>').join('');
+  }
+  function refresh() {
+    if (!enabled) { render(); return Promise.resolve(); }
+    return native('usage').then(value => { report = value; render(); }).catch(() => {});
+  }
+  function setEnabled(on) { enabled = !!on; if (enabled) refresh(); else render(); }
+  native('settings').then(value => setEnabled(value.usage !== false)).catch(() => {});
+  setInterval(refresh, 5 * 60 * 1000);
+  return {refresh, setEnabled, lines, report: () => report};
+})();

@@ -36,7 +36,7 @@ function fakeHost(seed) {
     },
     agents: seed.empty ? [] : [
       {key: 'e'.repeat(64), source: 'Claude Code', title: 'Claude Code · web-app', detail: 'Claude needs your permission to use Bash', state: 'attention', receipt: '', time: now - 50,
-       task: 'Deploy the preview build', started: now - 400, app: 'com.apple.Terminal'},
+       task: 'Deploy the preview build', started: now - 400, app: 'com.apple.Terminal', cwd: '/Users/me/code/web-app', terminal: {tty: 'ttys004'}},
       {key: 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', detail: 'Refactor the billing module and add tests', state: 'working', receipt: '', time: now - 95,
        task: 'Refactor the billing module and add tests', started: now - 95, app: 'com.microsoft.VSCode', activity: 'Edit billing.py', tools: 14},
       {key: 'f'.repeat(64), source: 'Claude Code', title: 'Claude Code · small-tool', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: 'connector/' + 'a'.repeat(64), time: now - 240,
@@ -113,7 +113,7 @@ function fakeHost(seed) {
     },
     copy: message => { state.clipboard = message.text; return true; },
     settings: message => {
-      state.settings = {hotkeys: true, keepAwake: false, hotkeyLabels: ['⌃⌥Space', '⌃⌥N'], takenShortcuts: [], keepingAwake: false, ...state.settings, ...message};
+      state.settings = {hotkeys: true, keepAwake: false, usage: true, hotkeyLabels: ['⌃⌥Space', '⌃⌥N'], takenShortcuts: [], keepingAwake: false, ...state.settings, ...message};
       return state.settings;
     },
     alerts: message => {
@@ -148,7 +148,12 @@ function fakeHost(seed) {
     dismissAgent: message => { state.agents = state.agents.filter(agent => agent.key !== message.key); window.setAgents(state.agents); return true; },
     compact: message => { window.setCompact(!!message.value); return true; },
     latestSize: () => true, openNotion: () => true, openCodex: message => { state.openedThread = message.thread; return true; },
-    openAgentApp: message => { state.openedApp = message.app; return {'com.apple.Terminal': 'Terminal', 'com.googlecode.iterm2': 'iTerm'}[message.app] || 'Terminal'; }, openConnectorLink: () => true, copyConnectorSetup: () => true,
+    openAgentApp: message => {
+      state.openedApp = message.app; state.openedPlace = {terminal: message.terminal, cwd: message.cwd};
+      return {app: {'com.apple.Terminal': 'Terminal', 'com.googlecode.iterm2': 'iTerm'}[message.app] || 'Terminal', found: state.focusResult || (message.terminal?.tty ? 'tab' : 'app')};
+    },
+    usage: () => state.usage ?? {ok: true, time: now, claude: {fiveHours: {tokens: 1240000, cacheRead: 5e6, replies: 40}, today: {tokens: 2e6, replies: 60}, week: {tokens: 8400000, cacheRead: 9e7, replies: 300}, sessions: 12},
+      codex: {observedAt: now - 120, primary: {usedPercent: 42.4, windowMinutes: 300, resetsAt: now + 3600}, secondary: {usedPercent: 83, windowMinutes: 10080, resetsAt: now + 3 * 86400}}}, openConnectorLink: () => true, copyConnectorSetup: () => true,
     extract: () => [{title: 'Send the homepage prototype to the design team', quote: 'Maya: Please send the new homepage prototype…', tag: 'Design'}]
   };
   window.webkit = {messageHandlers: {host: {postMessage(message) {

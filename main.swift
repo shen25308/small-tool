@@ -87,7 +87,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     }
     private func settingsState() -> [String:Any] {
         ["hotkeys":hotkeysOn,"hotkeyLabels":GlobalHotkeys.labels.sorted {$0.key.rawValue < $1.key.rawValue}.map(\.value),
-         "takenShortcuts":takenShortcuts,"keepAwake":keepAwakeOn,"keepingAwake":keepAwake.holding]
+         "takenShortcuts":takenShortcuts,"keepAwake":keepAwakeOn,"keepingAwake":keepAwake.holding,
+         "usage":UserDefaults.standard.object(forKey:"ShiShiShowUsage") as? Bool ?? true]
     }
     private var mainBackdrop: NSVisualEffectView!
     // Off unless chosen: a window that floats above everything is a deliberate preference.
@@ -723,10 +724,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                       let url=NSWorkspace.shared.urlForApplication(withBundleIdentifier:bundle) else {
                     throw AppIssue("Shishi could not tell which app this session runs in. Switch to it yourself.")
                 }
-                let launch=NSWorkspace.OpenConfiguration()
-                launch.activates=true
-                NSWorkspace.shared.openApplication(at:url,configuration:launch) { _,_ in }
-                reply(id,true,FileManager.default.displayName(atPath:url.path).replacingOccurrences(of:".app",with:""))
+                // The exact tab, pane or folder when the hook recorded it; otherwise the app itself.
+                let place=SessionFocus.Place(body["terminal"],cwd:body["cwd"])
+                let found=SessionFocus.focus(bundle:bundle,place:place,app:url)
+                reply(id,true,["app":FileManager.default.displayName(atPath:url.path).replacingOccurrences(of:".app",with:""),"found":found])
             case "dismissAgent":
                 guard let key=body["key"] as? String else {throw AppIssue("The agent ID is missing.")}
                 inboxQueue.async {
@@ -773,11 +774,19 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     UserDefaults.standard.set(on,forKey:"ShiShiHotkeys")
                     takenShortcuts=hotkeys.setEnabled(on)
                 }
+                if let on=body["usage"] as? Bool {UserDefaults.standard.set(on,forKey:"ShiShiShowUsage")}
                 if let on=body["keepAwake"] as? Bool {
                     UserDefaults.standard.set(on,forKey:"ShiShiKeepAwake")
                     keepAwake.update(working:on && agentsWorking)
                 }
                 reply(id,true,settingsState())
+            case "usage":
+                providers.usage { [weak self] result in
+                    switch result {
+                    case .success(let report):self?.reply(id,true,report)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
             case "alerts":
                 alerts.update(body)
                 reply(id,true,alerts.wire)

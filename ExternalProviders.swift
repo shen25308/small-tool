@@ -286,6 +286,14 @@ final class ExternalProviders {
     }
 
     /// Adds, checks or removes Shishi's hooks in the user's Claude Code settings.
+    /// Token use and limits, read by a helper from Claude Code's and Codex's own files on this Mac.
+    func usage(completion:@escaping Callback) {
+        io.async {
+            let result = Result { try self.launch("agent_usage.py",[],input:nil,timeout:40,folder:"Connectors") }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     /// `approvals` adds the optional PermissionRequest hook that lets the card answer permission requests.
     func claudeCode(_ action:String, approvals:Bool = false, completion:@escaping Callback) {
         guard ["status","install","remove"].contains(action) else {

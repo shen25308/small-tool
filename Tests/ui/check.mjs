@@ -1135,6 +1135,32 @@ await check('approvals and alerts in Connections', {}, async ({page, host}) => {
   await page.waitForFunction(() => window.__host.claude.installed === true);
 });
 
+await check('usage and limits under Agents, exact tab', {width: 1040, height: 760}, async ({page, host}) => {
+  await page.locator('#agentUsage:not([hidden])').waitFor();
+  const usage = await text(page, '#agentUsage');
+  assert.match(usage, /Claude Code 1\.2M tokens in 5 hours · 8\.4M this week/);
+  assert.match(usage, /Codex 42% of 5-hour limit, resets/);
+  assert.match(usage, /Codex 83% of weekly limit, resets/);
+  assert.equal(await page.locator('.usage-row.high').count(), 1, 'a limit above 80% stands out');
+  assert.match(await page.locator('.usage-row').first().getAttribute('title'), /counts, not a percentage/);
+  // Turning usage off hides it.
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.waitForFunction(() => !document.querySelector('[data-setting="usage"]').disabled);
+  await page.uncheck('[data-setting="usage"]');
+  await page.waitForFunction(() => document.getElementById('agentUsage').hidden);
+  await page.keyboard.press('Escape');
+});
+
+await check('open the exact terminal tab, and say when only the app opened', {width: 340, height: 640, compact: true}, async ({page, host}) => {
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => window.__host.openedApp === 'com.apple.Terminal');
+  assert.deepEqual((await host()).openedPlace, {terminal: {tty: 'ttys004'}, cwd: '/Users/me/code/web-app'});
+  await page.evaluate(() => { window.__host.focusResult = 'app'; });
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => /Privacy → Automation/.test(document.getElementById('toast').textContent));
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RECEIVE = ROOT / "ClaudeCode" / "receive.py"
 INSTALL = ROOT / "ClaudeCode" / "install.py"
 PERMISSION = ROOT / "ClaudeCode" / "permission.py"
+USAGE = ROOT / "Connectors" / "agent_usage.py"
 AGENTS = ROOT / "Connectors" / "shishi_agents.py"
 
 
@@ -116,6 +117,22 @@ class ClaudeCodeHook(Sandbox):
         self.assertEqual(self.states()[0]["state"], "done")
         self.hook(hook_event_name="UserPromptSubmit", prompt="Next")
         self.assertNotIn("tools", self.states()[0])
+
+    def test_where_the_session_runs_is_recorded(self):
+        self.env["ITERM_SESSION_ID"] = "w0t2p1:6f0d4b5e-8f7a-4d2b-9c1e-0a1b2c3d4e5f"
+        self.env["TMUX"] = "/private/tmp/tmux-501/default,4242,0"
+        self.env["TMUX_PANE"] = "%7"
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Fix it")
+        state, = self.states()
+        self.assertEqual(state["cwd"], "/Users/me/code/small-tool")
+        self.assertEqual(state["terminal"]["iterm"], "6F0D4B5E-8F7A-4D2B-9C1E-0A1B2C3D4E5F")
+        self.assertEqual((state["terminal"]["tmuxPane"], state["terminal"]["tmuxSocket"]), ("%7", "/private/tmp/tmux-501/default"))
+        # Odd values are not kept.
+        self.env["ITERM_SESSION_ID"] = 'w0t0p0:"; do shell script "rm -rf ~"'
+        self.env["TMUX_PANE"] = "%7; rm"
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Again")
+        self.assertNotIn("iterm", self.states()[0]["terminal"])
+        self.assertNotIn("tmuxPane", self.states()[0]["terminal"])
 
     def test_delivery_log_keeps_no_content(self):
         self.hook(hook_event_name="UserPromptSubmit", prompt="My private prompt about payroll")
@@ -326,6 +343,15 @@ class ApprovalHook(Sandbox):
     def alive(self):
         (self.approvals / ".alive").write_text("")
 
+    @staticmethod
+    def finish(process):
+        # Standard input is already closed, so communicate() cannot be used on every Python version.
+        process.wait(timeout=10)
+        out = process.stdout.read()
+        process.stdout.close()
+        process.stderr.close()
+        return out
+
     def test_allow_and_deny_from_the_card(self):
         self.alive()
         for behavior in ("allow", "deny"):
@@ -336,7 +362,7 @@ class ApprovalHook(Sandbox):
             self.assertEqual((state["state"], state["approval"]), ("attention", request["id"]))
             self.assertEqual(state["detail"], "Wants to use Bash: rm -rf node_modules")
             (self.approvals / (request["id"] + ".decision")).write_text(json.dumps({"behavior": behavior}))
-            out, _ = process.communicate(timeout=10)
+            out = self.finish(process)
             decision = json.loads(out)["hookSpecificOutput"]
             self.assertEqual((decision["hookEventName"], decision["decision"]["behavior"]), ("PermissionRequest", behavior))
             self.assertEqual(list(self.approvals.glob("*.json")), [], "the request is cleaned up")
@@ -360,7 +386,7 @@ class ApprovalHook(Sandbox):
         process = self.start()
         self.request(process)
         self.hook(hook_event_name="PostToolUse", tool_name="Bash", tool_input={"command": "rm -rf node_modules"})
-        out, _ = process.communicate(timeout=10)
+        out = self.finish(process)
         self.assertEqual(out, "")
         self.assertEqual(self.states()[0]["state"], "working")
 
@@ -377,6 +403,55 @@ class ApprovalHook(Sandbox):
         self.assertNotIn("async", handler)
         self.assertEqual(run("install")["approvals"], False, "turning it off removes the hook")
         self.assertEqual(run("remove")["installed"], False)
+
+
+class UsageReport(Sandbox):
+    """Usage and limits come only from the agents' own files on this Mac."""
+    def iso(self, seconds_ago):
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(time.time() - seconds_ago, timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def test_claude_tokens_by_window_without_duplicates(self):
+        claude = self.base / "claude"
+        project = claude / "projects" / "-Users-me-code-app"
+        project.mkdir(parents=True)
+        usage = {"input_tokens": 100, "output_tokens": 50, "cache_creation_input_tokens": 10, "cache_read_input_tokens": 1000}
+        rows = [
+            {"type": "assistant", "timestamp": self.iso(60), "sessionId": "a", "requestId": "r1", "message": {"id": "m1", "usage": usage}},
+            {"type": "assistant", "timestamp": self.iso(60), "sessionId": "a", "requestId": "r1", "message": {"id": "m1", "usage": usage}},
+            {"type": "assistant", "timestamp": self.iso(6 * 3600), "sessionId": "b", "requestId": "r2", "message": {"id": "m2", "usage": usage}},
+            {"type": "assistant", "timestamp": self.iso(8 * 24 * 3600), "sessionId": "c", "requestId": "r3", "message": {"id": "m3", "usage": usage}},
+            {"type": "user", "timestamp": self.iso(30), "message": {"content": "my prompt mentions usage"}},
+            "not json at all",
+        ]
+        (project / "s.jsonl").write_text("\n".join(r if isinstance(r, str) else json.dumps(r) for r in rows))
+        self.env["CLAUDE_CONFIG_DIR"] = str(claude)
+        self.env["CODEX_HOME"] = str(self.base / "no-codex")
+        report = json.loads(self.run_script(USAGE).stdout)
+        five, week = report["claude"]["fiveHours"], report["claude"]["week"]
+        self.assertEqual((five["replies"], five["tokens"], five["cacheRead"]), (1, 160, 1000))
+        self.assertEqual((week["replies"], week["tokens"]), (2, 320))
+        self.assertEqual(report["claude"]["sessions"], 2)
+        self.assertIsNone(report["codex"])
+
+    def test_codex_limits_from_its_newest_snapshot_in_either_format(self):
+        sessions = self.base / "codex" / "sessions" / "2026" / "11" / "13"
+        sessions.mkdir(parents=True)
+        old = {"timestamp": self.iso(3600), "type": "event_msg", "payload": {"type": "token_count", "rate_limits": {
+            "primary": {"used_percent": 12.0, "window_minutes": 300, "resets_in_seconds": 600}}}}
+        new = {"timestamp": self.iso(60), "type": "event_msg", "payload": {"type": "token_count", "rate_limits": {
+            "primary": {"used_percentage": 42.5, "window_minutes": 300, "resets_at": 1900000000},
+            "secondary": {"used_percent": 7, "window_minutes": 10080, "resets_in_seconds": 3600}}}}
+        (sessions / "rollout-a.jsonl").write_text(json.dumps(old) + "\n")
+        (sessions / "rollout-b.jsonl").write_text(json.dumps({"type": "session_meta"}) + "\n" + json.dumps(new) + "\n")
+        self.env["CODEX_HOME"] = str(self.base / "codex")
+        self.env["CLAUDE_CONFIG_DIR"] = str(self.base / "no-claude")
+        report = json.loads(self.run_script(USAGE).stdout)
+        codex = report["codex"]
+        self.assertEqual(codex["primary"], {"usedPercent": 42.5, "windowMinutes": 300, "resetsAt": 1900000000.0})
+        self.assertEqual((codex["secondary"]["usedPercent"], codex["secondary"]["windowMinutes"]), (7.0, 10080))
+        self.assertAlmostEqual(codex["secondary"]["resetsAt"], time.time() - 60 + 3600, delta=5)
+        self.assertIsNone(report["claude"])
 
 
 class AgentStatusCommand(Sandbox):

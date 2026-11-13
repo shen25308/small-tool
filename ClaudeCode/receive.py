@@ -62,6 +62,27 @@ def agent_pid():
     return 0
 
 
+def terminal_place(pid):
+    """Where this session runs, so Shishi can bring forward the exact tab: an iTerm2 session, a Terminal tab
+    (by its tty) or a tmux pane. Only identifiers are kept, never screen contents."""
+    place = {}
+    iterm = os.environ.get("ITERM_SESSION_ID", "")
+    match = re.fullmatch(r"w\d+t\d+p\d+:([0-9A-Fa-f-]{36})", iterm)
+    if match:
+        place["iterm"] = match.group(1).upper()
+    pane, server = os.environ.get("TMUX_PANE", ""), os.environ.get("TMUX", "").split(",")[0]
+    if re.fullmatch(r"%\d{1,6}", pane) and server.startswith("/") and len(server) < 300:
+        place["tmuxPane"], place["tmuxSocket"] = pane, server
+    if pid:
+        try:
+            tty = subprocess.run(["ps", "-o", "tty=", "-p", str(pid)], capture_output=True, text=True, timeout=2).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            tty = ""
+        if re.fullmatch(r"ttys\d{3,4}", tty):
+            place["tty"] = tty
+    return place
+
+
 def activity(event):
     """A short, local description of the tool that just ran, such as "Edit billing.py" or "Bash: pytest -q"."""
     tool = text(event.get("tool_name"))[:40]
@@ -273,6 +294,13 @@ def receive(event):
     pid = agent_pid() if name == "UserPromptSubmit" or (name in ("Notification", "PostToolUse") and not previous.get("pid")) else 0
     if pid or isinstance(previous.get("pid"), int):
         keep["pid"] = pid or previous["pid"]
+    cwd = text(event.get("cwd"))
+    if cwd.startswith("/") and len(cwd) < 1024:
+        keep["cwd"] = cwd
+    if pid:
+        keep["terminal"] = terminal_place(pid)
+    elif isinstance(previous.get("terminal"), dict):
+        keep["terminal"] = previous["terminal"]
 
     if name in ("PostToolUse", "Stop", "SessionEnd"):
         withdraw_approvals(session)
