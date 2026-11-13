@@ -142,3 +142,9 @@ dialog, .menu, #boardMenu, .task-picker, .focus-pop, #palette { box-shadow: var(
 .file-chip { padding: 0; border-radius: 5px }
 .file-chip code { cursor: pointer }
 .file-chip:hover code { background: var(--pressed); color: var(--ink) }
+/* In the matrix's narrow boxes, a task's tag and dates go under its title instead of beside it. */
+.quadrant .row { flex-wrap: wrap }
+.quadrant .row-trail { order: 3; flex-basis: 100%; max-width: none; margin: -4px 0 0 48px; flex-wrap: wrap }
+.quadrant .no-tag, .quadrant .no-deadline, .quadrant .rowAction { display: none }
+.quadrant .row-actions { display: none }
+.quadrant .row-meta .meta-note { display: none }
