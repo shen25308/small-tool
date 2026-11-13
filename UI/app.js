@@ -1250,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const s = await native('load');
     if (s) data = await upgradeWorkspace(s);
+    SourceColors.applyStyle();
     render();
     if (upgradeNote) toast(upgradeNote);
     await native('ready');

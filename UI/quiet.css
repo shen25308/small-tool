@@ -11,7 +11,7 @@
   -webkit-text-fill-color: currentColor !important; color: var(--ink) !important;
   font: 700 26px/1.15 var(--sans); letter-spacing: -.02em;
 }
-#pageCount { color: var(--faint); font: 600 26px/1.15 var(--sans); letter-spacing: -.02em }
+#pageCount { color: var(--muted); font: 600 26px/1.15 var(--sans); letter-spacing: -.02em }
 #dateline { color: var(--muted) }
 .toolbar-glass, .toolbar .glass { -webkit-backdrop-filter: none; backdrop-filter: none }
 
@@ -25,11 +25,11 @@
 .tile-icon { width: 20px; height: 20px; background: none; color: var(--tile); font: 700 11px/1 var(--sans) }
 .tile-icon .symbol { width: 16px; height: 16px }
 .tile-label { font-size: 13px; font-weight: 400; color: var(--ink) }
-.tile-count { font: 400 12px/1 var(--sans); color: var(--muted) }
+.tile-count { font: 400 12px/1 var(--sans); color: var(--secondary) }
 .smart-tile.active { background: var(--row-selected) }
 .smart-tile.active .tile-icon { background: none; color: var(--tile) }
 .smart-tile.active .tile-label { color: var(--ink); font-weight: 500 }
-.smart-tile.active .tile-count { color: var(--secondary) }
+.smart-tile.active .tile-count { color: var(--ink) }
 .tile-today { --tile: var(--action) }
 .tile-upcoming { --tile: var(--danger) }
 .tile-all, .tile-done { --tile: var(--muted) }
@@ -57,7 +57,7 @@
 .task-deadline.has-deadline { background: none; color: var(--muted); padding: 0 2px }
 .task-deadline.overdue { background: none; color: var(--danger) }
 .planned-day { color: var(--muted) }
-.row-meta .agent-chip { display: inline-flex; align-items: center; gap: 5px; padding: 0; background: none !important; color: var(--secondary) !important; font-size: 11.5px }
+.row-meta .agent-chip { display: inline-flex; align-items: center; gap: 5px; padding: 0; background: none !important; color: var(--secondary) !important; font-size: 12px }
 .row-meta .agent-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted) }
 .agent-chip.working::before { background: var(--action) }
 .agent-chip.blocked::before { background: var(--orange) }
@@ -90,7 +90,7 @@
 .test-chip.none { color: var(--warning) }
 .report-evidence { border-left-color: var(--line) }
 .approval-detail { background: var(--control) }
-.result-card.has-source-color { background: var(--paper); box-shadow: inset 3px 0 0 var(--source-color), 0 0 0 .5px var(--line) }
+.result-card.has-source-color { background: var(--source-tint, var(--paper)); box-shadow: inset 3px 0 0 var(--source-color), 0 0 0 .5px var(--line) }
 .source-swatch:not(.chosen) { background: none; box-shadow: inset 0 0 0 1px var(--line); opacity: 1 }
 
 /* The agent capsule stays a calm black pill: no travelling light, no coloured glow. */
@@ -134,7 +134,7 @@ dialog, .menu, #boardMenu, .task-picker, .focus-pop, #palette { box-shadow: var(
 .quadrant-head { display: flex; align-items: baseline; justify-content: space-between }
 .quadrant-head h3 { font-size: 13px; font-weight: 600 }
 .quadrant-head span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
-.quadrant-note { margin: 1px 0 6px; color: var(--muted); font-size: 11.5px }
+.quadrant-note { margin: 1px 0 6px; color: var(--muted); font-size: 12px }
 .quadrant .row-trail { max-width: 40% }
 @media (max-width: 760px) { .matrix { grid-template-columns: 1fr } }
 

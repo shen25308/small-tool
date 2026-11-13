@@ -297,7 +297,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         web.underPageBackgroundColor = .windowBackgroundColor
         let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView]
         let display = NSScreen.main?.visibleFrame.size ?? NSSize(width:760,height:800)
-        let frame=NSRect(x:0,y:0,width:min(760,display.width),height:min(800,display.height))
+        // "--window-size 1280x800" sets the first window size for one launch, for screenshots at known sizes.
+        let sized = args.firstIndex(of:"--window-size").flatMap { $0+1 < args.count ? args[$0+1] : nil }?
+            .split(separator:"x").compactMap { Double($0) }
+        let wanted = sized?.count == 2 && sized![0] >= 320 && sized![1] >= 300 ? NSSize(width:sized![0],height:sized![1]) : NSSize(width:760,height:800)
+        let frame=NSRect(x:0,y:0,width:min(wanted.width,display.width),height:min(wanted.height,display.height))
         window = NSWindow(contentRect:NSWindow.contentRect(forFrameRect:frame,styleMask:style),styleMask:style,backing:.buffered,defer:false)
         window.title = "My Notes"
         window.backgroundColor = .windowBackgroundColor

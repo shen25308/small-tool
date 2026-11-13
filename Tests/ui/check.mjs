@@ -27,6 +27,45 @@ async function check(name, options, body) {
 const day = offset => { const d = new Date(); d.setDate(d.getDate() + offset); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const text = (page, selector) => page.locator(selector).first().innerText();
 
+// READABILITY: every visible piece of text on the main screens reads at 4.5:1 or more against the opaque surface
+// behind it, and none is smaller than 12 px. Decorative marks (#, separators, placeholders) are excluded.
+const contrastAudit = () => {
+  // Colours come back as rgb()/rgba() or, for color-mix(), as color(srgb r g b / a) with 0–1 channels.
+  const parse = value => {
+    const m = value.match(/[\d.]+/g);
+    if (!m) return [0, 0, 0, 0];
+    const n = m.map(Number);
+    return value.startsWith('color(') ? [n[0] * 255, n[1] * 255, n[2] * 255, n[3] ?? 1] : n;
+  };
+  const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+  const over = (top, bottom) => { const a = top[3] ?? 1; return [0, 1, 2].map(i => top[i] * a + bottom[i] * (1 - a)).concat(1); };
+  // The page's own background, then each ancestor's background laid over it.
+  function backdrop(node) {
+    const chain = [];
+    for (let el = node; el; el = el.parentElement) chain.push(getComputedStyle(el).backgroundColor);
+    let colour = parse(getComputedStyle(document.documentElement).colorScheme.includes('dark') && matchMedia('(prefers-color-scheme: dark)').matches ? 'rgb(30,30,31)' : 'rgb(255,255,255)');
+    for (const value of chain.reverse()) { const c = parse(value); if (c.length === 3) c.push(1); if (c[3] > 0) colour = over(c, colour); }
+    return colour;
+  }
+  const problems = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    const value = text.textContent.trim();
+    const el = text.parentElement;
+    if (!value || !el || /^[#·•›|,()\-–—]+$/.test(value) || el.closest('[hidden], [aria-hidden="true"], .island, .symbol, kbd, .unread-dot, .tile-icon, #inboxBadge, #toast, option, script, style, dialog:not([open])')) continue;
+    const box = el.getBoundingClientRect();
+    if (!box.width || !box.height || box.bottom < 0 || box.top > innerHeight || box.right < 0 || box.left > innerWidth) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden' || Number(style.opacity) < .99) continue;
+    const back = backdrop(el), fore = over(parse(style.color).length === 3 ? [...parse(style.color), 1] : parse(style.color), back);
+    const [x, y] = [lum(fore), lum(back)].sort((p, q) => q - p);
+    const ratio = (x + .05) / (y + .05), size = parseFloat(style.fontSize);
+    if (size < 1) continue; // Text replaced by a drawn mark (the priority "!!"), kept for VoiceOver.
+    if (ratio < 4.5 || size < 12) problems.push(value.slice(0, 30) + ' (' + el.className + ') ' + ratio.toFixed(2) + ':1 ' + size + 'px');
+  }
+  return problems;
+};
+
 await check('today view and sidebar counts', {scale: 2}, async ({page, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.equal(await text(page, '#pageCount'), '5');
@@ -1089,26 +1128,23 @@ for (const dark of [false, true]) {
     const claude = page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first();
     assert.match(await claude.getAttribute('class'), /has-source-color/);
     assert.match(await claude.getAttribute('style'), /--source-color:\s*#af52de/);
+    // SOURCE-TINT: GitHub has a quiet default colour, and the tint really changes the background.
     const github = page.locator('#inboxItems [data-notice]', {hasText: 'GitHub Actions'}).first();
-    assert.doesNotMatch(await github.getAttribute('class'), /has-source-color/);
+    assert.match(await github.getAttribute('class'), /has-source-color/);
+    const backgrounds = await page.evaluate(() => [...document.querySelectorAll('#inboxItems .inbox-item')].map(node => getComputedStyle(node).backgroundColor));
+    const paper = await page.evaluate(() => { const i = document.createElement('i'); i.style.background = 'var(--paper)'; document.body.append(i); const c = getComputedStyle(i).backgroundColor; i.remove(); return c; });
+    assert.ok(backgrounds.filter(value => value !== paper).length >= 3, 'tinted backgrounds: ' + backgrounds.join(' | '));
     await shot('inbox-colours' + (dark ? '-dark' : ''));
-    // Contrast of the headline over the tinted card, for every preset.
-    const ratios = await page.evaluate(presets => {
-      const card = document.querySelector('#inboxItems .inbox-item.has-source-color'), head = card.querySelector('.inbox-item-title');
-      const rgb = value => value.match(/[\d.]+/g).map(Number);
-      const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
-      const mix = (a, b, t) => a.map((v, i) => v * (1 - t) + b[i] * t);
-      const probe = document.createElement('i'); probe.style.background = 'var(--paper)'; document.body.append(probe);
-      const paper = rgb(getComputedStyle(probe).backgroundColor); probe.remove();
-      const [r, g, b, a = 1] = rgb(getComputedStyle(head).color);
-      return presets.map(([, hex]) => {
-        const tint = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
-        const back = mix(paper, tint, .07), text = mix(back, [r, g, b], a);
-        const [x, y] = [lum(text), lum(back)].sort((p, q) => q - p);
-        return (x + .05) / (y + .05);
-      });
-    }, await page.evaluate(() => SourceColors.presets));
-    assert.ok(Math.min(...ratios) >= 7, 'headline contrast over every tint: ' + ratios.map(r => r.toFixed(1)).join(', '));
+    // Every text on every tint, for every preset and a few extreme custom colours, reads at 4.5:1 or more.
+    for (const color of [...(await page.evaluate(() => SourceColors.presets.map(([, hex]) => hex))), '#000000', '#ffffff', '#ffd60a', '#ff0000', '#0000ff']) {
+      await page.evaluate(color => document.querySelectorAll('#inboxItems .inbox-item').forEach(node => { node.classList.add('has-source-color'); node.style.setProperty('--source-color', color); }), color);
+      assert.deepEqual(await page.evaluate(contrastAudit).then(list => list.filter(item => /inbox-item/.test(item))), [], 'contrast on ' + color);
+    }
+    // Accent only: no background tint, the dot and stripe stay.
+    await page.evaluate(() => SourceColors.setStyle('accent'));
+    await page.waitForFunction(() => window.__host.workspace.sourceStyle === 'accent');
+    assert.equal(await claude.evaluate(node => getComputedStyle(node).backgroundColor), paper);
+    await page.evaluate(() => SourceColors.setStyle('tint'));
     // Reset removes the colour.
     await page.click('#boardMore');
     await page.click('#openConnectors');
@@ -1364,6 +1400,23 @@ await check('NATIVE-01: the card measures its content, settles, and shrinks agai
   await page.waitForTimeout(800);
   assert.equal(await page.evaluate(() => window.__host.cardSizes.length), calls, 'and stays put');
 });
+
+for (const dark of [false, true]) {
+  await check('READABILITY: text contrast and size on the main screens' + (dark ? ', dark' : ''), {dark, width: 1280, height: 800}, async ({page}) => {
+    const seen = [];
+    for (const go_ of ['today', 'upcoming', 'inbox', 'projects', 'all']) {
+      await page.evaluate(v => go(v), go_);
+      if (go_ === 'inbox') await page.locator('#inboxItems [data-notice]').first().click();
+      await page.waitForTimeout(150);
+      seen.push(...(await page.evaluate(contrastAudit)).map(problem => go_ + ': ' + problem));
+    }
+    assert.deepEqual([...new Set(seen)], [], 'text below 4.5:1 or 12 px');
+  });
+  await check('READABILITY: the compact card' + (dark ? ', dark' : ''), {dark, width: 340, height: 430, compact: true}, async ({page}) => {
+    await page.waitForTimeout(300);
+    assert.deepEqual([...new Set(await page.evaluate(contrastAudit))], [], 'text below 4.5:1 or 12 px on the card');
+  });
+}
 
 await check('native capture flags open the right sheets', {}, async ({page}) => {
   await page.evaluate(() => window.showForCapture('schedule'));

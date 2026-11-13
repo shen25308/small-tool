@@ -1,7 +1,8 @@
 'use strict';
-// A colour for each connection, so results from different sources are easy to tell apart (F12).
-// It is shown as a thin stripe and a dot beside the source name, never as a status colour,
-// and the source name is always written out, so colour is never the only cue.
+// A colour for each connection, so results from different sources are easy to tell apart (F12, SOURCE-TINT).
+// By default it tints the result's background very lightly; "Accent only" keeps just a dot and a stripe.
+// It is never a status colour, and the source name is always written out, so colour is never the only cue.
+// Codex, Claude Code, Gmail and GitHub have quiet defaults; any colour can be changed or reset.
 const SourceColors = (() => {
   const presets = [['Blue', '#0a84ff'], ['Teal', '#30b0c7'], ['Green', '#34c759'], ['Orange', '#ff9f0a'],
                    ['Pink', '#ff375f'], ['Purple', '#af52de'], ['Brown', '#a2845e'], ['Graphite', '#8e8e93']];
@@ -12,10 +13,15 @@ const SourceColors = (() => {
   };
   const keyFor = source => connections[source] || source;
   const valid = color => /^#[0-9a-f]{6}$/i.test(color || '');
+  const defaults = {'Codex': '#2e8b57', 'Claude Code': '#a0643c', 'Gmail': '#2f6fd1', 'Outlook': '#2f6fd1', 'GitHub Actions': '#7b68a6'};
   function colorFor(source) {
-    const color = (data.sourceColors || {})[keyFor(source)];
-    return valid(color) ? color : '';
+    const key = keyFor(source), color = (data.sourceColors || {})[key];
+    return valid(color) ? color : defaults[key] || '';
   }
+  // "tint" (the default) or "accent".
+  const style = () => data.sourceStyle === 'accent' ? 'accent' : 'tint';
+  function applyStyle() { document.documentElement.classList.toggle('source-accent', style() === 'accent'); }
+  function setStyle(value) { return change(state => { if (value === 'accent') state.sourceStyle = 'accent'; else delete state.sourceStyle; }).then(applyStyle); }
   function set(key, color) {
     return change(state => {
       state.sourceColors = {...(state.sourceColors || {})};
@@ -24,18 +30,18 @@ const SourceColors = (() => {
     });
   }
   function swatch(key) {
-    const color = (data.sourceColors || {})[key] || '';
+    const color = (data.sourceColors || {})[key] || defaults[key] || '';
     return '<button type="button" class="source-swatch' + (color ? ' chosen' : '') + '" data-color-for="' + esc(key) + '" style="--swatch:' + (color || 'transparent') + '" title="Colour for ' + esc(key) + '" aria-label="Colour for ' + esc(key) + (color ? ', ' + esc(color) : ', none') + '"></button>';
   }
   function picker(anchor) {
-    const key = anchor.dataset.colorFor, current = (data.sourceColors || {})[key] || '';
+    const key = anchor.dataset.colorFor, current = (data.sourceColors || {})[key] || defaults[key] || '';
     const pop = document.createElement('div');
     pop.className = 'task-picker color-picker';
     pop.setAttribute('aria-label', 'Colour for ' + key);
     pop.innerHTML = '<h3>' + esc(key) + '</h3><div class="color-grid">' + presets.map(([name, color]) =>
       '<button type="button" data-color="' + color + '" style="--swatch:' + color + '" aria-pressed="' + (color === current) + '" title="' + name + '" aria-label="' + name + '"></button>').join('') + '</div>' +
       '<label class="color-custom">Custom<input type="color" value="' + (current || '#0a84ff') + '"></label>' +
-      '<button type="button" class="mini-link" data-color="">Reset to none</button>';
+      '<button type="button" class="mini-link" data-color="">' + (defaults[key] ? 'Reset to default' : 'Reset to none') + '</button>';
     const choose = color => action(set(key, color).then(() => {
       pop.hidePopover();
       const row = document.querySelector('[data-color-for="' + CSS.escape(key) + '"]');
@@ -62,6 +68,6 @@ const SourceColors = (() => {
     const anchor = event.target.closest('.source-swatch');
     if (anchor) { event.preventDefault(); event.stopPropagation(); picker(anchor); }
   }, true);
-  return {colorFor, swatch, apply, keyFor, presets};
+  return {colorFor, swatch, apply, keyFor, presets, defaults, style, setStyle, applyStyle};
 })();
 window.SourceColors = SourceColors;

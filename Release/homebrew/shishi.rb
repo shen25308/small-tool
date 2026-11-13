@@ -3,7 +3,7 @@
 # github.com/shen25308/homebrew-tap as Casks/shishi.rb. Users then run:
 #   brew install --cask shen25308/tap/shishi
 cask "shishi" do
-  version "1.7"
+  version "1.8"
   sha256 "REPLACE_WITH_THE_SHA256_OF_THE_RELEASE_ZIP"
 
   url "https://github.com/shen25308/small-tool/releases/download/v#{version}/Shishi-#{version}-macOS-arm64.zip"

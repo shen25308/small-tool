@@ -177,6 +177,22 @@ dark = launch("--workspace", "--appearance", "dark")
 shot("workspace-dark.png", dark)
 stop(dark)
 
+# Retest 1.8 screenshots of the real app: the card at 340 x 430, the workspace at 760 x 600 and wide, light and dark.
+subprocess.run(["defaults", "write", "local.shishi.workdesk", "ShiShiCardWidth", "-float", "340"], check=False)
+subprocess.run(["defaults", "write", "local.shishi.workdesk", "ShiShiCardHeight", "-float", "430"], check=False)
+for appearance in ("light", "dark"):
+    card = launch("--compact-workspace", "--appearance", appearance)
+    shot(f"retest-card-340x430-{appearance}.png", card)
+    stop(card)
+    for size, views in (("760x600", ("today", "inbox")), ("1280x800", ("inbox", "projects", "plan-week"))):
+        for name in views:
+            flags = ["--workspace", "--window-size", size, "--appearance", appearance] + ([] if name == "today" else ["--show", name])
+            window = launch(*flags)
+            shot(f"retest-{name}-{size}-{appearance}.png", window)
+            stop(window)
+subprocess.run(["defaults", "delete", "local.shishi.workdesk", "ShiShiCardWidth"], check=False)
+subprocess.run(["defaults", "delete", "local.shishi.workdesk", "ShiShiCardHeight"], check=False)
+
 status = subprocess.run([str(python), "-B", str(resources / "ClaudeCode/install.py"), "install", "--json",
                          "--claude-home", str(shots.parent / "claude-home")], capture_output=True, text=True, timeout=60)
 print(status.stdout.strip())

@@ -490,6 +490,10 @@ $('closePeek').onclick = () => {
 // The build workflow opens these sheets with "--show <name>" to capture the real window.
 window.showForCapture = name => {
   if (name === 'settings-sync') { showConnectors('sync'); return; }
+  // The retest screenshots: the Inbox reading the newest result, Projects, and the week plan.
+  if (name === 'inbox') { const first = allNotices().find(note => !note.archived); if (first) InboxView.open(first.id); else go('inbox'); return; }
+  if (name === 'projects') { go('projects'); return; }
+  if (name === 'plan-week') { planLayout = 'week'; go('upcoming'); return; }
   if (name === 'connections') {
     showConnectors('agents');
     setTimeout(() => document.querySelector('#claudeRow .source-swatch')?.click(), 300);

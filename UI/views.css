@@ -7,7 +7,7 @@
 .alt-page .inbox-view { flex: 1; height: auto }
 .alt-page .projects-view { flex: 1; overflow-y: auto }
 #board[hidden], .alt-view[hidden] { display: none !important }
-.nav-heading { margin: 10px 8px 2px; color: var(--muted); font: 600 11px/1.4 var(--sans); letter-spacing: .02em; text-transform: uppercase }
+.nav-heading { margin: 10px 8px 2px; color: var(--muted); font: 600 12px/1.4 var(--sans); letter-spacing: .02em; text-transform: uppercase }
 .area-name { margin: 8px 8px 2px; color: var(--muted); font: 600 12px/1.4 var(--sans) }
 
 /* Inbox: list beside a reader. */
@@ -49,7 +49,7 @@
 .reader-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px }
 .reader-tabs { display: flex; gap: 20px; margin: 6px 0 14px; border-bottom: .5px solid var(--line) }
 .reader-tabs button { margin-bottom: -1px; padding: 6px 0 7px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--secondary); font: 500 13px/1.3 var(--sans) }
-.reader-tabs button[aria-selected="true"] { border-bottom-color: var(--action); color: var(--action); font-weight: 600 }
+.reader-tabs button[aria-selected="true"] { border-bottom-color: var(--blue); color: var(--blue); font-weight: 600 }
 .reader-tabs button:hover { color: var(--ink) }
 .reader-body h3 { margin: 14px 0 6px; font-size: 13px }
 .reader-points { margin: 0; padding-left: 20px; line-height: 1.55 }
@@ -121,3 +121,14 @@
 .week-day .row-actions, .week-day .no-tag, .week-day .no-deadline { display: none }
 .week-day .day-head { margin-bottom: 4px }
 @media (max-width: 1000px) { .week-grid { grid-template-columns: repeat(7, minmax(160px, 1fr)) } }
+
+/* SOURCE-TINT: a source's colour as a very light background (default), or only as a dot and stripe. The tint is
+   mixed into the opaque surface, so text contrast is measured against a solid colour. */
+.has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 9%, var(--paper)) }
+@media (prefers-color-scheme: dark) { .has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 16%, var(--paper)) } }
+html.dark-forced .has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 16%, var(--paper)) }
+.inbox-item.has-source-color, .source-chip.has-source-color { background: var(--source-tint) }
+.inbox-item.has-source-color { box-shadow: inset 3px 0 0 var(--source-color), 0 0 0 .5px var(--line) }
+.inbox-item.has-source-color[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--source-color), 0 0 0 1.5px var(--action) }
+html.source-accent .has-source-color { --source-tint: var(--paper) }
+html.source-accent .source-chip.has-source-color { background: var(--control) }

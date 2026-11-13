@@ -10,7 +10,7 @@
 .tool .symbol { width: 17px; height: 17px }
 #inboxBadge {
   position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px;
-  background: var(--red); color: #fff; font: 600 10px/15px var(--sans); text-align: center;
+  background: var(--red); color: #fff; font: 600 12px/15px var(--sans); text-align: center;
 }
 #focusButton.running { background: var(--tint); color: var(--blue); font-variant-numeric: tabular-nums; font-weight: 600; padding: 0 9px }
 #workspaceReturn { display: inline-flex; align-items: center; gap: 1px; padding: 3px 8px 3px 3px; color: var(--blue); font-size: 13px }
@@ -60,7 +60,7 @@
 .menu-item .shortcut, .menu-item .chosen { margin-left: auto; padding-left: 16px; color: var(--muted); font-size: 12px }
 .menu-item:hover .shortcut, .menu-item:hover .chosen { color: rgba(255,255,255,.8) }
 .menu-divider { height: .5px; margin: 5px 9px; background: var(--line) }
-.menu-heading { padding: 4px 9px 2px; color: var(--muted); font-size: 11px; font-weight: 600 }
+.menu-heading { padding: 4px 9px 2px; color: var(--muted); font-size: 12px; font-weight: 600 }
 .menu-segment { display: flex; gap: 4px; padding: 3px 9px 5px }
 .menu-segment button { flex: 1; min-height: 22px; border-radius: 5px; background: var(--control); font-size: 12px; font-weight: 500 }
 .menu-segment button:hover { background: var(--pressed) }
@@ -94,11 +94,11 @@
 .palette-field .symbol { width: 19px; height: 19px; color: var(--muted) }
 #paletteInput { min-height: 26px; padding: 0; background: none; box-shadow: none; font-size: 18px }
 #paletteList { flex: 1; min-height: 0; overflow-y: auto; padding: 5px }
-.palette-section { padding: 7px 9px 3px; color: var(--muted); font-size: 11px; font-weight: 600 }
+.palette-section { padding: 7px 9px 3px; color: var(--muted); font-size: 12px; font-weight: 600 }
 .palette-item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 30px; padding: 3px 9px; border-radius: 6px; text-align: left }
 .palette-item .symbol { width: 15px; height: 15px; color: var(--secondary) }
 .palette-item .palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.palette-item small { color: var(--muted); font-size: 11.5px; white-space: nowrap }
+.palette-item small { color: var(--muted); font-size: 12px; white-space: nowrap }
 .palette-item.active { background: var(--action); color: #fff }
 .palette-item.active .symbol, .palette-item.active small { color: rgba(255,255,255,.85) }
 .palette-item.is-done .palette-label { text-decoration: line-through; opacity: .6 }
@@ -106,7 +106,7 @@
 
 /* Agents */
 .agent-dock { flex: none; max-height: 42%; overflow-y: auto; padding: 6px 10px 10px; border-top: .5px solid var(--line) }
-.agent-dock h2 { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 4px 8px; color: var(--muted); font-size: 11px; font-weight: 600 }
+.agent-dock h2 { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 4px 8px; color: var(--muted); font-size: 12px; font-weight: 600 }
 .agent-row {
   position: relative; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; column-gap: 9px; align-items: center;
   width: 100%; padding: 5px 8px; border-radius: 6px; text-align: left;
@@ -118,8 +118,8 @@
 .agent-dot.attention { background: var(--orange) }
 @keyframes agent-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--action) 55%, transparent) } 60% { box-shadow: 0 0 0 5px transparent } }
 .agent-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500 }
-.agent-detail { grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11.5px }
-.agent-time { grid-row: 1; grid-column: 3; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums }
+.agent-detail { grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px }
+.agent-time { grid-row: 1; grid-column: 3; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
 .agent-state { font-weight: 500 }
 .agent-state.working { color: var(--blue) }
 .agent-state.done { color: var(--success) }
@@ -140,19 +140,19 @@
 .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 14px }
 .stat { padding: 9px 10px; border-radius: 9px; background: var(--control) }
 .stat b { display: block; font: 700 20px/1.1 var(--rounded); font-variant-numeric: tabular-nums }
-.stat span { color: var(--muted); font-size: 11.5px }
+.stat span { color: var(--muted); font-size: 12px }
 .week-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 74px; margin: 6px 0 2px }
 .week-bars div { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 3px }
 .week-bars i { width: 100%; max-width: 30px; min-height: 2px; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--action) 35%, transparent) }
 .week-bars .is-today i { background: var(--action) }
-.week-bars span { color: var(--muted); font-size: 10.5px }
-.week-bars b { font-size: 10.5px; font-weight: 500; color: var(--secondary); font-variant-numeric: tabular-nums }
+.week-bars span { color: var(--muted); font-size: 12px }
+.week-bars b { font-size: 12px; font-weight: 500; color: var(--secondary); font-variant-numeric: tabular-nums }
 
 @media (max-width: 460px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
 
 /* Agents: the project leads, the agent's name stays quiet; usage reads as two tidy lines. */
 .agent-dock { max-height: 36% }
-.agent-source { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400 }
+.agent-source { margin-left: 6px; color: var(--muted); font-size: 12px; font-weight: 400 }
 .agent-usage { display: grid; gap: 1px; margin: 6px 8px 0; padding-top: 6px; border-top: .5px solid var(--hairline) }
 .usage-row { display: flex; justify-content: space-between; gap: 8px; min-width: 0; white-space: nowrap }
 .usage-row b { flex: none; color: var(--secondary); font-weight: 500 }

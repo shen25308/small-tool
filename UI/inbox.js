@@ -233,6 +233,8 @@ function showConnectors(tab,{fromInbox=false}={}) {
       '<h3>Shishi</h3><div class="group-box">'+
       '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
         [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
+      '<div class="group-row"><span class="row-text"><b>Source colours</b><small>How results show the colour of their source. Set each colour under Agents and Sync.</small></span><div class="menu-segment" id="sourceStyleChoice">'+
+        [['tint','Subtle Tint'],['accent','Accent Only']].map(([value,label])=>'<button type="button" data-source-style="'+value+'" aria-pressed="'+(SourceColors.style()===value)+'">'+label+'</button>').join('')+'</div></div>'+
       toggle('id="menuBarChoice" disabled','Show status in the menu bar','Agent progress and unread results stay visible after the window closes.')+
       toggle('data-setting="hotkeys" disabled','Keyboard shortcuts in every app','⌃⌥Space shows or hides the card. ⌃⌥N adds a task.','hotkeyNote')+
       '</div><h3>Corner card</h3><div class="group-box">'+
@@ -246,6 +248,13 @@ function showConnectors(tab,{fromInbox=false}={}) {
     '</div>',fromInbox?{label:'Inbox',back:listNotices}:{});
   // Start keyboard focus on the chosen tab, not on the close button.
   document.querySelector('.settings-tabs [aria-selected="true"]')?.focus({preventScroll:true});
+  $('sourceStyleChoice').onclick=event=>{
+    const button=event.target.closest('[data-source-style]');
+    if(!button)return;
+    action(SourceColors.setStyle(button.dataset.sourceStyle).then(()=>{
+      $('sourceStyleChoice')?.querySelectorAll('[data-source-style]').forEach(node=>node.setAttribute('aria-pressed',String(node===button)));
+    }));
+  };
   document.querySelector('.settings-tabs').onclick=event=>{
     const button=event.target.closest('[data-settings-tab]');
     if(!button)return;

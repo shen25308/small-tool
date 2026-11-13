@@ -21,13 +21,13 @@ body.compact #card::before { content: ""; position: absolute; top: 8px; left: 50
 #card .island { position: relative; left: auto; top: auto; transform: none }
 
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px }
-.card-weekday { display: block; color: var(--red); font: 700 11px/1.2 var(--sans); letter-spacing: .07em }
+.card-weekday { display: block; color: var(--danger); font: 700 12px/1.2 var(--sans); letter-spacing: .07em }
 .card-date-line { display: flex; align-items: baseline; gap: 9px; margin-top: 1px }
 .card-day { font: 600 32px/1 var(--rounded); letter-spacing: -.02em; font-variant-numeric: tabular-nums }
 .card-summary { color: var(--secondary); font-size: 13px; font-weight: 500 }
 .card-ring { width: 40px; height: 40px }
 .card-ring .ring-track, .card-ring .ring-fill { stroke-width: 3.6 }
-.card-ring .ring-label { position: absolute; color: var(--secondary); font: 700 10.5px var(--rounded); font-variant-numeric: tabular-nums }
+.card-ring .ring-label { position: absolute; color: var(--secondary); font: 700 12px var(--rounded); letter-spacing: -.03em; font-variant-numeric: tabular-nums }
 
 .card-tasks { display: grid; align-content: start }
 #card .row { align-items: center; gap: 10px; min-height: 32px; margin: 0 -8px; padding: 6px 8px; border-radius: 10px }
@@ -42,7 +42,7 @@ body.compact #card::before { content: ""; position: absolute; top: 8px; left: 50
 #card .title { overflow: hidden; font-size: 13.5px; line-height: 1.3; white-space: nowrap; text-overflow: ellipsis }
 .card-due { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
 .card-due.late { color: var(--danger); font-weight: 500 }
-.card-sub { flex: none; padding: 0 6px; border-radius: 999px; background: var(--control); color: var(--muted); font-size: 11px; line-height: 17px }
+.card-sub { flex: none; padding: 0 6px; border-radius: 999px; background: var(--control); color: var(--muted); font-size: 12px; line-height: 17px }
 .card-more { align-self: flex-start; margin-top: -6px; padding: 1px 0; color: var(--blue); font-size: 12px; font-weight: 500 }
 .card-more:hover { background: none; text-decoration: underline }
 .card-empty { display: flex; align-items: center; gap: 10px; padding: 6px 0 2px; color: var(--secondary); font-size: 13px }
@@ -57,7 +57,7 @@ body.compact #card::before { content: ""; position: absolute; top: 8px; left: 50
 .card-tool { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--muted); opacity: 0; transition: opacity .2s, background .2s }
 #card:hover .card-tool, .card-tool:focus-visible { opacity: 1 }
 .card-tool:hover { background: var(--control); color: var(--ink) }
-.card-tool[aria-pressed="true"] { color: var(--action) }
+.card-tool[aria-pressed="true"] { color: var(--blue) }
 .card-tool .symbol { width: 14px; height: 14px }
 
 /* The brief report that appears when an agent finishes or needs you. */
@@ -81,11 +81,11 @@ html.vibrant .card-report { background: color-mix(in srgb, var(--tone) 12%, colo
 .report-close { display: grid; place-items: center; width: 18px; height: 18px; flex: none; align-self: center; border-radius: 50%; color: var(--muted) }
 .report-close:hover { background: var(--control); color: var(--ink) }
 .report-close .symbol { width: 9px; height: 9px }
-.report-verdict { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 11.5px; color: var(--secondary) }
+.report-verdict { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; color: var(--secondary) }
 .report-verdict > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .verdict-badge {
   display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px 1px 6px; border-radius: 999px;
-  background: var(--tone); color: #fff; font-size: 11.5px; font-weight: 600; line-height: 18px;
+  background: var(--tone); color: #fff; font-size: 12px; font-weight: 600; line-height: 18px;
 }
 .verdict-badge .symbol { width: 11px; height: 11px }
 .report-headline { display: -webkit-box; overflow: hidden; font-size: 13.5px; font-weight: 600; line-height: 1.35; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
@@ -94,17 +94,17 @@ html.vibrant .card-report { background: color-mix(in srgb, var(--tone) 12%, colo
 .report-points li::marker { color: var(--faint) }
 .report-chips { display: flex; flex-wrap: wrap; gap: 4px }
 .report-chips code { padding: 0 6px; border-radius: 5px; background: var(--control); color: var(--secondary); font: 11px/18px var(--mono) }
-.test-chip { padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 18px }
+.test-chip { padding: 0 7px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 18px }
 .test-chip.passed { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--success) }
 .test-chip.none { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--warning) }
 .test-chip.failed { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--danger) }
-.report-asked { overflow: hidden; color: var(--muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap }
+.report-asked { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap }
 .report-actions { display: flex; align-items: center; gap: 6px; margin-top: 2px }
 .report-actions .primary, .report-actions .secondary { min-height: 24px; padding: 2px 11px; border-radius: 999px; font-size: 12px }
 .report-actions .mini-link { margin-left: auto }
 .report-actions .primary:last-child { margin-left: auto }
 .card-report.verdict-done .report-actions .primary { background: var(--green) }
-.report-more { justify-self: start; padding: 0; color: var(--blue); font-size: 11.5px }
+.report-more { justify-self: start; padding: 0; color: var(--blue); font-size: 12px }
 .report-more:hover { background: none; text-decoration: underline }
 
 /* First run: what the card is for, with one click to connect or to watch a demo. */
@@ -117,7 +117,7 @@ html.vibrant .card-welcome { background: color-mix(in srgb, var(--action) 12%, c
 /* A newer result waits here while the current report is being read. */
 .report-newer {
   justify-self: center; display: inline-flex; align-items: center; gap: 4px; margin: -3px 0 1px; padding: 1px 10px 1px 8px;
-  border-radius: 999px; background: var(--action); color: #fff; font-size: 11.5px; font-weight: 600; line-height: 20px;
+  border-radius: 999px; background: var(--action); color: #fff; font-size: 12px; font-weight: 600; line-height: 20px;
 }
 .report-newer .symbol { width: 11px; height: 11px; transform: rotate(-90deg) }
 .report-newer:not([hidden]) { animation: menu-in .25s ease-out }
@@ -131,13 +131,13 @@ html.vibrant .card-welcome { background: color-mix(in srgb, var(--action) 12%, c
 .card-inbox { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 7px; border-radius: 999px; color: var(--secondary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums }
 .card-inbox:hover { background: var(--control); color: var(--ink) }
 .card-inbox .symbol { width: 15px; height: 15px }
-.card-inbox:has(#cardInboxCount:not(:empty)) { color: var(--action) }
+.card-inbox:has(#cardInboxCount:not(:empty)) { color: var(--blue) }
 .card-report.has-source-color { box-shadow: inset 3px 0 0 var(--source-color), inset 0 0 0 .5px color-mix(in srgb, var(--tone) 35%, transparent) }
 /* Report text can be selected and copied; the move grip is separate (F15). */
 .card-report .report-reason, .card-report .report-headline, .card-report .report-points, .card-report .report-asked, .card-report .report-chips code { -webkit-user-select: text; user-select: text; cursor: text }
 .card-add-area { display: grid; gap: 4px }
 .card-add-hint:empty { display: none }
-.card-add-hint { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px; padding-left: 28px; font-size: 11.5px }
+.card-add-hint { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px; padding-left: 28px; font-size: 12px }
 .card-row-more { display: grid; place-items: center; width: 22px; height: 20px; flex: none; border-radius: 5px; color: var(--muted); opacity: 0 }
 #card .row:hover .card-row-more, #card .row:focus-within .card-row-more { opacity: 1 }
 .card-row-more:hover { background: var(--pressed); color: var(--ink) }
