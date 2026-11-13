@@ -58,6 +58,8 @@ window.Backup = (() => {
       if (task.title !== undefined && typeof task.title !== 'string') problems.push(where + ' has a title that is not text.');
       return clean;
     }).filter(Boolean);
+    // A backup from before list IDs is upgraded on import; one from after must have a name for every list.
+    if (ws.schema >= 2) problems.push(...Projects.check({...ws, projects, tasks}).map(problem => 'Lists: ' + problem));
     const workspace = {...ws, projects, tasks};
     return {problems, workspace, summary: {
       lists: projects.length, tasks: tasks.length, open: tasks.filter(task => !task.done).length,
@@ -103,7 +105,10 @@ window.Backup = (() => {
     };
   }
 
-  async function replace(workspace) {
+  async function replace(incoming) {
+    const upgraded = Projects.migrate(incoming);
+    if (upgraded.problems.length) throw Error('Not imported: ' + upgraded.problems[0] + ' Nothing was changed.');
+    const workspace = upgraded.workspace;
     const previous = structuredClone(data);
     // No safety copy, no import: the current data stays exactly as it is (UX-N02).
     let snapshot = '';

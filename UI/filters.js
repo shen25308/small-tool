@@ -11,7 +11,7 @@ window.Filters = (() => {
   ];
   const list = () => Array.isArray(data.filters) ? data.filters : [];
   const get = id => list().find(item => item.id === id) || null;
-  const compile = query => TaskLogic.filter(query, {today: day()});
+  const compile = query => TaskLogic.filter(query, {today: day(), listName: projectLabel});
   const matches = filterItem => { const {test} = compile(filterItem.query); return data.tasks.filter(task => test(task)); };
 
   function renderSidebar() {

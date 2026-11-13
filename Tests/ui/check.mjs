@@ -12,7 +12,8 @@ async function check(name, options, body) {
   const session = await open(browser, options);
   const {page} = session;
   const host = () => page.evaluate(() => window.__host);
-  const tasks = async () => (await host()).workspace.tasks;
+  // Lists are stored by ID; checks read them by name, the way a person sees them.
+  const tasks = async () => { const ws = (await host()).workspace; return ws.tasks.map(task => ({...task, project: ws.lists?.[task.project]?.name ?? task.project})); };
   const shot = async file => { if (shots) await page.screenshot({path: shots + '/' + file + '.png'}); };
   try {
     await body({page, host, tasks, shot});
@@ -67,7 +68,7 @@ await check('quick add parses natural language', {}, async ({page, tasks, shot})
   await field.press('Escape');
   assert.equal(await page.locator('.quick-add').count(), 0);
   // A list section adds to that list without scheduling it.
-  await page.click('#pool [data-quick="p:Personal"]');
+  await page.click('#pool [data-quick="p:' + await page.evaluate(() => Projects.byName(data, 'Personal')) + '"]');
   await page.locator('.quick-add input').fill('Buy stamps');
   await page.locator('.quick-add input').press('Enter');
   await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy stamps'));
@@ -365,8 +366,8 @@ await check('context menu: schedule, priority, duplicate, delete with undo', {},
   await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === 'Test reminders').length === 2);
   await page.locator('#pool .row', {hasText: 'Test reminders'}).first().click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Move to List'}).click();
-  await page.locator('.task-picker [data-choice="Personal"]').click();
-  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Test reminders' && t.project === 'Personal'));
+  await page.locator('.task-picker [data-name="Personal"]').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Test reminders' && window.__host.workspace.lists[t.project]?.name === 'Personal'));
   await page.locator('#pool .row', {hasText: 'Test reminders'}).first().click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Copy Title'}).click();
   await page.waitForFunction(() => window.__host.clipboard === 'Test reminders');
@@ -382,21 +383,22 @@ await check('lists and tags: create, rename, delete', {}, async ({page, host}) =
   await page.click('#newProject');
   await page.fill('#projectName', 'Side project');
   await page.press('#projectName', 'Enter');
-  await page.waitForFunction(() => window.__host.workspace.projects.includes('Side project'));
+  await page.waitForFunction(() => Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Side project'));
   assert.equal(await text(page, '#pageTitle'), 'Side project');
-  await page.locator('#projects [data-project="Research notes"]').click({button: 'right'});
+  await page.locator('#projects [data-name="Research notes"]').click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Rename'}).click();
   await page.fill('#nameField', 'Research');
   await page.press('#nameField', 'Enter');
-  await page.waitForFunction(() => window.__host.workspace.projects.includes('Research'));
+  await page.waitForFunction(() => Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Research'));
   let state = (await host()).workspace;
-  assert.equal(state.tasks.filter(t => t.project === 'Research').length, 3);
-  assert.equal(state.tasks.some(t => t.project === 'Research notes'), false);
-  await page.locator('#projects [data-project="Research"]').click({button: 'right'});
+  const named = name => Object.keys(state.lists).find(id => state.lists[id].name === name);
+  assert.equal(state.tasks.filter(t => t.project === named('Research')).length, 3, 'the same tasks, under the same list ID');
+  assert.equal(named('Research notes'), undefined);
+  await page.locator('#projects [data-name="Research"]').click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Delete List'}).click();
-  await page.selectOption('#moveTarget', 'Personal');
+  await page.selectOption('#moveTarget', {label: 'Personal'});
   await page.click('#deleteList .primary');
-  await page.waitForFunction(() => !window.__host.workspace.projects.includes('Research'));
+  await page.waitForFunction(() => !Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Research'));
   state = (await host()).workspace;
   assert.equal(state.tasks.length, sampleWorkspace().tasks.length);
   assert.equal(state.tasks.every(t => state.projects.includes(t.project)), true);
@@ -526,21 +528,21 @@ await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host
   await page.click('#notionForm .primary');
   await page.waitForFunction(() => window.__host.workspace.notion && window.__host.notionPushes.length === 0 && window.__host.workspace.tasks.some(t => t.notion));
   let state = (await host()).workspace;
-  assert.deepEqual([state.notion.title, state.notion.project], ['Team tasks', 'Team tasks']);
+  assert.deepEqual([state.notion.title, state.lists[state.notion.project].name], ['Team tasks', 'Team tasks']);
   const imported = state.tasks.find(t => t.title === 'Plan the launch post');
-  assert.deepEqual([imported.project, imported.dueDate, imported.priority, imported.tag, imported.done], ['Team tasks', day(1), 'P1', 'Marketing', false]);
+  assert.deepEqual([state.lists[imported.project].name, imported.dueDate, imported.priority, imported.tag, imported.done], ['Team tasks', day(1), 'P1', 'Marketing', false]);
   assert.equal(state.tasks.some(t => t.title === 'Old finished page'), false);
   await page.waitForSelector('#notionSync:not([disabled])');
   await shot('notion-connected');
   await page.click('#dialog [data-close]');
   // A task added to the linked list is created in Notion, and completing the imported one is sent too.
-  await page.click('#projects [data-project="Team tasks"]');
+  await page.click('#projects [data-name="Team tasks"]');
   await page.click('#tasks [data-quick="view"]');
   await page.locator('.quick-add input').fill('Draft the changelog');
   await page.locator('.quick-add input').press('Enter');
   await page.keyboard.press('Escape');
   await page.locator('#tasks .row', {hasText: 'Plan the launch post'}).locator('.check').click();
-  await page.locator('#projects [data-project="Team tasks"]').click({button: 'right'});
+  await page.locator('#projects [data-name="Team tasks"]').click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Sync with Notion'}).click();
   await page.waitForFunction(() => window.__host.notionPushes.length === 2);
   const pushes = (await host()).notionPushes;
@@ -548,7 +550,7 @@ await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host
     [['create', {title: 'Draft the changelog', done: false}], ['update', {done: true}]]);
   await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Draft the changelog')?.notion?.id);
   // Nothing more to send on the next sync.
-  await page.locator('#projects [data-project="Team tasks"]').click({button: 'right'});
+  await page.locator('#projects [data-name="Team tasks"]').click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Sync with Notion'}).click();
   await page.waitForFunction(() => /up to date/.test(document.getElementById('toast').textContent));
   assert.equal((await host()).notionPushes.length, 2);
@@ -584,8 +586,8 @@ await check('drag a task into Today and onto a list', {height: 1500}, async ({pa
   const source = page.locator('#pool .row', {hasText: 'Compare pricing pages'});
   await source.dragTo(page.locator('#tasks .task-list'));
   await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === 'Compare pricing pages').planned === d, day(0));
-  await page.locator('#tasks .row', {hasText: 'Compare pricing pages'}).dragTo(page.locator('#projects [data-project="Personal"]'));
-  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Compare pricing pages').project === 'Personal');
+  await page.locator('#tasks .row', {hasText: 'Compare pricing pages'}).dragTo(page.locator('#projects [data-name="Personal"]'));
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Compare pricing pages').project === Object.keys(window.__host.workspace.lists).find(id => window.__host.workspace.lists[id].name === 'Personal'));
 });
 
 const weekdayNow = () => new Intl.DateTimeFormat('en-US', {weekday: 'long'}).format(new Date()).toUpperCase();
@@ -1117,7 +1119,7 @@ await check('backup: export, preview, import and undo', {}, async ({page, host, 
   assert.match(await text(page, '#dialogBody'), /3\s*Tasks[\s\S]*replaces your current 18 tasks/);
   await page.click('#confirmImport');
   await page.waitForFunction(() => window.__host.workspace.tasks.length === 3);
-  assert.equal((await host()).snapshots, 1, 'a copy of the current data is saved first');
+  assert.equal((await host()).snapshots, 2, 'a copy is saved at the upgrade to list IDs, and again before the import');
   await page.locator('#toast button', {hasText: 'Undo'}).click();
   await page.waitForFunction(() => window.__host.workspace.tasks.length === 18);
   assert.equal((await tasks()).find(t => t.title === 'Organize the review notes').done, true, 'undo restores the data from before the import');
@@ -1358,6 +1360,68 @@ await check('Apple Reminders: sync a list both ways', {}, async ({page, host, ta
   assert.equal((await tasks()).some(t => t.reminder), false);
 });
 
+await check('UX-N07: renamed or deleted synced lists never come back after a sync or relaunch', {}, async () => {
+  // Data from before list IDs, with two connections on "Personal", as an older Shishi stored it.
+  const reopen = async workspace => {
+    const again = await open(browser, {workspace});
+    await again.page.evaluate(() => { window.__host.issues = [{number: 31, title: 'Crash on login', state: 'open', url: 'https://github.com/acme/app/issues/31'}]; });
+    return again;
+  };
+  let session = await reopen({...structuredClone(sampleWorkspace()), reminders: {list: 'L2', title: 'Errands', project: 'Personal'},
+    github: {repo: 'acme/app', assignee: '', label: '', project: 'Personal'}});
+  try {
+    const p = session.page;
+    const names = async () => p.evaluate(() => window.__host.workspace.projects.map(id => window.__host.workspace.lists[id].name));
+    assert.deepEqual(await names(), sampleWorkspace().projects, 'the upgrade keeps every list in order');
+    assert.equal(await p.evaluate(() => window.__host.snapshots), 1, 'a copy was saved before the upgrade');
+    await p.locator('#projects [data-name="Personal"]').click({button: 'right'});
+    await p.locator('.menu-item', {hasText: 'Rename'}).click();
+    await p.fill('#nameField', 'Home');
+    await p.press('#nameField', 'Enter');
+    await p.waitForFunction(() => Object.values(window.__host.workspace.lists).some(list => list.name === 'Home'));
+    await p.evaluate(() => Promise.all([syncReminders({quiet: true}), syncIssues({quiet: true})]));
+    await p.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy milk') && window.__host.workspace.tasks.some(t => t.github?.number === 31));
+    let ws = await p.evaluate(() => window.__host.workspace);
+    const home = ws.projects.find(id => ws.lists[id].name === 'Home');
+    assert.equal((await names()).includes('Personal'), false, 'the old name is not recreated');
+    assert.equal((await names()).filter(name => name === 'Home').length, 1, 'and the list is not split');
+    assert.deepEqual([ws.reminders.project, ws.github.project, ws.tasks.find(t => t.title === 'Buy milk').project, ws.tasks.find(t => t.github?.number === 31).project], [home, home, home, home]);
+    // Relaunch from what was stored, sync again: still one "Home".
+    const stored = ws;
+    await session.context.close();
+    session = await reopen(stored);
+    const q = session.page;
+    await q.evaluate(() => Promise.all([syncReminders({quiet: true}), syncIssues({quiet: true})]));
+    ws = await q.evaluate(() => window.__host.workspace);
+    assert.deepEqual(ws.projects.map(id => ws.lists[id].name), stored.projects.map(id => stored.lists[id].name));
+    assert.equal(await q.evaluate(() => window.__host.snapshots || 0), 0, 'no second upgrade');
+    // Delete "Home" with its tasks: both syncs stop, and syncing again creates nothing.
+    await q.locator('#projects [data-name="Home"]').click({button: 'right'});
+    await q.locator('.menu-item', {hasText: 'Delete List'}).click();
+    assert.match(await text(q, '#dialogBody'), /Reminders and GitHub issues syncs with this list/);
+    await q.selectOption('#moveTarget', '');
+    await q.click('#deleteList .primary');
+    await q.waitForFunction(() => !Object.values(window.__host.workspace.lists).some(list => list.name === 'Home'));
+    ws = await q.evaluate(() => window.__host.workspace);
+    assert.equal(ws.reminders, undefined);
+    assert.equal(ws.github, undefined);
+    await q.evaluate(() => Promise.all([syncReminders({quiet: true}), syncIssues({quiet: true})]));
+    ws = await q.evaluate(() => window.__host.workspace);
+    assert.equal(ws.projects.some(id => ['Home', 'Personal', 'Errands', 'app'].includes(ws.lists[id].name)), false);
+  } finally { await session.context.close(); }
+});
+
+await check('upgrade to list IDs: no safety copy, no upgrade', {}, async ({page}) => {
+  const session = await open(browser, {workspace: sampleWorkspace(), failSnapshot: 'The disk is full.'});
+  try {
+    const p = session.page;
+    await p.waitForFunction(() => /could not save a copy/.test(document.getElementById('tasks').textContent));
+    assert.equal(await p.evaluate(() => window.__host.saves), 0, 'the old file is not touched');
+    assert.deepEqual(await p.evaluate(() => window.__host.workspace.projects), sampleWorkspace().projects);
+    session.problems.length = 0;
+  } finally { await session.context.close(); }
+});
+
 await check('calendar events in Today, Upcoming and the card', {}, async ({page, host}) => {
   await page.click('#boardMore');
   await page.click('#openConnectors');
@@ -1437,7 +1501,8 @@ await check('send a task to Claude Code and follow it back', {}, async ({page, h
   const started = (await host()).started[0];
   assert.deepEqual([started.agent, started.folder, started.task, started.terminal], ['claude', '/Users/me/code/app', id, 'Terminal']);
   assert.match(started.prompt, /^Review the product roadmap/);
-  assert.equal((await host()).workspace.projectFolders['Product ideas'], '/Users/me/code/app', 'the folder is remembered for the list');
+  const ws = (await host()).workspace;
+  assert.equal(ws.projectFolders[Object.keys(ws.lists).find(id => ws.lists[id].name === 'Product ideas')], '/Users/me/code/app', 'the folder is remembered for the list');
   assert.match(await text(page, '#toast'), /Claude Code started in Terminal/);
   // The linked session shows on the task row while it works, then its report and time attach to the task.
   const now = Date.now() / 1000;

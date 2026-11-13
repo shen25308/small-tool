@@ -140,33 +140,31 @@ function taskMenu(task, at, anchor) {
   ], at);
 }
 
-function renameProject(name) {
-  nameForm('Rename List', 'Name', projectLabel(name), 'Rename', next => {
-    if (next === name) return;
-    if (data.projects.includes(next)) throw Error('A list with this name already exists.');
-    return change(state => {
-      state.projects[state.projects.indexOf(name)] = next;
-      state.tasks.forEach(task => { if (task.project === name) task.project = next; });
-      if (state.notion?.project === name) state.notion.project = next;
-    }).then(() => { if (view === 'p:' + name) view = 'p:' + next; render(); });
+// Renaming changes the name only: tasks, connections and folders point at the list's ID (UX-N07).
+function renameProject(id) {
+  nameForm('Rename List', 'Name', projectLabel(id), 'Rename', next => {
+    if (next === Projects.name(data, id)) return;
+    return change(state => { Projects.rename(state, id, next); }).then(render);
   });
 }
 
 function deleteProject(name) {
   const others = data.projects.filter(item => item !== name);
   const count = data.tasks.filter(task => task.project === name).length;
+  const linked = [['notion', 'Notion'], ['reminders', 'Reminders'], ['github', 'GitHub issues']].filter(([key]) => data[key]?.project === name).map(([, label]) => label);
   dialog('Delete List', '<form id="deleteList"><p>Delete “' + esc(projectLabel(name)) + '”?</p>' +
     (count ? '<label>Move its ' + count + (count === 1 ? ' task' : ' tasks') + ' to<select id="moveTarget">' + options(others, others[0], projectLabel) + '<option value="">Delete the tasks too</option></select></label>' : '') +
+    (linked.length ? '<p class="hint">' + esc(linked.join(' and ')) + ' syncs with this list. Its sync moves with the tasks, or stops if they are deleted, so the list does not come back.</p>' : '') +
     '<div class="actions"><button type="button" class="secondary" data-close>Cancel</button><button class="primary">Delete</button></div></form>');
   $('deleteList').onsubmit = event => {
     event.preventDefault();
     const target = $('moveTarget')?.value ?? '';
-    action(change(state => {
-      state.projects = state.projects.filter(item => item !== name);
-      if (target) state.tasks.forEach(task => { if (task.project === name) task.project = target; });
-      else state.tasks = state.tasks.filter(task => task.project !== name);
-      if (state.notion?.project === name) delete state.notion;
-    }).then(() => { closeDialog(); if (view === 'p:' + name) go('today'); }));
+    let stopped = [];
+    action(change(state => { stopped = Projects.remove(state, name, target); }).then(() => {
+      closeDialog();
+      if (view === 'p:' + name) go('today');
+      if (stopped.length) toast('Stopped syncing ' + stopped.map(key => ({notion: 'Notion', reminders: 'Reminders', github: 'GitHub issues'})[key]).join(' and ') + ' for the deleted list.');
+    }));
   };
 }
 
@@ -503,7 +501,7 @@ window.openURLAction = fields => {
   if (action === 'add') {
     const found = parseQuick(String(fields.text || fields.title || '').slice(0, 400));
     if (!found.title) { toast('The link had no task title.'); return; }
-    const list = data.projects.find(name => name.toLocaleLowerCase() === String(fields.list || '').toLocaleLowerCase());
+    const list = Projects.byName(data, fields.list);
     const task = newTask({project: list || found.project || data.projects[0], title: found.title});
     for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'repeat', 'evening', 'someday']) if (found[key]) task[key] = found[key];
     if (fields.notes) task.notes = String(fields.notes).slice(0, 4000);

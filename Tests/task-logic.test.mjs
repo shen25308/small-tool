@@ -299,3 +299,47 @@ test('saved filters: a small query language like Todoist', () => {
     assert.equal(tasks.filter(result.test).length, 0);
   }
 });
+
+test('PROJECT-MODEL: lists get stable IDs; the upgrade keeps every task, name and connection', async () => {
+  await import('../UI/projects.js');
+  const {migrate, rename, remove, ensure, name, byName, create} = globalThis.Projects;
+  let n = 0;
+  const newId = () => 'l-test' + String(++n).padStart(4, '0');
+  const legacy = {version: 1, projects: ['Work', '我的工作'], tasks: [
+    {id: 'a', title: 'Ship', project: 'Work', notes: 'keep me', repeat: 'weekly', plannedDates: ['2026-11-13', '2026-11-14']},
+    {id: 'b', title: 'Lost list', project: 'Gone'}
+  ], notion: {project: 'Work', database: 'x'}, reminders: {project: '我的工作', list: 'r'}, github: {project: 'Work', repo: 'a/b'},
+  projectFolders: {Work: '/Users/me/work'}, someFutureField: {kept: true}};
+  const before = JSON.stringify(legacy);
+  const {workspace: ws, changed, problems} = migrate(legacy, newId);
+  assert.equal(JSON.stringify(legacy), before, 'the original is untouched, so it can be kept as the recovery copy');
+  assert.equal(changed, true);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(ws.projects.map(id => name(ws, id)), ['Work', '我的工作', 'Gone'], 'a task in a missing list keeps its list');
+  const work = byName(ws, 'work');
+  assert.equal(ws.tasks[0].project, work);
+  assert.deepEqual([ws.tasks[0].notes, ws.tasks[0].repeat, ws.tasks[0].plannedDates.length], ['keep me', 'weekly', 2]);
+  assert.deepEqual([ws.notion.project, ws.github.project, ws.reminders.project], [work, work, byName(ws, '我的工作')]);
+  assert.deepEqual(ws.projectFolders, {[work]: '/Users/me/work'});
+  assert.deepEqual(ws.someFutureField, {kept: true}, 'unknown fields survive');
+  assert.equal(migrate(ws, newId).changed, false, 'the upgrade runs once');
+  // UX-N07: rename, then a sync for the connection: the same list is used, nothing reappears or splits.
+  rename(ws, work, 'Client work');
+  assert.equal(ensure(ws, ws.github, 'b', newId), work);
+  assert.equal(ensure(ws, ws.notion, 'x', newId), work);
+  assert.deepEqual(ws.projects.map(id => name(ws, id)), ['Client work', '我的工作', 'Gone']);
+  assert.throws(() => rename(ws, work, '我的工作'), /already exists/);
+  // Delete with "delete the tasks too": the connections stop, so a sync cannot recreate the list.
+  const stopped = remove(ws, work, '');
+  assert.deepEqual(stopped.sort(), ['github', 'notion']);
+  assert.equal(ws.notion, undefined);
+  assert.equal(ws.projects.includes(work), false);
+  // Delete with a move: the connection follows the tasks.
+  const home = create(ws, 'Home', {}, newId);
+  ws.tasks.push({id: 'c', title: 'Fix sink', project: home});
+  ws.github = {project: home, repo: 'a/b'};
+  const gone = byName(ws, 'Gone');
+  remove(ws, home, gone);
+  assert.equal(ws.github.project, gone);
+  assert.equal(ws.tasks.find(t => t.id === 'c').project, gone);
+});

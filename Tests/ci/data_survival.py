@@ -61,6 +61,7 @@ try:
             task.pop(key, None)
     old.pop("sourceColors", None)
     (support / "Workspace.json").write_text(json.dumps(old, ensure_ascii=False, sort_keys=True))
+    original_bytes = (support / "Workspace.json").read_bytes()
     # A Codex inbox as 1.6 wrote it: no "archived" key.
     now = time.time()
     codex = {"since": now - 86400, "cursors": {}, "notices": [
@@ -105,16 +106,25 @@ try:
     record["after"] = after
     new = json.loads((support / "Workspace.json").read_text())
     by_id = {task["id"]: task for task in new["tasks"]}
+    # 1.8 moves lists to stable IDs: the names, their order and every task's list must be the same.
+    lists = new.get("lists") or {}
+    name = lambda list_id: (lists.get(list_id) or {}).get("name", list_id)
     for task in old["tasks"]:
         kept = by_id.get(task["id"])
         if kept is None:
             problems.append("Task lost: " + task["title"])
             continue
-        changed = [key for key, value in task.items() if kept.get(key) != value]
+        changed = [key for key, value in task.items() if (name(kept.get(key)) if key == "project" else kept.get(key)) != value]
         if changed:
             problems.append(f"Task changed without an edit: {task['title']} ({', '.join(changed)})")
-    if new["projects"] != old["projects"]:
+    if [name(list_id) for list_id in new["projects"]] != old["projects"]:
         problems.append("The list names changed.")
+    if new.get("schema") != 2:
+        problems.append("The lists were not upgraded to stable IDs.")
+    copies = sorted((support / "Backups").glob("Workspace before upgrade *.json"))
+    record["upgradeCopy"] = copies[-1].name if copies else ""
+    if not copies or copies[-1].read_bytes() != original_bytes:
+        problems.append("No exact copy of the 1.7 workspace was kept before the upgrade.")
     if not set(before["codex"]["ids"]) <= set(after["codex"]["ids"]):
         problems.append("A Codex result was lost.")
     stored = {notice["id"]: notice for notice in json.loads((support / "CodexInbox.json").read_text())["notices"]}

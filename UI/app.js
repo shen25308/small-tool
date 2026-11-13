@@ -20,7 +20,7 @@ function dayLabel(date, long = false) {
 }
 const plannedDateLabel = dayLabel;
 const example = 'Maya: Please send the new homepage prototype to the design team before tomorrow afternoon’s review.\nAlex: Got it, thanks!\nMaya: Also, summarize the customer feedback for the product team by Friday.';
-let data = {version: 1, projects: ['My Work'], tasks: []}, view = 'today', tag = '', compact = false, dragId = '', lastDay = day(), locked = false;
+let data = Projects.migrate({version: 1, projects: ['My Work'], tasks: []}).workspace, view = 'today', tag = '', compact = false, dragId = '', lastDay = day(), locked = false;
 // The inline "New Task" field that is open: 'view', 'p:<list>' or 'd:<date>'.
 let quickTarget = null;
 // All can be shown as a list or as a priority matrix (TickTick's Eisenhower view).
@@ -53,9 +53,11 @@ function setWhen(id, when) {
 const projectOfView = () => view.startsWith('p:') ? view.slice(2) : null;
 // Project names are storage keys. Display the original built-in list in English
 // without changing task references, even when the user also has a list named My Work.
-function projectLabel(name) {
-  if (name !== '我的工作' || data.projects[0] !== name) return name;
-  return data.projects.includes('My Work') ? 'My Work (original)' : 'My Work';
+// Lists are stored by ID (projects.js); this is the name a person sees.
+function projectLabel(id) {
+  const name = Projects.name(data, id);
+  if (name !== '我的工作' || data.projects[0] !== id) return name;
+  return Projects.byName(data, 'My Work') ? 'My Work (original)' : 'My Work';
 }
 const currentTitle = () => projectOfView() ? projectLabel(projectOfView()) : view.startsWith('f:') ? (window.Filters?.get(view.slice(2))?.name || 'Filter') : titles[view];
 // A task can be planned for one day or for several (F11). plannedDates holds the list when there is more than
@@ -158,7 +160,7 @@ function smartTile(id, label, count, icon) {
 }
 function navButton(id, label, count) {
   const name = id.slice(2);
-  return '<button data-view="' + esc(id) + '" data-target="' + esc(id) + '" data-project="' + esc(name) + '"' +
+  return '<button data-view="' + esc(id) + '" data-target="' + esc(id) + '" data-project="' + esc(name) + '" data-name="' + esc(projectLabel(name)) + '"' +
     (view === id ? ' class="active" aria-current="page"' : '') + '><span class="list-badge ' + projectTone(name) + '">' + symbol('i-list') + '</span>' +
     '<span class="prname">' + esc(projectLabel(label)) + '</span><span class="num">' + (count || '') + '</span></button>';
 }
@@ -335,7 +337,7 @@ function showTaskPicker(anchor, task, field) {
     const search = input?.value.trim() ?? '';
     const filtered = choices.filter(value => value.toLowerCase().includes(search.toLowerCase()));
     const current = task[field];
-    choicesBox.innerHTML = filtered.map(value => '<button type="button" data-choice="' + esc(value) + '" aria-pressed="' + (current === value) + '">' +
+    choicesBox.innerHTML = filtered.map(value => '<button type="button" data-choice="' + esc(value) + '"' + (isProject ? ' data-name="' + esc(projectLabel(value)) + '"' : '') + ' aria-pressed="' + (current === value) + '">' +
       (isProject ? '<span class="list-badge ' + projectTone(value) + '">' + symbol('i-list') + '</span><span>' + esc(projectLabel(value)) + '</span>'
         : '<span class="' + (isTag ? 'task-tag ' + taskTagColor(value) : 'priority ' + value.toLowerCase()) + '">' + esc(value) + '</span>') +
       (value === current ? '<span class="chosen" aria-hidden="true">✓</span>' : '') + '</button>').join('') +
@@ -816,7 +818,8 @@ function projectForm() {
     e.preventDefault();
     const name = $('projectName').value.trim();
     if (!name) return;
-    try { await change(s => { if (s.projects.includes(name)) throw Error('A list with this name already exists.'); s.projects.push(name); }); closeDialog(); go('p:' + name); }
+    let id = '';
+    try { await change(s => { if (Projects.byName(s, name)) throw Error('A list with this name already exists.'); id = Projects.create(s, name); }); closeDialog(); go('p:' + id); }
     catch (err) { toast(err.message); }
   };
 }
@@ -914,7 +917,10 @@ function quickDefaults(key) {
 // What the typed text was read as, kinds the person turned back into text, and the chips that show both (F10, F14).
 const ignoredKinds = input => (input.dataset.ignore || '').split(',').filter(Boolean);
 function parseQuick(text, ignore = []) {
-  return TaskLogic.parse(text, {today: day(), projects: data.projects, tags: availableTaskTags(), ignore});
+  // Lists are typed by name (@Work) and stored by ID.
+  const found = TaskLogic.parse(text, {today: day(), projects: data.projects.map(projectLabel), tags: availableTaskTags(), ignore});
+  if (found.project) found.project = data.projects.find(id => projectLabel(id) === found.project) || '';
+  return found;
 }
 const timeLabel = time => new Date('2000-01-01T' + time).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
 function parseChips(found) {
@@ -1134,11 +1140,25 @@ document.addEventListener('keydown', e => {
   }
 });
 setInterval(() => { if (lastDay !== day()) { lastDay = day(); render(); } }, 30000);
+// The move to list IDs: checked before anything is replaced, and a copy of the file is kept first.
+let upgradeNote = '';
+async function upgradeWorkspace(stored) {
+  const {workspace, changed, problems} = Projects.migrate(stored);
+  if (problems.length) throw Error('Shishi could not upgrade your lists safely (' + problems[0] + '). Nothing was changed.');
+  if (!changed) return workspace;
+  let copy;
+  try { copy = await native('snapshotWorkspace', {reason: 'upgrade'}); }
+  catch (error) { throw Error('Shishi needs to upgrade your lists but could not save a copy of them first (' + error.message + '). Nothing was changed.'); }
+  await native('save', {state: workspace});
+  if (copy) upgradeNote = 'Lists upgraded. A copy of the previous file is in Backups.';
+  return workspace;
+}
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     const s = await native('load');
-    if (s) data = s;
+    if (s) data = await upgradeWorkspace(s);
     render();
+    if (upgradeNote) toast(upgradeNote);
     await native('ready');
   } catch (e) {
     locked = true;

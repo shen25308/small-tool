@@ -15,7 +15,7 @@ async function syncReminders({quiet = false} = {}) {
     let outcome;
     await change(state => {
       if (!state.reminders) throw Error('Reminders was disconnected during the sync.');
-      if (!state.projects.includes(state.reminders.project)) state.projects.push(state.reminders.project);
+      Projects.ensure(state, state.reminders, state.reminders.title || 'Reminders');
       outcome = NotionSync.plan(state.tasks, pulled.pages || [], {mapping: REMINDER_MAPPING, project: state.reminders.project,
         truncated: false, newId: uuid, stamp: stampNow(), linkKey: 'reminder'});
       state.reminders.title = pulled.title || state.reminders.title;
@@ -64,9 +64,7 @@ async function showReminders() {
       const title = select.selectedOptions[0]?.textContent || 'Reminders';
       try {
         await change(state => {
-          let project = chosen || title.slice(0, 32);
-          if (!chosen) { let name = project, n = 2; while (state.projects.includes(name)) name = project.slice(0, 28) + ' ' + n++; project = name; }
-          if (!state.projects.includes(project)) state.projects.push(project);
+          const project = chosen && state.projects.includes(chosen) ? chosen : Projects.create(state, title.slice(0, 32));
           state.reminders = {list: select.value, title, project};
         });
         showReminders();
@@ -142,7 +140,7 @@ async function syncIssues({quiet = false} = {}) {
     let stats;
     await change(state => {
       if (!state.github) throw Error('The issue import was turned off.');
-      if (!state.projects.includes(state.github.project)) state.projects.push(state.github.project);
+      Projects.ensure(state, state.github, state.github.repo.split('/')[1] || 'GitHub');
       stats = IssueSync.plan(state.tasks, fetched.issues || [], {project: state.github.project, newId: uuid, stamp: stampNow()});
       state.github.lastSync = stampNow();
       // GitHub had more pages than Shishi reads in one sync: say the list may be incomplete (C03).
@@ -180,9 +178,7 @@ function showIssues() {
       try {
         await native('githubIssues', config);
         await change(state => {
-          let project = chosen || repo.split('/')[1].slice(0, 32);
-          if (!chosen) { let name = project, n = 2; while (state.projects.includes(name)) name = project.slice(0, 28) + ' ' + n++; project = name; }
-          if (!state.projects.includes(project)) state.projects.push(project);
+          const project = chosen && state.projects.includes(chosen) ? chosen : Projects.create(state, repo.split('/')[1].slice(0, 32));
           state.github = {...config, project};
         });
         showIssues();

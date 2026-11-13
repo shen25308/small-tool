@@ -12,7 +12,7 @@ async function syncNotion({quiet = false} = {}) {
     let outcome;
     await change(state => {
       if (!state.notion) throw Error('Notion was disconnected during the sync.');
-      if (!state.projects.includes(state.notion.project)) state.projects.push(state.notion.project);
+      Projects.ensure(state, state.notion, state.notion.title || 'Notion');
       outcome = NotionSync.plan(state.tasks, pulled.pages || [], {mapping: pulled.mapping, project: state.notion.project,
         truncated: !!pulled.truncated, newId: uuid, stamp: stampNow()});
       state.notion.title = pulled.title || state.notion.title;
@@ -63,9 +63,7 @@ function showNotion() {
         const found = await native('notion', {action: 'connect', database: $('notionDatabase').value.trim()});
         const chosen = $('notionProject')?.value || '';
         await change(state => {
-          let project = chosen || String(found.title || 'Notion').slice(0, 32);
-          if (!chosen) { let name = project, n = 2; while (state.projects.includes(name)) name = project.slice(0, 28) + ' ' + n++; project = name; }
-          if (!state.projects.includes(project)) state.projects.push(project);
+          const project = chosen && state.projects.includes(chosen) ? chosen : Projects.create(state, String(found.title || 'Notion').slice(0, 32));
           state.notion = {database: found.database, title: found.title || 'Notion', project};
         });
         if ($('notionForm')?.isConnected) showNotion();

@@ -253,7 +253,7 @@
       if (token === '!') { const inner = atom(); return task => !inner(task); }
       const word = lower(token);
       if (word.startsWith('#')) { const name = lower(token.slice(1).trim()); return task => lower(task.tag) === name; }
-      if (word.startsWith('@')) { const name = lower(token.slice(1).trim()); return task => lower(task.project) === name; }
+      if (word.startsWith('@')) { const name = lower(token.slice(1).trim()); const label = context.listName || (id => id); return task => lower(label(task.project)) === name; }
       if (word.startsWith('search:')) { const text = lower(token.slice(7).trim()); return task => lower(task.title + ' ' + (task.notes || '')).includes(text); }
       const range = /^next (\d{1,3}) days$/.exec(word);
       if (range) { const end = addDays(today, Number(range[1])); return task => { const d = date(task); return !!d && d >= today && d <= end; }; }
