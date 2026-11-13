@@ -235,3 +235,31 @@ test('GitHub issues become tasks and close with their issue', async () => {
   assert.equal(tasks[0].done, false);
   assert.equal(tasks.length, 1);
 });
+
+test('saved filters: a small query language like Todoist', () => {
+  const {filter} = globalThis.TaskLogic;
+  const ctx = {today: '2026-11-13'};
+  const tasks = [
+    {id: 'a', title: 'Ship release', project: 'Work', tag: 'Launch', priority: 'P0', planned: '2026-11-13', done: false},
+    {id: 'b', title: 'Pay rent', project: 'Home', tag: '', priority: 'P2', planned: '', dueDate: '2026-11-10', done: false},
+    {id: 'c', title: 'Read book', project: 'Home', tag: 'Later', priority: 'P2', planned: '', done: false, someday: true},
+    {id: 'd', title: 'Plan offsite', project: 'Work', tag: 'Launch', priority: 'P1', planned: '2026-11-18', done: false},
+    {id: 'e', title: 'Old task', project: 'Work', tag: '', priority: 'P2', planned: '2026-11-01', done: true}
+  ];
+  const ids = query => tasks.filter(filter(query, ctx).test).map(task => task.id).join('');
+  assert.equal(ids('today'), 'a');
+  assert.equal(ids('overdue'), 'b');
+  assert.equal(ids('(today | overdue) & !p2'), 'a');
+  assert.equal(ids('@work & open'), 'ad');
+  assert.equal(ids('#launch & next 7 days'), 'ad');
+  assert.equal(ids('no date'), 'c', 'neither planned nor a deadline');
+  assert.equal(ids('no date & !someday'), '');
+  assert.equal(ids('someday'), 'c');
+  assert.equal(ids('search: rent | p1'), 'bd');
+  assert.equal(ids('done'), 'e');
+  for (const bad of ['today &', '(today', 'today tomorrow', 'banana', '%']) {
+    const result = filter(bad, ctx);
+    assert.ok(result.error, bad + ' should explain the problem');
+    assert.equal(tasks.filter(result.test).length, 0);
+  }
+});

@@ -23,6 +23,23 @@ const example = 'Maya: Please send the new homepage prototype to the design team
 let data = {version: 1, projects: ['My Work'], tasks: []}, view = 'today', tag = '', compact = false, dragId = '', lastDay = day(), locked = false;
 // The inline "New Task" field that is open: 'view', 'p:<list>' or 'd:<date>'.
 let quickTarget = null;
+// All can be shown as a list or as a priority matrix (TickTick's Eisenhower view).
+let layout = 'list';
+const urgent = t => { const date = taskDate(t); return !!date && date <= addDays(day(), 2); };
+const important = t => t.priority === 'P0' || t.priority === 'P1';
+const QUADRANTS = [
+  ['Do now', 'Important and due within two days', t => important(t) && urgent(t)],
+  ['Plan', 'Important, not urgent', t => important(t) && !urgent(t)],
+  ['Fit in', 'Due soon, lower priority', t => !important(t) && urgent(t)],
+  ['Later', 'Neither', t => !important(t) && !urgent(t)]
+];
+function matrixMarkup(tasks) {
+  return '<div class="matrix">' + QUADRANTS.map(([name, note, test]) => {
+    const inside = sortVisibleTasks(tasks.filter(test));
+    return '<section class="quadrant"><div class="quadrant-head"><h3>' + name + '</h3><span>' + (inside.length || '') + '</span></div><p class="quadrant-note">' + note + '</p>' +
+      (inside.map(t => row(t, {project: true})).join('') || '<p class="day-empty">Nothing here.</p>') + '</section>';
+  }).join('') + '</div>';
+}
 const titles = {today: 'Today', upcoming: 'Upcoming', all: 'All', someday: 'Someday', done: 'Completed'};
 // Things-style "When": This Evening keeps a task in Today but after the rest; Someday parks it without a date.
 function setWhen(id, when) {
@@ -39,7 +56,7 @@ function projectLabel(name) {
   if (name !== '我的工作' || data.projects[0] !== name) return name;
   return data.projects.includes('My Work') ? 'My Work (original)' : 'My Work';
 }
-const currentTitle = () => projectOfView() ? projectLabel(projectOfView()) : titles[view];
+const currentTitle = () => projectOfView() ? projectLabel(projectOfView()) : view.startsWith('f:') ? (window.Filters?.get(view.slice(2))?.name || 'Filter') : titles[view];
 // A task can be planned for one day or for several (F11). plannedDates holds the list when there is more than
 // one; planned always holds the next of them (or the last, once all have passed) so older data keeps working.
 const plannedDays = t => t.plannedDates?.length ? t.plannedDates : t.planned ? [t.planned] : [];
@@ -402,6 +419,9 @@ function render() {
 }
 
 function renderBoard() {
+  // A filter that was deleted leaves its view; fall back to All before anything is drawn.
+  if (view.startsWith('f:') && !window.Filters?.get(view.slice(2))) view = 'all';
+  const filterView = view.startsWith('f:') ? Filters.get(view.slice(2)) : null;
   const draftField = document.querySelector('.quick-add input');
   const draft = draftField ? {value: draftField.value, focused: document.activeElement === draftField} : null;
   const tasks = data.tasks, open = tasks.filter(t => !t.done), today = tasks.filter(isToday), project = projectOfView();
@@ -426,14 +446,15 @@ function renderBoard() {
   $('pageTitle').textContent = tag || currentTitle();
   $('wrapUp').hidden = view !== 'today';
   renderBoardTags();
+  window.Filters?.renderSidebar();
   const pin = $('pin');
   pin.innerHTML = symbol(compact ? 'expand' : 'pin') + '<span class="tool-label">' + (compact ? 'Open Full Workspace' : 'Floating Today List') + '</span>';
   pin.setAttribute('aria-label', compact ? 'Open full workspace' : 'Switch to the floating Today list');
   $('manual').hidden = view === 'done';
 
-  const flat = view === 'today' || view === 'all' || view === 'someday' || !!project;
+  const flat = view === 'today' || view === 'all' || view === 'someday' || !!filterView || !!project;
   document.querySelector('.board-content > .listhead').hidden = !flat;
-  let list = view === 'today' ? today : project ? tasks.filter(t => t.project === project) : view === 'someday' ? open.filter(t => t.someday) : open.filter(t => !t.someday);
+  let list = filterView ? Filters.matches(filterView) : view === 'today' ? today : project ? tasks.filter(t => t.project === project) : view === 'someday' ? open.filter(t => t.someday) : open.filter(t => !t.someday);
   const tags = [...new Set(list.map(t => t.tag).filter(Boolean))];
   const filterable = view === 'all' || !!project;
   if (!filterable || !(view === 'all' ? availableTaskTags() : tags).includes(tag)) tag = '';
@@ -445,11 +466,15 @@ function renderBoard() {
   const count = view === 'done' ? tasks.length - open.length : view === 'upcoming' ? open.filter(t => taskDate(t) > day()).length : list.filter(t => !t.done).length;
   $('pageCount').textContent = count || '';
 
-  if (view === 'upcoming') $('tasks').innerHTML = upcomingMarkup(tasks);
+  $('layoutToggle').hidden = view !== 'all' || !!tag;
+  $('layoutToggle').querySelectorAll('[data-layout]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === layout)));
+  if (view === 'all' && !tag && layout === 'matrix') $('tasks').innerHTML = matrixMarkup(list.filter(t => !t.done));
+  else if (view === 'upcoming') $('tasks').innerHTML = upcomingMarkup(tasks);
   else if (view === 'done') $('tasks').innerHTML = completedMarkup(tasks);
   else {
     const empty = tag ? emptyState('i-tag', 'No open tasks with this tag.') : view === 'today' ? emptyState('i-sun', 'Nothing planned for today. Add a task or drag one here.')
       : view === 'someday' ? emptyState('i-someday', 'Ideas and tasks without a date wait here until you plan them.')
+      : filterView ? emptyState('i-filter', 'No tasks match “' + filterView.query + '” right now.')
       : emptyState('i-check-circle', 'No tasks here yet.');
     const listAttrs = view === 'today' ? 'class="task-list drop" data-target="today"' : 'class="task-list"';
     // Today ends with This Evening, as in Things.
@@ -1082,4 +1107,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     render();
     $('tasks').textContent = 'Shishi could not load your lists. Saving is paused to protect your data. ' + e.message;
   }
+});
+
+$('layoutToggle').addEventListener('click', event => {
+  const choice = event.target.closest('[data-layout]');
+  if (choice) { layout = choice.dataset.layout; render(); }
 });

@@ -204,5 +204,72 @@
     return found;
   }
 
-  root.TaskLogic = {iso, fromISO, addDays, addMonths, nextRepeat, nextWeekday, parse, repeatLabels};
+  /**
+   * Saved filters, in a small query language like Todoist's:
+   *   today, tomorrow, overdue, upcoming, "no date", evening, someday, done, open, repeating, agent
+   *   "next 7 days", "due" (has a deadline), p0 / p1 / p2, #tag, @list, "search: words"
+   *   combined with & (and), | (or), ! (not) and parentheses.  Example: (today | overdue) & #Work & !p2
+   * Returns {test(task), error}. A query that cannot be read returns an error and matches nothing.
+   */
+  function filter(query, context) {
+    const today = context.today;
+    const days = task => task.plannedDates?.length ? task.plannedDates : task.planned ? [task.planned] : [];
+    const date = task => days(task).find(d => d >= today) || days(task).at(-1) || task.dueDate || '';
+    const lower = value => String(value || '').toLocaleLowerCase();
+    const terms = {
+      today: task => days(task).includes(today) || (!!task.dueDate && task.dueDate === today),
+      tomorrow: task => days(task).includes(addDays(today, 1)) || task.dueDate === addDays(today, 1),
+      overdue: task => !task.done && ((!!task.dueDate && task.dueDate < today) || (days(task).length > 0 && days(task).every(d => d < today))),
+      upcoming: task => date(task) > today,
+      'no date': task => !days(task).length && !task.dueDate,
+      evening: task => !!task.evening,
+      someday: task => !!task.someday,
+      done: task => !!task.done,
+      open: task => !task.done,
+      repeating: task => !!task.repeat,
+      agent: task => !!task.agentReceipt || !!task.agentStarted,
+      due: task => !!task.dueDate,
+      p0: task => task.priority === 'P0', p1: task => task.priority === 'P1', p2: task => !task.priority || task.priority === 'P2'
+    };
+    const tokens = [];
+    const source = String(query || '').trim();
+    const pattern = /\s*(\(|\)|&|\||!|search:\s*[^&|()]+|#[^&|()!]+|@[^&|()!]+|next \d{1,3} days|no date|[a-z0-9]+)/iy;
+    let at = 0;
+    while (at < source.length) {
+      pattern.lastIndex = at;
+      const match = pattern.exec(source);
+      if (!match) return {test: () => false, error: 'Shishi could not read “' + source.slice(at).trim().slice(0, 30) + '”.'};
+      tokens.push(match[1].trim());
+      at = pattern.lastIndex;
+      while (source[at] === ' ') at++;
+    }
+    if (!tokens.length) return {test: () => false, error: 'Type a filter, for example: today & #Work'};
+    let index = 0;
+    const peek = () => tokens[index];
+    function atom() {
+      const token = tokens[index++];
+      if (token === undefined) throw Error('The filter ends too early.');
+      if (token === '(') { const inner = or(); if (tokens[index++] !== ')') throw Error('A “(” is not closed.'); return inner; }
+      if (token === '!') { const inner = atom(); return task => !inner(task); }
+      const word = lower(token);
+      if (word.startsWith('#')) { const name = lower(token.slice(1).trim()); return task => lower(task.tag) === name; }
+      if (word.startsWith('@')) { const name = lower(token.slice(1).trim()); return task => lower(task.project) === name; }
+      if (word.startsWith('search:')) { const text = lower(token.slice(7).trim()); return task => lower(task.title + ' ' + (task.notes || '')).includes(text); }
+      const range = /^next (\d{1,3}) days$/.exec(word);
+      if (range) { const end = addDays(today, Number(range[1])); return task => { const d = date(task); return !!d && d >= today && d <= end; }; }
+      if (terms[word]) return terms[word];
+      throw Error('“' + token + '” is not a filter word. Try today, overdue, #tag, @list, p1 or search: words.');
+    }
+    function and() { let left = atom(); while (peek() === '&') { index++; const right = atom(), l = left; left = task => l(task) && right(task); } return left; }
+    function or() { let left = and(); while (peek() === '|') { index++; const right = and(), l = left; left = task => l(task) || right(task); } return left; }
+    try {
+      const test = or();
+      if (index < tokens.length) throw Error('Use & or | between filter words: “' + tokens[index] + '” is unexpected.');
+      return {test, error: ''};
+    } catch (problem) {
+      return {test: () => false, error: problem.message};
+    }
+  }
+
+  root.TaskLogic = {iso, fromISO, addDays, addMonths, nextRepeat, nextWeekday, parse, repeatLabels, filter};
 })(typeof window === 'undefined' ? globalThis : window);

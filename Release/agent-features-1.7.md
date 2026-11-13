@@ -43,3 +43,20 @@ macOS build workflow compiles the Swift and runs the native launch, window and d
 Global shortcuts from another app; Allow/Deny reaching a real Claude Code session; the Automation prompts for
 Terminal and iTerm2 and landing in the right tab; Reminders and Calendar permission prompts and a real sync;
 sound and banner alerts; keep-awake (`pmset -g assertions`); starting an agent from a task in a real folder.
+
+## Second round: design and features from Things, TickTick, Todoist and agent tools
+
+| From | Feature | Tests |
+|---|---|---|
+| Design critique of generated UI | `UI/quiet.css`: neutral surfaces, one accent, colour only for meaning; no glow, gradient text, confetti or tinted cards | full UI suite; screenshots reviewed in light and dark |
+| macOS System Settings | Settings in four tabs (Agents, Sync, Alerts, General), switches, ⌘, | Settings checks in the UI suite |
+| Things | This Evening, Someday (⌘E, ⌘O, "this evening", "someday"), keyboard control of the list | UI *This Evening, Someday and keyboard control of the list* |
+| Todoist filters, OmniFocus perspectives | Saved filters with `& | ! ( )`, #tag, @list, dates, priority | node *saved filters*; UI *saved filters in the sidebar* |
+| TickTick | Priority matrix in All | UI *priority matrix in All* |
+| Conductor-style review | Open changed files from a report, inside the session folder only | UI *open a changed file from the report* |
+
+Not copied, and why:
+- **Answering Claude's multiple-choice questions from the card.** Claude Code's hook answer for AskUserQuestion is undocumented, and
+  open reports say a PreToolUse hook can make those questions return empty answers. Shishi does not risk that.
+- **Habits, countdowns, sticky notes.** Outside a task list for agent work; the corner card already plays the sticky-note role.
+- **Diff viewer and worktrees.** Shishi opens the changed files; reviewing diffs belongs to the editor or a tool like Conductor.

@@ -40,7 +40,7 @@ function fakeHost(seed) {
       {key: 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', detail: 'Refactor the billing module and add tests', state: 'working', receipt: '', time: now - 95,
        task: 'Refactor the billing module and add tests', started: now - 95, app: 'com.microsoft.VSCode', activity: 'Edit billing.py', tools: 14},
       {key: 'f'.repeat(64), source: 'Claude Code', title: 'Claude Code · small-tool', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: 'connector/' + 'a'.repeat(64), time: now - 240,
-       task: 'Refactor billing.py and add tests for refunds', started: now - 540, app: 'com.googlecode.iterm2',
+       task: 'Refactor billing.py and add tests for refunds', started: now - 540, app: 'com.googlecode.iterm2', cwd: '/Users/me/code/small-tool',
        facts: {files: ['billing.py', 'tests/test_billing.py'], fileCount: 2, commands: 3, failedTools: 0, tests: 'passed', testCommand: 'pytest -q'}}
     ]
   };
@@ -191,6 +191,7 @@ function fakeHost(seed) {
     openRelease: message => { state.openedRelease = message.url; return true; },
     chooseFolder: () => state.folderChoice ?? '/Users/me/code/app',
     startAgent: message => { state.started = [...(state.started || []), message]; return message.terminal === 'iTerm2' ? 'iTerm2' : 'Terminal'; },
+    openFile: message => { state.openedFile = {path: message.path, cwd: message.cwd, app: message.app}; return true; },
     openIssue: message => { state.openedIssue = message.url; return true; },
     usage: () => state.usage ?? {ok: true, time: now, claude: {fiveHours: {tokens: 1240000, cacheRead: 5e6, replies: 40}, today: {tokens: 2e6, replies: 60}, week: {tokens: 8400000, cacheRead: 9e7, replies: 300}, sessions: 12},
       codex: {observedAt: now - 120, primary: {usedPercent: 42.4, windowMinutes: 300, resetsAt: now + 3600}, secondary: {usedPercent: 83, windowMinutes: 10080, resetsAt: now + 3 * 86400}}}, openConnectorLink: () => true, copyConnectorSetup: () => true,

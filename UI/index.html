@@ -25,6 +25,8 @@
         <nav id="projects" aria-label="My lists"></nav>
         <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
         <nav id="labels" aria-label="Tags"></nav>
+        <div class="side-heading" id="filtersHead"><h2>Filters</h2><button id="newFilter" title="New filter" aria-label="New filter"><span class="symbol plus" aria-hidden="true"></span></button></div>
+        <nav id="filters" aria-label="Filters"></nav>
       </div>
       <section id="agentDock" class="agent-dock" aria-label="Agents">
         <h2>Agents</h2>
@@ -53,7 +55,7 @@
             <button id="wrapUp" class="secondary" title="Review today's tasks">Wrap Up</button>
           </section>
           <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result"><span class="symbol close-icon" aria-hidden="true"></span></button></div><div id="latestCard"></div></section></div>
-          <div class="listhead"><label class="sort-menu"><span class="symbol i-sort" aria-hidden="true"></span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual</option><option value="priority">Priority</option><option value="deadline">Deadline</option><option value="title">Title</option></select></label></div>
+          <div class="listhead"><div class="menu-segment layout-toggle" id="layoutToggle" hidden><button type="button" data-layout="list" aria-pressed="true">List</button><button type="button" data-layout="matrix" aria-pressed="false">Matrix</button></div><label class="sort-menu"><span class="symbol i-sort" aria-hidden="true"></span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual</option><option value="priority">Priority</option><option value="deadline">Deadline</option><option value="title">Title</option></select></label></div>
           <div id="tasks"></div><div id="pool"></div>
         </div>
       </div>
@@ -106,6 +108,6 @@
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="task-logic.js"></script><script src="notion-sync.js"></script><script src="issue-sync.js"></script><script src="motion.js"></script>
-  <script src="app.js"></script><script src="day-picker.js"></script><script src="backup.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="approvals.js"></script><script src="agent-tasks.js"></script><script src="notion-ui.js"></script><script src="apple.js"></script>
+  <script src="app.js"></script><script src="day-picker.js"></script><script src="backup.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="approvals.js"></script><script src="agent-tasks.js"></script><script src="filters.js"></script><script src="notion-ui.js"></script><script src="apple.js"></script>
 </body>
 </html>

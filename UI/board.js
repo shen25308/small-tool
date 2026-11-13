@@ -288,7 +288,8 @@ function drawPalette() {
   const lists = [
     ...['today', 'upcoming', 'all', 'someday', 'done'].map((id, index) => ({label: titles[id], icon: 'i-list', hint: '⌘' + (index + 1), run: () => go(id)})),
     ...data.projects.map(name => ({label: projectLabel(name), icon: 'i-list', hint: 'List', run: () => go('p:' + name)})),
-    ...availableTaskTags().map(name => ({label: name, icon: 'i-tag', hint: 'Tag', run: () => { view = 'all'; tag = name; render(); }}))
+    ...availableTaskTags().map(name => ({label: name, icon: 'i-tag', hint: 'Tag', run: () => { view = 'all'; tag = name; render(); }})),
+    ...(window.Filters?.list() || []).map(item => ({label: item.name, icon: 'i-filter', hint: 'Filter', run: () => go('f:' + item.id)}))
   ].filter(item => match(item.label));
   const tasks = query ? data.tasks.filter(task => match([task.title, projectLabel(task.project), task.tag, task.notes || ''].join(' '))).slice(0, 40)
     .map(task => ({label: task.title, icon: task.done ? 'i-check-circle' : 'i-clock', hint: projectLabel(task.project), done: task.done, run: () => taskForm(task)})) : [];

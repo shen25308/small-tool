@@ -26,6 +26,25 @@ enum SessionFocus {
     static let editors: Set<String> = ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",
                                        "dev.zed.Zed", "com.exafunction.windsurf", "com.vscodium"]
 
+    /// Opens a file the agent changed, in the session's editor when it is one, otherwise in the default app.
+    /// Only a file inside the session's folder can be opened.
+    static func openFile(_ path: String, cwd: String, bundle: String) -> Bool {
+        let place = Place(nil, cwd: cwd)
+        guard !place.cwd.isEmpty, !path.isEmpty, path.count < 1024, !path.contains("\0") else { return false }
+        let root = URL(fileURLWithPath: place.cwd, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+        let target = (path.hasPrefix("/") ? URL(fileURLWithPath: path) : root.appendingPathComponent(path)).standardizedFileURL.resolvingSymlinksInPath()
+        var isFolder: ObjCBool = false
+        guard target.path.hasPrefix(root.path + "/"), FileManager.default.fileExists(atPath: target.path, isDirectory: &isFolder), !isFolder.boolValue else { return false }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        if editors.contains(bundle), let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            NSWorkspace.shared.open([target], withApplicationAt: app, configuration: configuration) { _, _ in }
+        } else {
+            NSWorkspace.shared.open(target)
+        }
+        return true
+    }
+
     /// Returns how precisely it found the session: "tab", "pane", "folder" or "app".
     static func focus(bundle: String, place: Place, app: URL) -> String {
         var found = "app"

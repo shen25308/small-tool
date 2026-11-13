@@ -70,7 +70,7 @@ window.Card = (() => {
       (report.evidence && report.evidence !== report.headline ? '<blockquote class="report-evidence selectable">' + esc(report.evidence) + '</blockquote>' : '') +
       '<p class="report-headline">' + esc(report.headline) + '</p>' +
       (report.points.length ? '<ul class="report-points">' + report.points.map(point => '<li>' + esc(point) + '</li>').join('') + '</ul>' : '') +
-      (report.files.length || report.tests ? '<div class="report-chips">' + report.files.slice(0, 3).map(file => '<code>' + esc(file) + '</code>').join('') +
+      (report.files.length || report.tests ? '<div class="report-chips">' + report.files.slice(0, 3).map(file => entry.cwd ? '<button type="button" class="file-chip" data-open-file="' + esc(file) + '" title="Open ' + esc(file) + '"><code>' + esc(file) + '</code></button>' : '<code>' + esc(file) + '</code>').join('') +
         (report.moreFiles ? '<code class="more-files">+' + report.moreFiles + '</code>' : '') +
         (report.tests ? '<span class="test-chip ' + report.tests + '"' + (report.checked ? ' title="' + esc(report.checked) + '"' : '') + '>' +
           ({passed: 'Checks ran and passed', failed: report.verified ? 'A check failed' : 'Reported failing', none: 'No checks ran', claimed: 'Reported passing'})[report.tests] + '</span>' : '') + '</div>' : '') +
@@ -213,6 +213,12 @@ window.Card = (() => {
   }
 
   root.addEventListener('click', event => {
+    const file = event.target.closest('[data-open-file]');
+    if (file && reportShown) {
+      const {entry} = reportShown;
+      action(native('openFile', {path: file.dataset.openFile, cwd: entry.cwd || '', app: entry.app || ''}));
+      return;
+    }
     const report = event.target.closest('[data-report]');
     if (report) { reportAction(report.dataset.report); return; }
     const welcome = event.target.closest('[data-welcome]');

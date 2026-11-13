@@ -116,3 +116,29 @@ dialog, .menu, #boardMenu, .task-picker, .focus-pop, #palette { box-shadow: var(
 /* This Evening closes Today, under a quiet heading. */
 .evening-group { margin-top: 18px }
 .evening-group .day-head h3 { display: flex; align-items: center; gap: 6px }
+
+/* Filters in the sidebar and their sheet. */
+.filter-glyph { display: grid; place-items: center; width: 20px; height: 20px; color: var(--muted) }
+.filter-glyph .symbol { width: 14px; height: 14px }
+.filter-examples { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px }
+.chip-button { padding: 2px 9px; border-radius: 999px; background: var(--control); color: var(--secondary); font-size: 12px }
+.chip-button:hover { background: var(--pressed); color: var(--ink) }
+#filterPreview.problem { color: var(--danger) }
+#filterQuery { font-family: var(--mono); font-size: 12.5px }
+
+/* The priority matrix: four quiet boxes, no colour coding beyond the tasks' own marks. */
+.layout-toggle { margin-right: auto; padding: 0 }
+.layout-toggle button { min-width: 64px }
+.matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px }
+.quadrant { min-width: 0; padding: 10px 12px 8px; border-radius: 10px; box-shadow: 0 0 0 .5px var(--line) }
+.quadrant-head { display: flex; align-items: baseline; justify-content: space-between }
+.quadrant-head h3 { font-size: 13px; font-weight: 600 }
+.quadrant-head span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
+.quadrant-note { margin: 1px 0 6px; color: var(--muted); font-size: 11.5px }
+.quadrant .row-trail { max-width: 40% }
+@media (max-width: 760px) { .matrix { grid-template-columns: 1fr } }
+
+/* Changed files in a report open in the session's editor. */
+.file-chip { padding: 0; border-radius: 5px }
+.file-chip code { cursor: pointer }
+.file-chip:hover code { background: var(--pressed); color: var(--ink) }

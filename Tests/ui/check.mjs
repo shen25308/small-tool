@@ -1362,6 +1362,67 @@ await check('This Evening, Someday and keyboard control of the list', {}, async 
   await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call mum' && t.evening));
 });
 
+await check('saved filters in the sidebar', {}, async ({page, host}) => {
+  await page.click('#newFilter');
+  await page.locator('#filterForm').waitFor();
+  await page.fill('#filterQuery', 'today &');
+  assert.match(await text(page, '#filterPreview'), /ends too early/);
+  await page.click('.filter-examples [data-name="High priority"]');
+  assert.equal(await page.inputValue('#filterName'), 'High priority');
+  assert.match(await text(page, '#filterPreview'), /^\d+ open tasks match/);
+  await page.click('#filterForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.filters?.length === 1);
+  assert.equal(await text(page, '#pageTitle'), 'High priority');
+  const rows = await page.locator('#tasks .row:not(.done) .title').allInnerTexts();
+  const expected = await page.evaluate(() => data.tasks.filter(t => !t.done && (t.priority === 'P0' || t.priority === 'P1')).map(t => t.title).sort());
+  assert.deepEqual([...rows].sort(), expected);
+  assert.match(await text(page, '#filters'), new RegExp('High priority\\s*' + expected.length));
+  // Edit and delete from the sidebar, with Undo.
+  await page.locator('#filters [data-filter]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Delete Filter'}).click();
+  await page.waitForFunction(() => !window.__host.workspace.filters.length);
+  assert.equal(await text(page, '#pageTitle'), 'All');
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => window.__host.workspace.filters.length === 1);
+});
+
+await check('priority matrix in All', {}, async ({page}) => {
+  await page.click('#nav [data-view="today"]');
+  assert.equal(await page.locator('#layoutToggle').isHidden(), true, 'only in All');
+  await page.click('#nav [data-view="all"]');
+  await page.click('#layoutToggle [data-layout="matrix"]');
+  const quadrants = page.locator('.quadrant');
+  assert.equal(await quadrants.count(), 4);
+  const expected = await page.evaluate(() => {
+    const soon = TaskLogic.addDays(day(), 2);
+    const date = t => (t.plannedDates?.length ? t.plannedDates.find(d => d >= day()) || t.plannedDates.at(-1) : t.planned) || t.dueDate || '';
+    const open = data.tasks.filter(t => !t.done && !t.someday);
+    const imp = t => t.priority === 'P0' || t.priority === 'P1', urg = t => !!date(t) && date(t) <= soon;
+    return [open.filter(t => imp(t) && urg(t)).length, open.filter(t => imp(t) && !urg(t)).length,
+            open.filter(t => !imp(t) && urg(t)).length, open.filter(t => !imp(t) && !urg(t)).length];
+  });
+  const counts = await quadrants.evaluateAll(nodes => nodes.map(node => node.querySelectorAll('.row').length));
+  assert.deepEqual(counts, expected);
+  assert.deepEqual(await page.locator('.quadrant h3').allInnerTexts(), ['Do now', 'Plan', 'Fit in', 'Later']);
+  // Tasks in the matrix work like any row.
+  const first = page.locator('.quadrant .row').first();
+  const title = await first.locator('.title').innerText();
+  await first.locator('[data-act="toggle"]').click();
+  await page.waitForFunction(t => window.__host.workspace.tasks.find(x => x.title === t).done, title);
+  await page.click('#layoutToggle [data-layout="list"]');
+  assert.equal(await page.locator('.quadrant').count(), 0);
+});
+
+await check('open a changed file from the report', {width: 340, height: 640, compact: true}, async ({page, host}) => {
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
+  const chip = page.locator('#cardReport [data-open-file="billing.py"]');
+  await chip.waitFor();
+  await chip.click();
+  await page.waitForFunction(() => window.__host.openedFile);
+  assert.deepEqual((await host()).openedFile, {path: 'billing.py', cwd: '/Users/me/code/small-tool', app: 'com.googlecode.iterm2'});
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);

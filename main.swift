@@ -851,6 +851,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                                                prompt:body["prompt"] as? String ?? "",task:body["task"] as? String ?? "",
                                                terminal:body["terminal"] as? String ?? "Terminal",support:file.deletingLastPathComponent())
                 reply(id,true,used)
+            case "openFile":
+                guard SessionFocus.openFile(body["path"] as? String ?? "",cwd:body["cwd"] as? String ?? "",bundle:body["app"] as? String ?? "") else {
+                    throw AppIssue("That file is no longer in the session's folder.")
+                }
+                reply(id,true,true)
             case "openIssue":
                 // Only an issue page on github.com, nothing else.
                 guard let link=body["url"] as? String, link.count<300,
