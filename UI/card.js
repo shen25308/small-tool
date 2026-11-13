@@ -190,18 +190,37 @@ window.Card = (() => {
   // The window follows the content: the page measures itself and the app resizes the card.
   // The height the card would need to show everything. Parts that scroll inside the card report their
   // full content height, so a short window can still grow when the screen allows it (F08).
+  // A part that stretches or scrolls is measured by what is inside it, never by its own box: the box follows
+  // the window, so measuring it would make the window grow each time it grew (NATIVE-01).
+  function intrinsic(node) {
+    const style = getComputedStyle(node);
+    const stretches = parseFloat(style.flexGrow) > 0 || /auto|scroll/.test(style.overflowY);
+    if (!stretches) return node.getBoundingClientRect().height;
+    const children = [...node.children].filter(child => child.getClientRects().length);
+    const gap = parseFloat(style.rowGap) || 0;
+    const inside = children.reduce((sum, child) => {
+      const own = getComputedStyle(child);
+      return sum + intrinsic(child) + (parseFloat(own.marginTop) || 0) + (parseFloat(own.marginBottom) || 0);
+    }, 0) + gap * Math.max(0, children.length - 1);
+    return inside + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+  }
   function naturalHeight() {
     const style = getComputedStyle(inner);
     const parts = [...inner.children].filter(node => node.getClientRects().length);
-    const content = parts.reduce((sum, node) => sum + Math.max(node.scrollHeight, node.getBoundingClientRect().height), 0);
+    const content = parts.reduce((sum, node) => sum + intrinsic(node), 0);
     return Math.ceil(content + (parseFloat(style.rowGap) || 0) * Math.max(0, parts.length - 1) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom));
   }
+  // Report only real changes, once the layout has settled, so the window never chases sub-pixel noise.
+  let settle = 0;
   function report() {
     if (!compact) return;
-    const height = naturalHeight();
-    if (!height || height === reported) return;
-    reported = height;
-    native('cardSize', {height}).catch(() => {});
+    clearTimeout(settle);
+    settle = setTimeout(() => {
+      const height = naturalHeight();
+      if (!height || Math.abs(height - reported) < 2) return;
+      reported = height;
+      native('cardSize', {height}).catch(() => {});
+    }, 60);
   }
   const measure = () => requestAnimationFrame(report);
   new ResizeObserver(measure).observe(inner);

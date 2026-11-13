@@ -89,6 +89,17 @@ check("starts in the top-right corner", abs(frame["x"] + frame["w"] - (right_edg
 check("not floating unless chosen", frame["layer"] == 0, f"window layer {frame['layer']}")
 shot("window-1-placement.png")
 
+# 1b. NATIVE-01: the card's height comes from its content and settles. Sample it for 6 seconds: it must not keep
+# growing, and with the CI sample's few tasks it must stay under the 760-point cap the old feedback loop always reached.
+heights = []
+for _ in range(12):
+    found = card_windows(card.pid)
+    heights.append(found[0]["h"] if found else -1)
+    time.sleep(0.5)
+record["cardHeights"] = heights
+check("card height settles below the cap", len(set(heights[4:])) == 1 and 0 < heights[-1] < 740,
+      f"heights over 6 s: {heights}")
+
 # 2. A result arrives while another app is in front: the card must not take focus.
 subprocess.run(["open", "-a", "Calculator"], check=False)
 time.sleep(4)

@@ -1191,6 +1191,22 @@ await check('UX-N01/N02: malformed backups are explained; empty backups confirm;
   await page.waitForFunction(() => window.__host.workspace.tasks.length === 0);
 });
 
+await check('NATIVE-01: the card measures its content, settles, and shrinks again', {compact: true, width: 340, height: 900, emulateCard: true}, async ({page}) => {
+  await page.waitForTimeout(1500);
+  const settled = await page.evaluate(() => ({sizes: window.__host.cardSizes, height: window.__host.windowHeight}));
+  assert.ok(settled.sizes.length <= 4, 'the card settles instead of resizing again and again: ' + settled.sizes.length + ' calls, ' + settled.sizes.slice(0, 8).join(', '));
+  assert.ok(settled.height < 760, 'it does not grow to the maximum with only a few tasks: ' + settled.height);
+  // Content shrinks (tasks done): the card follows it down.
+  const before = settled.height;
+  await page.evaluate(() => { const today = day(); data.tasks.forEach(t => { if (t.planned === today) t.done = true; }); render(); });
+  await page.waitForTimeout(800);
+  const after = await page.evaluate(() => window.__host.windowHeight);
+  assert.ok(after < before, 'Fit to content shrinks: ' + before + ' → ' + after);
+  const calls = await page.evaluate(() => window.__host.cardSizes.length);
+  await page.waitForTimeout(800);
+  assert.equal(await page.evaluate(() => window.__host.cardSizes.length), calls, 'and stays put');
+});
+
 await check('native capture flags open the right sheets', {}, async ({page}) => {
   await page.evaluate(() => window.showForCapture('schedule'));
   await page.locator('#plannedPicker:not([hidden]) .day-picker').waitFor();

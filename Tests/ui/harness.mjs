@@ -18,7 +18,7 @@ export function sampleWorkspace() {
 function fakeHost(seed) {
   const now = Date.now() / 1000;
   const state = {
-    workspace: seed.workspace, saves: 0, failSnapshot: seed.failSnapshot || '', clipboard: '', codex: true, menuBar: true, edgeMail: false, edge: false,
+    workspace: seed.workspace, saves: 0, failSnapshot: seed.failSnapshot || '', emulateCard: !!seed.emulateCard, clipboard: '', codex: true, menuBar: true, edgeMail: false, edge: false,
     claude: {installed: false, working: false, cli: true, problem: ''}, notionConnected: false, notionPushes: [],
     notionPages: [
       {id: 'aaaaaaaa-0000-0000-0000-000000000001', url: '', edited: 'e1', title: 'Plan the launch post', done: false, due: seed.tomorrow, priority: 'P1', tag: 'Marketing'},
@@ -81,7 +81,17 @@ function fakeHost(seed) {
     codexConnection: message => { if (typeof message.enabled === 'boolean') state.codex = message.enabled; return state.codex; },
     externalProvider: message => message.provider === 'github' ? {connected: false} : {accounts: [], configuredDefault: false, connected: false},
     appearance: message => { if (['system', 'light', 'dark'].includes(message.value)) state.appearance = message.value; return state.appearance || 'system'; },
-    cardSize: message => { state.cardHeight = message.height; return true; },
+    // Like CornerCard.setContentHeight: the window takes the reported height (120 to 760), so a page that
+    // measures its own window instead of its content keeps growing (NATIVE-01).
+    cardSize: message => {
+      state.cardHeight = message.height;
+      state.cardSizes = [...(state.cardSizes || []), message.height];
+      if (state.emulateCard) {
+        const height = Math.max(120, Math.min(Math.ceil(message.height), 760));
+        setTimeout(() => { const card = document.getElementById('card'); card.style.bottom = 'auto'; card.style.height = height + 'px'; state.windowHeight = height; }, 16);
+      }
+      return true;
+    },
     cardPrefs: message => {
       state.card = state.card || {snap: true, allSpaces: false, pinned: state.pinned === true, userSized: false};
       for (const key of ['snap', 'allSpaces', 'pinned']) if (typeof message[key] === 'boolean') state.card[key] = message[key];
@@ -229,7 +239,7 @@ html.desktop body.compact #card { inset: 14px 14px auto auto; width: 340px; heig
 `;
 const EDITOR = '<u>// billing.py</u><br><b>def</b> <i>charge</i>(account, amount):<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>if</b> amount &lt;= 0:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>raise</b> ValueError(<i>"amount must be positive"</i>)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice = Invoice.<i>open</i>(account)<br>&nbsp;&nbsp;&nbsp;&nbsp;invoice.<i>add</i>(amount)<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>return</b> invoice.<i>settle</i>()<br><br><u># Claude Code is refactoring this module…</u>';
 
-export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false, video = '', lite = false, failSnapshot = ''} = {}) {
+export async function open(browser, {width = 1040, height = 760, dark = false, compact = false, empty = false, titlebar = 28, workspace, scale = 1, motion = false, desktop = false, video = '', lite = false, failSnapshot = '', emulateCard = false} = {}) {
   // Checks run with reduced motion so timing never decides a result. One check turns motion on.
   const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light', reducedMotion: motion ? 'no-preference' : 'reduce', ...(video ? {recordVideo: {dir: video, size: {width, height}}} : {})});
   const page = await context.newPage();
@@ -237,7 +247,7 @@ export async function open(browser, {width = 1040, height = 760, dark = false, c
   page.on('pageerror', error => problems.push('pageerror: ' + error.message + (process.env.STACK ? error.stack : '')));
   page.on('console', message => { if (message.type() === 'error') problems.push('console: ' + message.text()); });
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  await page.addInitScript(fakeHost, {workspace: workspace === undefined ? sampleWorkspace() : workspace, compact, empty, titlebar, lite, failSnapshot, tomorrow: iso(tomorrow)});
+  await page.addInitScript(fakeHost, {workspace: workspace === undefined ? sampleWorkspace() : workspace, compact, empty, titlebar, lite, failSnapshot, emulateCard, tomorrow: iso(tomorrow)});
   // Chromium reports the Mac platform key as Meta, the same key the page listens for.
   await page.goto(pathToFileURL(path.join(root, 'UI/index.html')).href);
   await page.waitForFunction(() => window.__host && document.querySelector('#nav .smart-tile') && document.querySelector('#agentList'));
