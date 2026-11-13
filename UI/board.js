@@ -122,10 +122,13 @@ function taskMenu(task, at, anchor) {
     '-',
     data.projects.length > 1 && {label: 'Move to List…', icon: 'i-list', run: () => showTaskPicker(anchor, task, 'project')},
     !task.done && {label: 'Start Focus', icon: 'i-timer', run: () => startFocus(focusLength, task)},
+    !task.done && {label: 'Send to Claude Code', icon: 'i-terminal', run: () => action(AgentTasks.send(task, 'claude'))},
+    !task.done && {label: 'Send to Codex', icon: 'i-terminal', run: () => action(AgentTasks.send(task, 'codex'))},
     {label: 'Duplicate', icon: 'i-duplicate', run: () => action(change(state => {
       const index = state.tasks.findIndex(item => item.id === task.id);
       const copy = {...structuredClone(task), id: uuid(), done: false};
       delete copy.completedAt; delete copy.notion; delete copy.next; delete copy.nextSignature; delete copy.previous; delete copy.series;
+      delete copy.reminder; delete copy.github; delete copy.agentRuns; delete copy.agentReceipt;
       state.tasks.splice(index + 1, 0, copy);
     }))},
     {label: 'Copy Title', icon: 'i-copy', run: () => action(native('copy', {text: task.title}).then(() => toast('Copied')))},
@@ -200,6 +203,7 @@ document.addEventListener('contextmenu', event => {
     showMenu([
       {label: 'New Task', icon: 'plus', run: () => { go('p:' + name); openQuick('view'); }},
       {label: 'Rename…', icon: 'i-pencil', run: () => renameProject(name)},
+      {label: data.projectFolders?.[name] ? 'Project Folder: ' + AgentTasks.shortPath(data.projectFolders[name]) : 'Set Project Folder…', icon: 'i-terminal', run: () => action(AgentTasks.chooseFolder(name))},
       data.notion?.project === name && {label: 'Sync with Notion', icon: 'i-link', run: () => syncNotion()},
       '-',
       {label: 'Delete List…', icon: 'i-trash', danger: true, disabled: data.projects.length < 2, run: () => deleteProject(name)}
@@ -366,7 +370,8 @@ function wrapUp() {
   const section = (title, rows) => '<h3>' + title + ' <span>' + rows.length + '</span></h3>' +
     (rows.length ? '<ul class="selectable">' + rows.map(task => '<li>' + esc(task.title) + '</li>').join('') + '</ul>' : '<p class="hint">None</p>');
   dialog('Wrap Up', '<div class="stat-grid"><div class="stat"><b>' + done.length + '</b><span>Completed</span></div><div class="stat"><b>' + open.length + '</b><span>Still open</span></div>' +
-    '<div class="stat"><b>' + streak() + '</b><span>Day streak</span></div><div class="stat"><b>' + minutes + '</b><span>Focus minutes</span></div></div>' +
+    '<div class="stat"><b>' + streak() + '</b><span>Day streak</span></div><div class="stat"><b>' + minutes + '</b><span>Focus minutes</span></div>' +
+    (AgentTasks.minutesOn(today) ? '<div class="stat"><b>' + AgentTasks.minutesOn(today) + '</b><span>Agent minutes</span></div>' : '') + '</div>' +
     '<div class="week-bars" role="img" aria-label="Tasks completed over the last seven days">' + week.map((date, index) => '<div' + (date === today ? ' class="is-today"' : '') + '><b>' + (counts[index] || '') + '</b><i style="height:' + Math.round(counts[index] / top * 100) + '%"></i><span>' +
       new Intl.DateTimeFormat('en-US', {weekday: 'narrow'}).format(fromISO(date)) + '</span></div>').join('') + '</div>' +
     '<div class="wrap-summary">' + section('Completed', done) + section('Still open', open) + '</div>' +

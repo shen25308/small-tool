@@ -812,6 +812,13 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     }
                 }
                 if op=="reminders" {eventKit.reminders(body,reply:handle)} else {eventKit.events(body,reply:handle)}
+            case "chooseFolder":
+                AgentLaunch.chooseFolder { [weak self] path in self?.reply(id,true,path ?? "") }
+            case "startAgent":
+                let used=try AgentLaunch.start(agent:body["agent"] as? String ?? "",folder:body["folder"] as? String ?? "",
+                                               prompt:body["prompt"] as? String ?? "",task:body["task"] as? String ?? "",
+                                               terminal:body["terminal"] as? String ?? "Terminal",support:file.deletingLastPathComponent())
+                reply(id,true,used)
             case "openIssue":
                 // Only an issue page on github.com, nothing else.
                 guard let link=body["url"] as? String, link.count<300,

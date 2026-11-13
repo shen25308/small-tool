@@ -134,6 +134,16 @@ class ClaudeCodeHook(Sandbox):
         self.assertNotIn("iterm", self.states()[0]["terminal"])
         self.assertNotIn("tmuxPane", self.states()[0]["terminal"])
 
+    def test_session_started_from_a_task_keeps_its_link(self):
+        self.env["SHISHI_TASK"] = "6f0d4b5e-8f7a-4d2b-9c1e-0a1b2c3d4e5f"
+        self.hook(hook_event_name="UserPromptSubmit", prompt="Fix it")
+        self.env.pop("SHISHI_TASK")
+        self.hook(hook_event_name="Stop", last_assistant_message="Fixed.")
+        self.assertEqual(self.states()[0]["shishiTask"], "6f0d4b5e-8f7a-4d2b-9c1e-0a1b2c3d4e5f")
+        self.env["SHISHI_TASK"] = "$(rm -rf ~)"
+        self.hook(hook_event_name="UserPromptSubmit", session_id="s-2", prompt="Other")
+        self.assertNotIn("shishiTask", [s for s in self.states() if s["session"] == "s-2"][0])
+
     def test_delivery_log_keeps_no_content(self):
         self.hook(hook_event_name="UserPromptSubmit", prompt="My private prompt about payroll")
         self.hook(hook_event_name="PostToolUse", tool_name="Bash", tool_input={"command": "cat salaries.csv"})

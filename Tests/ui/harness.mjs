@@ -181,6 +181,8 @@ function fakeHost(seed) {
         {number: 9, title: 'Fixed long ago', state: 'closed', url: 'https://github.com/' + message.repo + '/issues/9', labels: []}
       ]};
     },
+    chooseFolder: () => state.folderChoice ?? '/Users/me/code/app',
+    startAgent: message => { state.started = [...(state.started || []), message]; return message.terminal === 'iTerm2' ? 'iTerm2' : 'Terminal'; },
     openIssue: message => { state.openedIssue = message.url; return true; },
     usage: () => state.usage ?? {ok: true, time: now, claude: {fiveHours: {tokens: 1240000, cacheRead: 5e6, replies: 40}, today: {tokens: 2e6, replies: 60}, week: {tokens: 8400000, cacheRead: 9e7, replies: 300}, sessions: 12},
       codex: {observedAt: now - 120, primary: {usedPercent: 42.4, windowMinutes: 300, resetsAt: now + 3600}, secondary: {usedPercent: 83, windowMinutes: 10080, resetsAt: now + 3 * 86400}}}, openConnectorLink: () => true, copyConnectorSetup: () => true,

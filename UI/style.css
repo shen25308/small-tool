@@ -421,3 +421,13 @@ button.group-row:hover { background: var(--hover) }
 .event-time { flex: none; width: 64px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums }
 .event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .card-next-event { display: block; margin-top: 3px; overflow: hidden; color: var(--secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap }
+.row-meta .agent-chip { padding: 0 6px; border-radius: 999px; background: var(--control); color: var(--secondary); font-size: 11px; line-height: 16px }
+.agent-chip.working { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue) }
+.agent-chip.blocked { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--danger) }
+.agent-chip.review { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--warning) }
+.agent-chip.done { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--success) }
+.agent-task { display: grid; gap: 6px; margin-top: 12px; padding: 9px 10px; border-radius: 9px; background: var(--control) }
+.agent-task-line { display: flex; align-items: center; gap: 6px; color: var(--secondary); font-size: 12px }
+.agent-task-line .symbol { width: 13px; height: 13px; flex: none }
+.agent-task-line span { flex: 1; min-width: 0 }
+.agent-task-actions { display: flex; align-items: center; gap: 6px }

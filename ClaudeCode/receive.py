@@ -294,6 +294,12 @@ def receive(event):
     pid = agent_pid() if name == "UserPromptSubmit" or (name in ("Notification", "PostToolUse") and not previous.get("pid")) else 0
     if pid or isinstance(previous.get("pid"), int):
         keep["pid"] = pid or previous["pid"]
+    # A session started from a Shishi task carries its ID, so the report and the time spent attach to the task.
+    linked = os.environ.get("SHISHI_TASK", "")
+    if re.fullmatch(r"[0-9A-Za-z-]{8,64}", linked):
+        keep["shishiTask"] = linked
+    elif isinstance(previous.get("shishiTask"), str):
+        keep["shishiTask"] = previous["shishiTask"]
     cwd = text(event.get("cwd"))
     if cwd.startswith("/") and len(cwd) < 1024:
         keep["cwd"] = cwd

@@ -182,6 +182,8 @@ function showConnectors() {
     connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>','Claude Code')+
     '<label class="group-row toggle-label sub-row" id="approvalRow" hidden><span class="row-text"><b>Answer permission requests in Shishi</b><small>Claude Code waits <select id="approvalWait" aria-label="Seconds to wait">'+
       [15,25,45,90].map(n=>'<option value="'+n+'">'+n+' seconds</option>').join('')+'</select> for Allow or Deny on the card, then asks in the terminal as usual. While it waits, the terminal shows no prompt.</small></span><input type="checkbox" id="approvalChoice"></label>'+
+    '<div class="group-row sub-row"><span class="row-text"><b>Start agents in</b><small>“Send to Claude Code” on a task opens a new window here, in the list’s project folder.</small></span>'+
+      '<select id="agentTerminal" aria-label="Terminal for agents">'+['Terminal','iTerm2'].map(name=>'<option'+((data.agentTerminal||'Terminal')===name?' selected':'')+'>'+name+'</option>').join('')+'</select></div>'+
     connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>','Codex')+
     connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>','Grok Bot')+
     connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
@@ -314,6 +316,7 @@ function showConnectors() {
 
   $('notionRow').onclick=()=>showNotion();
   $('remindersRow').onclick=()=>action(showReminders());
+  $('agentTerminal').onchange=()=>action(change(state=>{state.agentTerminal=$('agentTerminal').value}));
   $('issuesRow').onclick=()=>showIssues();
   $('calendarChoice').onchange=()=>{
     const on=$('calendarChoice').checked;

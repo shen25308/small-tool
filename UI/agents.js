@@ -66,6 +66,9 @@ window.setAgents = rows => {
   agentRows = Array.isArray(rows) ? rows : [];
   for (const row of agentRows) if (row.receipt && row.facts) factsByNotice.set(row.receipt, {state: 'done', facts: row.facts, task: row.task || '', started: row.started, time: row.time, receipt: row.receipt});
   renderAgents();
+  window.AgentTasks?.link(agentRows);
+  // Task rows show their linked session's live state.
+  if (agentRows.some(row => row.shishiTask) || data.tasks.some(task => task.agentStarted)) render();
   // Session facts decide inbox verdicts too; refresh an open inbox so both places agree.
   if ($('dialog').open && $('inboxList')) { const top = $('dialog').scrollTop; listNotices(); $('dialog').scrollTop = top; }
 };

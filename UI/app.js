@@ -142,6 +142,8 @@ function rowMeta(t, options) {
   if (t.notion?.id && !t.notion.gone) parts.push('<span title="Synced with Notion">' + symbol('i-link') + 'Notion</span>');
   if (t.reminder?.id && !t.reminder.gone) parts.push('<span title="Synced with Apple Reminders">' + symbol('i-link') + 'Reminders</span>');
   if (t.github?.number) parts.push('<span title="GitHub issue">#' + esc(String(t.github.number)) + '</span>');
+  const agent = window.AgentTasks?.status(t);
+  if (agent) parts.push('<span class="agent-chip ' + esc(agent.tone) + '" title="' + esc(agent.title) + '">' + esc(agent.text) + '</span>');
   if (t.notes) parts.push('<span class="meta-note">' + esc(t.notes.split('\n')[0].slice(0, 120)) + '</span>');
   return parts.length ? '<span class="row-meta">' + parts.join('') + '</span>' : '';
 }
@@ -526,6 +528,7 @@ function taskForm(t, context = {}) {
     (t.notion?.id && !t.notion.gone ? '<div class="notion-line">' + symbol('i-link') + 'Synced with Notion<button type="button" class="mini-link" id="openNotionPage">Open page</button></div>' : '') +
     (t.github?.url ? '<div class="notion-line">' + symbol('i-link') + 'GitHub issue #' + esc(String(t.github.number)) + (t.github.state === 'closed' ? ' (closed)' : '') +
       '<button type="button" class="mini-link" id="openIssue">Open on GitHub</button></div>' : '') +
+    (created && !t.done && window.AgentTasks ? AgentTasks.detailsMarkup(t) : '') +
     '<div class="close-prompt" id="closePrompt" role="alertdialog" aria-labelledby="closePromptText" hidden></div>' +
     '<div class="actions"><button type="button" class="mini-link danger-link" id="removeTask">' + (created ? 'Delete Task' : 'Discard') + '</button>' +
     '<span class="save-state" id="saveState" role="status" aria-live="polite"></span><span class="spacer"></span>' +
@@ -657,6 +660,7 @@ function taskForm(t, context = {}) {
   $('fieldTitle').focus();
   if ($('openNotionPage')) $('openNotionPage').onclick = () => action(native('openNotion', {page: t.notion.id}));
   if ($('openIssue')) $('openIssue').onclick = () => action(native('openIssue', {url: t.github.url}));
+  window.AgentTasks?.bindDetails(t, () => dialogGuard?.flush());
   $('revertTask').onclick = revert;
   $('removeTask').onclick = () => {
     clearTimeout(timer);
@@ -702,6 +706,8 @@ function toggleTask(id) {
     const nextDay = TaskLogic.nextRepeat(base, task.repeat, today);
     const next = {...structuredClone(task), id: uuid(), done: false, previous: task.id};
     delete next.completedAt; delete next.notion; delete next.next; delete next.nextSignature; delete next.plannedDates;
+    // Links belong to this occurrence only: its Reminders item, its GitHub issue and its agent runs.
+    delete next.reminder; delete next.github; delete next.agentRuns; delete next.agentReceipt;
     if (task.planned || !task.dueDate) next.planned = nextDay;
     if (task.dueDate) next.dueDate = task.planned ? TaskLogic.nextRepeat(task.dueDate, task.repeat, today) : nextDay;
     if (next.subtasks) next.subtasks.forEach(item => { item.done = false; });
@@ -710,6 +716,9 @@ function toggleTask(id) {
     s.tasks.splice(index + 1, 0, next);
     outcome = {kind: 'created', date: next.planned || next.dueDate};
   }).then(() => {
+    // Checking off a task also clears the agent report that was waiting for it.
+    const finished = data.tasks.find(item => item.id === id);
+    if (finished?.done && finished.agentReceipt) window.AgentTasks?.closeReport(finished);
     if (outcome?.kind === 'created') toast('Done. Next one scheduled for ' + dayLabel(outcome.date), () => action(toggleTask(id)));
     if (outcome?.kind === 'removed') toast('Reopened. The next one for ' + dayLabel(outcome.date) + ' was removed.');
     if (outcome?.kind === 'kept') {

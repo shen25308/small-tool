@@ -1247,6 +1247,48 @@ await check('GitHub issues become tasks', {}, async ({page, host, tasks}) => {
   await page.waitForFunction(() => window.__host.openedIssue === 'https://github.com/acme/app/issues/12');
 });
 
+await check('send a task to Claude Code and follow it back', {}, async ({page, host, tasks}) => {
+  const id = (await tasks()).find(t => t.title === 'Review the product roadmap').id;
+  const row = () => page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await row().locator('[data-act="more"]').click();
+  await page.locator('.menu button', {hasText: 'Send to Claude Code'}).click();
+  await page.waitForFunction(() => window.__host.started?.length === 1);
+  const started = (await host()).started[0];
+  assert.deepEqual([started.agent, started.folder, started.task, started.terminal], ['claude', '/Users/me/code/app', id, 'Terminal']);
+  assert.match(started.prompt, /^Review the product roadmap/);
+  assert.equal((await host()).workspace.projectFolders['Product ideas'], '/Users/me/code/app', 'the folder is remembered for the list');
+  assert.match(await text(page, '#toast'), /Claude Code started in Terminal/);
+  // The linked session shows on the task row while it works, then its report and time attach to the task.
+  const now = Date.now() / 1000;
+  const working = {key: '7'.repeat(64), source: 'Claude Code', title: 'Claude Code · app', detail: '', state: 'working', time: now, started: now - 600, shishiTask: id, activity: 'Edit roadmap.md', receipt: ''};
+  await page.evaluate(rows => window.setAgents([...window.__host.agents, ...rows]), [working]);
+  await page.waitForFunction(() => /Claude Code working/.test(document.querySelector('#tasks').innerText));
+  const receipt = 'connector/' + '7'.repeat(64);
+  await page.evaluate(([row, receipt]) => {
+    const host = window.__host;
+    host.notices.external.unshift({id: receipt, source: 'Claude Code', title: 'Claude Code · app', time: row.time + 900, read: false, thread: '', link: '', summary: 'Updated roadmap.md. Tests: 3 passed.'});
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+    window.setAgents([...host.agents, {...row, state: 'done', time: row.time + 900, receipt, facts: {files: ['roadmap.md'], fileCount: 1, commands: 1, failedTools: 0, tests: 'passed', testCommand: 'npm test'}}]);
+  }, [working, receipt]);
+  await page.waitForFunction(id => window.__host.workspace.tasks.find(t => t.id === id).agentRuns?.length === 1, id);
+  const linked = (await tasks()).find(t => t.id === id);
+  assert.deepEqual([linked.agentReceipt, linked.agentRuns[0].seconds], [receipt, 1500]);
+  await page.waitForFunction(() => /Completed · Checks passed · 25 min/.test(document.querySelector('#tasks').innerText));
+  // A second delivery of the same state adds nothing.
+  await page.evaluate(() => window.setAgents(window.__host.agents.concat([])));
+  assert.equal((await tasks()).find(t => t.id === id).agentRuns.length, 1);
+  // Details show the time and the report; Wrap Up counts agent minutes.
+  await row().locator('.task-body').click();
+  assert.match(await text(page, '#agentTask'), /Agents worked 25 min over 1 run · in ~\/code\/app/);
+  await page.evaluate(() => closeDialog(true));
+  await page.click('#wrapUp');
+  assert.match(await text(page, '#dialogBody'), /25\s*Agent minutes/);
+  await page.evaluate(() => closeDialog(true));
+  // Checking the task off clears its report.
+  await row().locator('[data-act="toggle"]').click();
+  await page.waitForFunction(receipt => window.__host.notices.external.find(n => n.id === receipt)?.read, receipt);
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);
