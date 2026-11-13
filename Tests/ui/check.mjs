@@ -253,7 +253,7 @@ await check('context menu: schedule, priority, duplicate, delete with undo', {},
   await row.click({button: 'right'});
   await page.waitForSelector('.menu');
   await shot('context-menu');
-  await page.locator('.menu-item', {hasText: 'Tomorrow'}).click();
+  await page.locator('.menu .menu-segment button', {hasText: 'Tomorrow'}).click();
   await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === 'Test reminders').planned === d, day(1));
   await page.locator('#pool .row', {hasText: 'Test reminders'}).click({button: 'right'});
   await page.locator('.menu-segment button', {hasText: 'P0'}).click();
@@ -406,6 +406,7 @@ await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host
   await page.click('#claudeConnection');
   await page.waitForFunction(() => document.querySelector('#claudeConnection').textContent === 'Disconnect');
   assert.match(await text(page, '#claudeRow [data-state]'), /Connected/);
+  await page.click('[data-settings-tab="general"]');
   await page.waitForSelector('#appearanceChoice [data-appearance="system"][aria-pressed="true"]');
   await page.click('#appearanceChoice [data-appearance="dark"]');
   await page.waitForFunction(() => window.__host.appearance === 'dark' && document.querySelector('[data-appearance="dark"]').getAttribute('aria-pressed') === 'true');
@@ -416,6 +417,7 @@ await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host
   await page.waitForFunction(() => window.__host.card.snap === false);
   await page.uncheck('#menuBarChoice');
   await page.waitForFunction(() => window.__host.menuBar === false);
+  await page.click('[data-settings-tab="sync"]');
   await page.click('#notionRow');
   await page.fill('#notionDatabase', 'https://www.notion.so/acme/Team-tasks-11111111222233334444555555555555?v=1');
   await shot('notion-connect');
@@ -1062,11 +1064,14 @@ await check('agents: current tool, stopped sessions, settings and diagnostics', 
   const hotkeys = page.locator('[data-setting="hotkeys"]'), awake = page.locator('[data-setting="keepAwake"]');
   await page.waitForFunction(() => !document.querySelector('[data-setting="hotkeys"]').disabled);
   assert.deepEqual([await hotkeys.isChecked(), await awake.isChecked()], [true, false]);
-  assert.match(await text(page, '#hotkeyNote'), /⌃⌥Space shows or hides the card\. ⌃⌥N adds a task\./);
   await awake.check();
   await page.waitForFunction(() => window.__host.settings.keepAwake === true);
+  await page.click('[data-settings-tab="general"]');
+  assert.match(await text(page, '#hotkeyNote'), /⌃⌥Space shows or hides the card\. ⌃⌥N adds a task\./);
   await hotkeys.uncheck();
   await page.waitForFunction(() => window.__host.settings.hotkeys === false);
+  await page.click('[data-settings-tab="agents"]');
+
   await page.click('#hookLogBox summary');
   await page.locator('#hookLog .hook-outcome').first().waitFor();
   assert.match(await text(page, '#hookLog'), /PostToolUse[\s\S]*session 1a2b3c4d[\s\S]*delivered[\s\S]*Unreadable event[\s\S]*problem:/);
@@ -1113,6 +1118,7 @@ await check('approvals and alerts in Connections', {}, async ({page, host}) => {
   assert.match(await text(page, '#toast'), /Permission requests now come to Shishi first/);
   await page.selectOption('#approvalWait', '45');
   await page.waitForFunction(() => window.__host.approvalWait === 45);
+  await page.click('[data-settings-tab="alerts"]');
   // Alerts are off until chosen; sound and banner follow the two triggers.
   await page.waitForFunction(() => !document.querySelector('[data-alert="needsYou"]').disabled);
   assert.equal(await page.locator('[data-alert="sound"]').isDisabled(), true);
@@ -1129,6 +1135,7 @@ await check('approvals and alerts in Connections', {}, async ({page, host}) => {
   await page.click('#testAlert');
   await page.waitForFunction(() => window.__host.testAlerts === 1);
   // Reconnecting keeps the approval choice.
+  await page.click('[data-settings-tab="agents"]');
   await page.click('#claudeConnection');
   await page.waitForFunction(() => window.__host.claude.installed === false);
   await page.click('#claudeConnection');
@@ -1138,9 +1145,9 @@ await check('approvals and alerts in Connections', {}, async ({page, host}) => {
 await check('usage and limits under Agents, exact tab', {width: 1040, height: 760}, async ({page, host}) => {
   await page.locator('#agentUsage:not([hidden])').waitFor();
   const usage = await text(page, '#agentUsage');
-  assert.match(usage, /Claude Code 1\.2M tokens in 5 hours · 8\.4M this week/);
-  assert.match(usage, /Codex 42% of 5-hour limit, resets/);
-  assert.match(usage, /Codex 83% of weekly limit, resets/);
+  assert.match(usage, /Claude Code\s*1\.2M \/ 5 h · 8\.4M \/ week/);
+  assert.match(usage, /Codex\s*42% \/ 5 h · 83% \/ week/);
+  assert.match(await page.locator('.usage-row').nth(1).getAttribute('title'), /42% of the 5-hour limit, resets[\s\S]*83% of the weekly limit, resets/);
   assert.equal(await page.locator('.usage-row.high').count(), 1, 'a limit above 80% stands out');
   assert.match(await page.locator('.usage-row').first().getAttribute('title'), /counts, not a percentage/);
   // Turning usage off hides it.
@@ -1183,6 +1190,7 @@ await check('shishi:// links add a task or show a view, nothing else', {}, async
 await check('Apple Reminders: sync a list both ways', {}, async ({page, host, tasks}) => {
   await page.click('#boardMore');
   await page.click('#openConnectors');
+  await page.click('[data-settings-tab="sync"]');
   await page.click('#remindersRow');
   await page.locator('#remindersForm').waitFor();
   await page.selectOption('#remindersList', 'L2');
@@ -1206,6 +1214,7 @@ await check('Apple Reminders: sync a list both ways', {}, async ({page, host, ta
 await check('calendar events in Today, Upcoming and the card', {}, async ({page, host}) => {
   await page.click('#boardMore');
   await page.click('#openConnectors');
+  await page.click('[data-settings-tab="sync"]');
   await page.check('#calendarChoice');
   await page.waitForFunction(() => window.__host.workspace.calendar?.enabled);
   await page.evaluate(() => closeDialog(true));
@@ -1224,6 +1233,7 @@ await check('calendar events in Today, Upcoming and the card', {}, async ({page,
 await check('GitHub issues become tasks', {}, async ({page, host, tasks}) => {
   await page.click('#boardMore');
   await page.click('#openConnectors');
+  await page.click('[data-settings-tab="sync"]');
   await page.click('#issuesRow');
   await page.fill('#issuesRepo', 'acme/missing');
   await page.click('#issuesForm .primary');
@@ -1292,6 +1302,7 @@ await check('send a task to Claude Code and follow it back', {}, async ({page, h
 await check('update check: quiet, once per version, never installs', {}, async ({page, host}) => {
   await page.click('#boardMore');
   await page.click('#openConnectors');
+  await page.click('[data-settings-tab="general"]');
   await page.waitForFunction(() => !document.getElementById('updateChoice').disabled);
   assert.match(await text(page, '#updateNote'), /latest published version \(1\.7\)/);
   await page.evaluate(() => { window.__host.latestRelease = '1.8'; });

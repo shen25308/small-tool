@@ -31,11 +31,18 @@ function agentActivity(entry) {
   if (entry.state !== 'working' || !entry.activity) return '';
   return entry.activity + (entry.tools > 1 ? ' · ' + entry.tools + ' tools' : '');
 }
+// "Claude Code · web-app" reads as the project first, with the agent's name quieter beside it.
+function agentTitle(entry) {
+  const parts = String(entry.title || 'Agent').split(' · ');
+  const project = parts.length > 1 ? parts.slice(1).join(' · ') : parts[0];
+  const source = parts.length > 1 ? parts[0] : entry.source || '';
+  return '<span class="agent-title">' + esc(project) + (source && source !== project ? '<span class="agent-source">' + esc(source) + '</span>' : '') + '</span>';
+}
 function agentMarkup(entry) {
   const state = entry.ended ? 'Stopped' : agentWords[entry.state] || 'Idle';
   const detail = agentActivity(entry) || entry.detail;
   return '<button type="button" class="agent-row" data-agent="' + esc(entry.key) + '" title="' + esc(entry.title + (entry.detail ? '\n' + entry.detail : '')) + '">' +
-    '<span class="agent-dot ' + esc(entry.ended ? 'ended' : entry.state) + '" aria-hidden="true"></span><span class="agent-title">' + esc(entry.title) + '</span>' +
+    '<span class="agent-dot ' + esc(entry.ended ? 'ended' : entry.state) + '" aria-hidden="true"></span>' + agentTitle(entry) +
     '<span class="agent-time">' + agentAge(entry.time) + '</span>' +
     '<span class="agent-detail"><span class="agent-state ' + esc(entry.ended ? 'ended' : entry.state) + '">' + state + '</span>' + (detail ? ' · ' + esc(detail) : '') + '</span></button>';
 }
@@ -87,7 +94,7 @@ function agentMenu(entry, at) {
 
 for (const id of ['agentList']) {
   $(id).addEventListener('click', event => {
-    if (event.target.closest('[data-connect-agents]')) { showConnectors(); return; }
+    if (event.target.closest('[data-connect-agents]')) { showConnectors('agents'); return; }
     if (event.target.closest('[data-agent-demo]')) { Demo.start(); return; }
     const row = event.target.closest('[data-agent]');
     const entry = row && agentEntries().find(item => item.key === row.dataset.agent);
@@ -118,16 +125,18 @@ window.Usage = (() => {
     const out = [];
     const claude = report?.claude;
     if (claude && claude.week.replies) {
-      out.push({source: 'Claude Code', text: compactNumber.format(claude.fiveHours.tokens) + ' tokens in 5 hours · ' + compactNumber.format(claude.week.tokens) + ' this week',
+      out.push({source: 'Claude Code', text: compactNumber.format(claude.fiveHours.tokens) + ' / 5 h · ' + compactNumber.format(claude.week.tokens) + ' / week',
                 title: 'Input, output and cache-write tokens from Claude Code\'s own session files. ' + compactNumber.format(claude.week.cacheRead) +
                   ' cache-read tokens this week are not included. Anthropic keeps plan limits on its servers, so Shishi shows counts, not a percentage.'});
     }
     const codex = report?.codex;
-    for (const name of ['primary', 'secondary']) {
-      const limit = codex?.[name];
-      if (limit) out.push({source: 'Codex', text: Math.round(limit.usedPercent) + '% of ' + windowName(limit.windowMinutes) + resets(limit.resetsAt),
-                           title: 'From the latest rate-limit snapshot Codex wrote to its session files (' + clock.format(new Date(codex.observedAt * 1000)) + ').',
-                           high: limit.usedPercent >= 80});
+    const limits = ['primary', 'secondary'].map(name => codex?.[name]).filter(Boolean);
+    if (limits.length) {
+      const short = minutes => !minutes ? '' : minutes % 10080 === 0 ? 'week' : minutes % 1440 === 0 ? minutes / 1440 + ' d' : minutes / 60 + ' h';
+      out.push({source: 'Codex', text: limits.map(limit => Math.round(limit.usedPercent) + '% / ' + (short(limit.windowMinutes) || 'limit')).join(' · '),
+                title: limits.map(limit => Math.round(limit.usedPercent) + '% of the ' + windowName(limit.windowMinutes) + resets(limit.resetsAt)).join('\n') +
+                  '\nFrom the latest rate-limit snapshot Codex wrote to its session files (' + clock.format(new Date(codex.observedAt * 1000)) + ').',
+                high: limits.some(limit => limit.usedPercent >= 80)});
     }
     return out;
   }
@@ -136,7 +145,7 @@ window.Usage = (() => {
     if (!box) return;
     const rows = enabled ? lines() : [];
     box.hidden = !rows.length;
-    box.innerHTML = rows.map(row => '<div class="usage-row' + (row.high ? ' high' : '') + '" title="' + esc(row.title) + '"><b>' + esc(row.source) + '</b> ' + esc(row.text) + '</div>').join('');
+    box.innerHTML = rows.map(row => '<div class="usage-row' + (row.high ? ' high' : '') + '" title="' + esc(row.title) + '"><b>' + esc(row.source) + '</b><span>' + esc(row.text) + '</span></div>').join('');
   }
   function refresh() {
     if (!enabled) { render(); return Promise.resolve(); }

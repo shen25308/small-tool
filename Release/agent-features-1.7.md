@@ -16,7 +16,7 @@ macOS build workflow compiles the Swift and runs the native launch, window and d
 | A waiting agent goes unnoticed | Optional sound/banner, reminder after N minutes, quiet hours; due-task alerts | `Alerts.swift` | UI *approvals and alerts in Connections* |
 | Hunting for the right tab | iTerm2 session, Terminal tab (tty), tmux pane, or editor folder window | `SessionFocus.swift` | `test_where_the_session_runs_is_recorded`; UI *open the exact terminal tab…* |
 | No usage or limits | Claude tokens (5 h, today, week) from local logs; Codex rate limits from its session files | `agent_usage.py` | `UsageReport`; UI *usage and limits under Agents…* |
-| Codex coverage overstated | Connections says Codex cannot report waiting for approval | `inbox.js` | — |
+| Codex coverage overstated | Connections says Codex cannot report waiting for approval | `inbox.js` (Settings → Agents) | — |
 | No iPhone, Siri, widgets | Two-way sync of one list with Apple Reminders (same tested sync as Notion) | `EventKitBridge.swift`, `apple.js` | node *the same sync keeps a list in step with Apple Reminders*; UI *Apple Reminders: sync a list both ways* |
 | No calendar | Today's events above Today, in Upcoming, "Next" on the card (read only) | `EventKitBridge.swift`, `apple.js` | UI *calendar events in Today, Upcoming and the card* |
 | No automation | `shishi://` add/open/search/show-card links (add or show only) | `main.swift`, `board.js` | UI *shishi:// links add a task or show a view…* |

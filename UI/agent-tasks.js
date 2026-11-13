@@ -89,8 +89,8 @@ window.AgentTasks = (() => {
       ' · ' + (folder ? 'in ' + esc(shortPath(folder)) : 'no project folder for this list') + '</span>' +
       '<button type="button" class="mini-link" data-agent-folder>' + (folder ? 'Change' : 'Choose') + '</button></div>' +
       '<div class="agent-task-actions">' + (note ? '<button type="button" class="mini-link" data-agent-report>Open the latest report</button>' : '') +
-      '<span class="spacer"></span><button type="button" class="secondary" data-agent-send="codex">Send to Codex</button>' +
-      '<button type="button" class="secondary" data-agent-send="claude">Send to Claude Code</button></div></div>';
+      '<span class="spacer"></span><button type="button" class="mini-link" data-agent-send="codex">Send to Codex</button>' +
+      '<button type="button" class="secondary agent-send" data-agent-send="claude">' + symbol('i-terminal') + 'Send to Claude Code</button></div></div>';
   }
 
   function bindDetails(task, flush) {

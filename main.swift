@@ -356,6 +356,12 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         if let url = action.request.url, url.isFileURL, url.lastPathComponent=="index.html" { decisionHandler(.allow) }
         else { decisionHandler(.cancel) }
     }
+    @objc private func showSettings() {
+        if compact {setCompact(false)}
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps:true)
+        tell("openSettings","agents")
+    }
     /// The About panel names the exact source commit, so a build can be matched to its documentation (F18).
     @objc private func showAbout() {
         let info=Bundle.main.infoDictionary ?? [:]
@@ -374,6 +380,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         bar.addItem(appItem)
         let appMenu=NSMenu(title:"Shishi")
         appMenu.addItem(withTitle:"About Shishi",action:#selector(showAbout),keyEquivalent:"")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle:"Settings…",action:#selector(showSettings),keyEquivalent:",")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle:"Hide Shishi",action:#selector(NSApplication.hide(_:)),keyEquivalent:"h")
         appMenu.addItem(.separator())

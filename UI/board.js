@@ -111,19 +111,19 @@ function taskMenu(task, at, anchor) {
     {label: 'Edit Details…', icon: 'i-pencil', run: () => taskForm(task)},
     '-',
     !task.done && {heading: 'Schedule'},
-    !task.done && {label: 'Today', icon: 'i-sun', run: plan(today)},
-    !task.done && {label: 'Tomorrow', icon: 'i-arrow-right', run: plan(addDays(today, 1))},
-    !task.done && {label: 'Next Week', icon: 'i-calendar', run: plan(TaskLogic.nextWeekday(today, 1))},
+    !task.done && {segment: [['Today', today], ['Tomorrow', addDays(today, 1)], ['Next Week', TaskLogic.nextWeekday(today, 1)]].map(([label, date]) =>
+      ({label, pressed: plannedDays(task).length === 1 && plannedDays(task)[0] === date, run: plan(date)}))},
     !task.done && {label: 'Choose Days…', icon: 'i-calendar', run: () => editPlanned(anchor, task)},
     !task.done && task.planned && {label: 'Remove Date', icon: 'i-xmark', run: plan('')},
     !task.done && '-',
     {heading: 'Priority'},
     {segment: ['P0', 'P1', 'P2'].map(level => ({label: level, pressed: task.priority === level, run: () => action(patchTask(task.id, item => { item.priority = level; }))}))},
     '-',
-    data.projects.length > 1 && {label: 'Move to List…', icon: 'i-list', run: () => showTaskPicker(anchor, task, 'project')},
-    !task.done && {label: 'Start Focus', icon: 'i-timer', run: () => startFocus(focusLength, task)},
     !task.done && {label: 'Send to Claude Code', icon: 'i-terminal', run: () => action(AgentTasks.send(task, 'claude'))},
     !task.done && {label: 'Send to Codex', icon: 'i-terminal', run: () => action(AgentTasks.send(task, 'codex'))},
+    !task.done && '-',
+    data.projects.length > 1 && {label: 'Move to List…', icon: 'i-list', run: () => showTaskPicker(anchor, task, 'project')},
+    !task.done && {label: 'Start Focus', icon: 'i-timer', run: () => startFocus(focusLength, task)},
     {label: 'Duplicate', icon: 'i-duplicate', run: () => action(change(state => {
       const index = state.tasks.findIndex(item => item.id === task.id);
       const copy = {...structuredClone(task), id: uuid(), done: false};
@@ -267,7 +267,7 @@ function paletteCommands() {
     {label: 'New List', icon: 'i-list', run: projectForm},
     canCapture && {label: 'Capture Tasks from a Message', icon: 'sparkles', run: () => capture()},
     {label: 'Open Inbox', icon: 'inbox', run: () => $('inboxButton').click()},
-    {label: 'Connections', icon: 'i-link', run: () => showConnectors()},
+    {label: 'Settings', icon: 'i-gear', hint: '⌘,', run: () => showConnectors()},
     {label: focusSession ? 'Stop Focus Timer' : 'Start Focus Timer', icon: 'i-timer', run: () => focusSession ? stopFocus(false) : startFocus(focusLength)},
     {label: 'Wrap Up Today', icon: 'i-check-circle', run: wrapUp},
     {label: compact ? 'Open Full Workspace' : 'Floating Today List', icon: compact ? 'expand' : 'pin', run: () => $('pin').click()},
@@ -349,6 +349,7 @@ $('searchTasks').onclick = () => openPalette();
 $('sideSearch').onclick = () => openPalette();
 document.addEventListener('keydown', event => {
   if (event.metaKey && ['k', 'f'].includes(event.key.toLowerCase()) && !$('dialog').open) { event.preventDefault(); openPalette(); }
+  if (event.metaKey && event.key === ',' && !$('palette').open) { event.preventDefault(); showConnectors(); }
 });
 
 // Daily review
@@ -478,8 +479,9 @@ $('closePeek').onclick = () => {
 
 // The build workflow opens these sheets with "--show <name>" to capture the real window.
 window.showForCapture = name => {
+  if (name === 'settings-sync') { showConnectors('sync'); return; }
   if (name === 'connections') {
-    showConnectors();
+    showConnectors('agents');
     setTimeout(() => document.querySelector('#claudeRow .source-swatch')?.click(), 300);
   } else if (name === 'schedule') {
     const task = data.tasks.find(item => !item.done && item.plannedDates?.length > 1) || data.tasks.find(item => !item.done);
@@ -516,3 +518,6 @@ function addFromLink(task) {
     state.tasks = state.tasks.filter(item => item.id !== task.id);
   })))));
 }
+
+// The app menu's Settings… item (⌘,) opens the same sheet.
+window.openSettings = tab => { if (compact) Card.inWorkspace(() => showConnectors(tab)); else showConnectors(tab); };

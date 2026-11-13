@@ -44,7 +44,7 @@ async function syncReminders({quiet = false} = {}) {
 
 async function showReminders() {
   const config = data.reminders;
-  const navigation = {label: 'Connections', back: showConnectors};
+  const navigation = {label: 'Settings', back: () => showConnectors('sync')};
   if (!config) {
     dialog('Apple Reminders', '<p class="hint">Keep one list in step with a list in Reminders, so your tasks are on iPhone, Apple Watch and in Siri. ' +
       'Title, completion, deadline and priority stay in step both ways. macOS asks once for access.</p><p class="feedback" id="remindersFeedback" role="status">Loading your Reminders lists…</p>', navigation);
@@ -160,7 +160,7 @@ async function syncIssues({quiet = false} = {}) {
 
 function showIssues() {
   const config = data.github;
-  const navigation = {label: 'Connections', back: showConnectors};
+  const navigation = {label: 'Settings', back: () => showConnectors('sync')};
   if (!config) {
     dialog('GitHub Issues', '<p class="hint">Turn a public repository’s open issues into tasks. A task is checked off when its issue closes, and opens again if the issue reopens. No GitHub account is needed.</p>' +
       '<form id="issuesForm"><label>Repository<input id="issuesRepo" required autocomplete="off" placeholder="owner/repo"></label>' +

@@ -149,3 +149,15 @@
 .week-bars b { font-size: 10.5px; font-weight: 500; color: var(--secondary); font-variant-numeric: tabular-nums }
 
 @media (max-width: 460px) { .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+
+/* Agents: the project leads, the agent's name stays quiet; usage reads as two tidy lines. */
+.agent-dock { max-height: 36% }
+.agent-source { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400 }
+.agent-usage { display: grid; gap: 1px; margin: 6px 8px 0; padding-top: 6px; border-top: .5px solid var(--hairline) }
+.usage-row { display: flex; justify-content: space-between; gap: 8px; min-width: 0; white-space: nowrap }
+.usage-row b { flex: none; color: var(--secondary); font-weight: 500 }
+.usage-row span { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums }
+
+/* Segmented rows inside menus share the width evenly and never wrap their labels. */
+.menu .menu-segment { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr }
+.menu .menu-segment button { white-space: nowrap; padding-left: 6px; padding-right: 6px; font-size: 12.5px }

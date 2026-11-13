@@ -33,7 +33,7 @@ const ProviderUI = (() => {
   function mailbox(provider,accounts,registered=false) {
     const accountRows=accounts.map(a=>'<div class="account-row"><b>'+esc(a.email)+'</b><p>'+esc(stateLabel(a))+' · '+esc(a.sender?'Only from '+a.sender:'All new mail')+'</p>'+(a.error?'<p class="feedback">'+esc(a.error)+'</p>':'')+'<button class="mini-link" type="button" data-edit="'+esc(a.id)+'">Message filter</button><button class="mini-link" type="button" data-remove="'+esc(a.id)+'">Disconnect</button></div>').join('');
     const registration=registered?'':provider==='gmail'?'This beta uses your Google desktop app credentials. Click Connect account and select the OAuth JSON file from Google Cloud.':'This beta uses your registered Microsoft desktop app. Click Connect account and enter its public client ID.';
-    dialog(names[provider]+' accounts',accountRows+(registration?'<p class="hint">'+registration+'</p>':'')+'<p class="hint">Sign in with your email provider to receive the subject, sender, and arrival time of new messages. Shishi stores the access tokens in this Mac’s Keychain.</p><form id="accountForm"><label>Messages to receive<select id="mailScope"><option value="sender">Specific sender</option><option value="all">All new mail</option></select></label><label id="senderLabel">Sender email address<input id="senderAddress" type="email" required autocomplete="off" placeholder="name@example.com"></label><p id="providerFeedback" class="feedback" role="status"></p><div class="actions"><button type="submit" class="primary">Connect account</button></div></form>',{label:'Connections',back:showConnectors});
+    dialog(names[provider]+' accounts',accountRows+(registration?'<p class="hint">'+registration+'</p>':'')+'<p class="hint">Sign in with your email provider to receive the subject, sender, and arrival time of new messages. Shishi stores the access tokens in this Mac’s Keychain.</p><form id="accountForm"><label>Messages to receive<select id="mailScope"><option value="sender">Specific sender</option><option value="all">All new mail</option></select></label><label id="senderLabel">Sender email address<input id="senderAddress" type="email" required autocomplete="off" placeholder="name@example.com"></label><p id="providerFeedback" class="feedback" role="status"></p><div class="actions"><button type="submit" class="primary">Connect account</button></div></form>',{label:'Settings',back:()=>showConnectors('sync')});
     $('mailScope').onchange=()=>{const one=$('mailScope').value==='sender';$('senderLabel').hidden=!one;$('senderAddress').required=one};
     const form=$('accountForm');
     form.onsubmit=async e=>{
@@ -55,18 +55,18 @@ const ProviderUI = (() => {
     form.onsubmit=async e=>{
       e.preventDefault();const btn=form.querySelector('.primary');btn.disabled=true;
       try{await request(provider,remove?'disconnect':'set-sender',remove?{account:account.id,purge:$('mailPurge').checked}:{account:account.id,sender:$('senderAddress').value.trim()});
-        if(form.isConnected)showConnectors();
+        if(form.isConnected)showConnectors('sync');
       }catch(err){if(form.isConnected)showError(err)}finally{btn.disabled=false}
     };
   }
   function github(state){
     const connected=!!state?.connected;
     const fields=connected?'<p><b>'+esc(state.repo)+'</b></p><p>'+esc(state.workflow||'All workflows')+'</p>':'<label>Public repository<input id="gitRepo" required placeholder="owner/repository" autocomplete="off"></label><label>Workflow name (optional)<input id="gitWorkflow" placeholder="e.g. CI"></label>';
-    dialog('GitHub Actions','<p class="hint">Receive the branch and build result when a workflow finishes in this public repository.</p><form id="gitForm">'+fields+'<p class="feedback" id="providerFeedback">'+esc(state?.error||'')+'</p><div class="actions"><button class="primary">'+(connected?'Unsubscribe':'Subscribe')+'</button></div></form>',{label:'Connections',back:showConnectors});
+    dialog('GitHub Actions','<p class="hint">Receive the branch and build result when a workflow finishes in this public repository.</p><form id="gitForm">'+fields+'<p class="feedback" id="providerFeedback">'+esc(state?.error||'')+'</p><div class="actions"><button class="primary">'+(connected?'Unsubscribe':'Subscribe')+'</button></div></form>',{label:'Settings',back:()=>showConnectors('sync')});
     const form=$('gitForm');
     form.onsubmit=async e=>{
       e.preventDefault();const b=form.querySelector('.primary');b.disabled=true;
-      try {await request('github',connected?'disconnect':'connect',connected?{}:{repo:$('gitRepo').value.trim(),workflow:$('gitWorkflow').value.trim()});if(form.isConnected)showConnectors()}
+      try {await request('github',connected?'disconnect':'connect',connected?{}:{repo:$('gitRepo').value.trim(),workflow:$('gitWorkflow').value.trim()});if(form.isConnected)showConnectors('sync')}
       catch(err){if(form.isConnected)showError(err)}finally{b.disabled=false}
     };
   }

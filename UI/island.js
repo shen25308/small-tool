@@ -28,7 +28,7 @@ window.Island = (() => {
     if (open) {
       const rows = entries.map(agentMarkup).join('') || '<p class="agent-empty">Claude Code and Codex appear here while they work.</p>';
       return {mode: 'panel', html: '<div class="island-panel"><div class="island-head">' + glyph(summary().mode) + '<b>Agents</b><span>' + entries.length + '</span></div>' +
-        '<div class="island-list">' + rows + '</div><div class="island-actions"><button type="button" data-island="inbox">Open Inbox</button><button type="button" data-island="connections">Connections…</button></div></div>'};
+        '<div class="island-list">' + rows + '</div><div class="island-actions"><button type="button" data-island="inbox">Open Inbox</button><button type="button" data-island="connections">Settings…</button></div></div>'};
     }
     if (flash) {
       const entry = flash.entry;

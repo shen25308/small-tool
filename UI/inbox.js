@@ -95,8 +95,8 @@ function latestResult() {
 }
 function listNotices() {
   if(!$('dialog').open || !$('inboxList')){
-    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link"></button><button id="readEverything" class="mini-link"></button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Connections…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',{});
-    $('connectors').onclick=showConnectors;
+    dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link"></button><button id="readEverything" class="mini-link"></button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Settings…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',{});
+    $('connectors').onclick=()=>showConnectors('agents',{fromInbox:true});
     $('readAll').onclick=()=>markAllRead(false);
     $('readEverything').onclick=()=>markAllRead(true);
     $('olderResults').onclick=()=>{resultLimit+=30;listNotices()};
@@ -174,54 +174,82 @@ function showHookLog(){
 function connectorRow(id,badge,icon,title,detail,extra='',colorKey='') {
   return '<div class="group-row" id="'+id+'"><span class="app-badge" style="--badge:'+badge+'">'+symbol(icon)+'</span><span class="row-text"><b>'+title+'</b><small data-state>'+detail+'</small></span>'+(colorKey?SourceColors.swatch(colorKey):'')+extra+'</div>';
 }
-function showConnectors() {
+// Settings, in four tabs like System Settings. Opened from the ••• menu (⌘,), the Inbox, or a sync sheet's back button.
+const SETTINGS_TABS=[['agents','Agents'],['sync','Sync'],['alerts','Alerts'],['general','General']];
+let settingsTab='agents';
+function showConnectors(tab,{fromInbox=false}={}) {
+  if(SETTINGS_TABS.some(([name])=>name===tab))settingsTab=tab;
   const fromGrok=allNotices().filter(n=>sourceName(n)==='Grok Bot');
   const receipt=fromGrok.length?'Last received '+inboxDate(fromGrok[0].time):'Sends a summary when a task finishes';
-  dialog('Connections','<div class="connector-list">'+
-    '<h3>Coding agents</h3><div class="group-box">'+
-    connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>','Claude Code')+
-    '<label class="group-row toggle-label sub-row" id="approvalRow" hidden><span class="row-text"><b>Answer permission requests in Shishi</b><small>Claude Code waits <select id="approvalWait" aria-label="Seconds to wait">'+
-      [15,25,45,90].map(n=>'<option value="'+n+'">'+n+' seconds</option>').join('')+'</select> for Allow or Deny on the card, then asks in the terminal as usual. While it waits, the terminal shows no prompt.</small></span><input type="checkbox" id="approvalChoice"></label>'+
-    '<div class="group-row sub-row"><span class="row-text"><b>Start agents in</b><small>“Send to Claude Code” on a task opens a new window here, in the list’s project folder.</small></span>'+
-      '<select id="agentTerminal" aria-label="Terminal for agents">'+['Terminal','iTerm2'].map(name=>'<option'+((data.agentTerminal||'Terminal')===name?' selected':'')+'>'+name+'</option>').join('')+'</select></div>'+
-    connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>','Codex')+
-    connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>','Grok Bot')+
-    connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
-    '</div><p>Claude Code and Codex show up under Agents while they work. Each finished turn leaves its reply in the inbox, without a notification.</p>'+
-    '<details class="more-sources" id="hookLogBox"><summary>Diagnostics: recent hook deliveries</summary><p>The last deliveries from the Claude Code hook: event, time and outcome. Prompts, replies and commands are never kept.</p><div class="group-box hook-log" id="hookLog"><div class="group-row"><span class="row-text"><small>Open to load…</small></span></div></div></details>'+
-    '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button>'+
-    '<button type="button" class="group-row" id="remindersRow"><span class="app-badge" style="--badge:var(--orange)">'+symbol('i-check-circle')+'</span><span class="row-text"><b>Apple Reminders</b><small>'+
-      (data.reminders?esc('Syncing “'+data.reminders.title+'” with the list “'+projectLabel(data.reminders.project)+'”'):'Sync a list with Reminders, for iPhone and Siri')+'</small></span>'+symbol('i-chevron-right chev')+'</button>'+
-    '<button type="button" class="group-row" id="issuesRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-link')+'</span><span class="row-text"><b>GitHub issues</b><small>'+
-      (data.github?esc(data.github.repo+' → “'+projectLabel(data.github.project)+'”'):'Turn a repository’s open issues into tasks')+'</small></span>'+symbol('i-chevron-right chev')+'</button>'+
-    '<label class="group-row toggle-label"><span class="app-badge" style="--badge:var(--red)">'+symbol('i-calendar')+'</span><span class="row-text"><b>Calendar events</b><small id="calendarNote">Show the day\'s events above Today and in Upcoming. Read only.</small></span><input type="checkbox" id="calendarChoice"'+(data.calendar?.enabled?' checked':'')+'></label></div>'+
-    '<details class="more-sources"><summary>More sources: Gmail, Outlook and GitHub Actions</summary>'+
-    '<p>Mail needs a Google or Microsoft app registration of your own. GitHub Actions works with any public repository.</p>'+
-    '<div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div></details>'+
-    '<h3>Corner card</h3><div class="group-box">'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Keep above other windows</b><small>Otherwise the card stays behind the app you are using.</small></span><input type="checkbox" data-card-pref="pinned" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Show on all Spaces</b><small>Otherwise the card stays on the Space where you put it.</small></span><input type="checkbox" data-card-pref="allSpaces" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Snap to screen corners</b><small>Otherwise the card stays exactly where you drop it.</small></span><input type="checkbox" data-card-pref="snap" disabled></label>'+
-    '</div>'+
-    '<h3>Alerts</h3><p>Shishi is silent unless you choose otherwise. Results always wait in the inbox.</p><div class="group-box" id="alertBox">'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>When an agent needs you</b><small>A permission request or a question, and once more if it is still waiting after <select data-alert="remindAfter" aria-label="Remind after">'+
-      [[0,'never'],[2,'2 minutes'],[5,'5 minutes'],[10,'10 minutes']].map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('')+'</select>.</small></span><input type="checkbox" data-alert="needsYou" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>When a task is due</b><small>At the deadline time of a task that is still open.</small></span><input type="checkbox" data-alert="due" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Play a sound</b></span><input type="checkbox" data-alert="sound" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Show a banner</b><small id="bannerNote">macOS asks once whether Shishi may show banners.</small></span><input type="checkbox" data-alert="banner" disabled></label>'+
-    '<div class="group-row"><span class="row-text"><b>Quiet hours</b><small id="quietNote">No sound or banner between these times.</small></span><span class="quiet-hours"><input type="time" data-alert="quietFrom" aria-label="Quiet from"> – <input type="time" data-alert="quietTo" aria-label="Quiet until"></span></div>'+
-    '<div class="group-row"><span class="row-text"><small>Hear and see an alert now, even in quiet hours.</small></span><button type="button" class="secondary" id="testAlert">Test</button></div>'+
-    '</div>'+
-    '<h3>Shishi</h3><div class="group-box">'+
-    '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
-      [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Show status in the menu bar</b><small>Agent progress and unread results stay visible after the window closes.</small></span><input type="checkbox" id="menuBarChoice" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Check for updates once a day</b><small id="updateNote">Asks GitHub for the latest release. Nothing is downloaded or installed.</small></span>'+
-      '<button type="button" class="secondary" id="checkUpdate">Check Now</button><input type="checkbox" id="updateChoice" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Keyboard shortcuts in every app</b><small id="hotkeyNote">⌃⌥Space shows or hides the card. ⌃⌥N adds a task.</small></span><input type="checkbox" data-setting="hotkeys" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Show usage and limits under Agents</b><small>Token counts from Claude Code\'s session files and the limits Codex records, read on this Mac only.</small></span><input type="checkbox" data-setting="usage" disabled></label>'+
-    '<label class="group-row toggle-label"><span class="row-text"><b>Keep the Mac awake while an agent works</b><small>Lets the Mac sleep again when every agent has finished or is waiting for you.</small></span><input type="checkbox" data-setting="keepAwake" disabled></label>'+
-    '</div></div>',{label:'Inbox',back:listNotices});
+  const toggle=(attrs,title,note='',noteId='')=>'<label class="group-row toggle-label"><span class="row-text"><b>'+title+'</b>'+(note||noteId?'<small'+(noteId?' id="'+noteId+'"':'')+'>'+note+'</small>':'')+'</span><input type="checkbox" '+attrs+'></label>';
+  const pane=(name,html)=>'<section class="settings-pane" data-pane="'+name+'"'+(name===settingsTab?'':' hidden')+'>'+html+'</section>';
+  dialog('Settings','<div class="settings-tabs menu-segment" role="tablist" aria-label="Settings sections">'+
+    SETTINGS_TABS.map(([name,label])=>'<button type="button" role="tab" data-settings-tab="'+name+'" aria-selected="'+(name===settingsTab)+'">'+label+'</button>').join('')+'</div>'+
+    '<div class="connector-list">'+
+    pane('agents',
+      '<h3>Coding agents</h3><div class="group-box">'+
+      connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>','Claude Code')+
+      '<label class="group-row toggle-label sub-row" id="approvalRow" hidden><span class="row-text"><b>Answer permission requests on the card</b><small>Allow or Deny on the card; otherwise Claude Code asks in the terminal as usual. While it waits, the terminal shows no prompt.</small></span><input type="checkbox" id="approvalChoice"></label>'+
+      '<div class="group-row sub-row" id="approvalWaitRow" hidden><span class="row-text"><b>Wait for an answer</b></span><select id="approvalWait" aria-label="Seconds to wait">'+
+        [15,25,45,90].map(n=>'<option value="'+n+'">'+n+' seconds</option>').join('')+'</select></div>'+
+      '<div class="group-row sub-row"><span class="row-text"><b>Start agents in</b><small>Where “Send to Claude Code” on a task opens, in the list’s project folder.</small></span>'+
+        '<select id="agentTerminal" aria-label="Terminal for agents">'+['Terminal','iTerm2'].map(name=>'<option'+((data.agentTerminal||'Terminal')===name?' selected':'')+'>'+name+'</option>').join('')+'</select></div>'+
+      connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>','Codex')+
+      connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>','Grok Bot')+
+      connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
+      '</div><p>Agents show up under Agents while they work. Each finished turn leaves its reply in the inbox.</p>'+
+      '<h3>While agents work</h3><div class="group-box">'+
+      toggle('data-setting="usage" disabled','Show usage and limits','Claude Code token counts and Codex limits, read on this Mac only.')+
+      toggle('data-setting="keepAwake" disabled','Keep the Mac awake','Only while an agent is working, not while it waits for you.')+
+      '</div>'+
+      '<details class="more-sources" id="hookLogBox"><summary>Diagnostics: recent hook deliveries</summary><p>Event, time and outcome of the last deliveries from the Claude Code hook. Prompts, replies and commands are never kept.</p><div class="group-box hook-log" id="hookLog"><div class="group-row"><span class="row-text"><small>Open to load…</small></span></div></div></details>')+
+    pane('sync',
+      '<h3>Tasks</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button>'+
+      '<button type="button" class="group-row" id="remindersRow"><span class="app-badge" style="--badge:var(--orange)">'+symbol('i-check-circle')+'</span><span class="row-text"><b>Apple Reminders</b><small>'+
+        (data.reminders?esc('Syncing “'+data.reminders.title+'” with “'+projectLabel(data.reminders.project)+'”'):'Sync a list with Reminders, for iPhone and Siri')+'</small></span>'+symbol('i-chevron-right chev')+'</button>'+
+      '<button type="button" class="group-row" id="issuesRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-link')+'</span><span class="row-text"><b>GitHub issues</b><small>'+
+        (data.github?esc(data.github.repo+' → “'+projectLabel(data.github.project)+'”'):'Turn a repository’s open issues into tasks')+'</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
+      '<h3>Calendar</h3><div class="group-box">'+
+      '<label class="group-row toggle-label"><span class="app-badge" style="--badge:var(--red)">'+symbol('i-calendar')+'</span><span class="row-text"><b>Show calendar events</b><small id="calendarNote">Above Today, in each Upcoming day, and the next one on the card. Read only.</small></span><input type="checkbox" id="calendarChoice"'+(data.calendar?.enabled?' checked':'')+'></label></div>'+
+      '<h3>More sources</h3><p>Mail needs a Google or Microsoft app registration of your own. GitHub Actions works with any public repository.</p>'+
+      '<div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div>')+
+    pane('alerts',
+      '<p>Shishi is silent unless you choose otherwise. Results always wait in the inbox.</p><h3>Alert me</h3><div class="group-box" id="alertBox">'+
+      toggle('data-alert="needsYou" disabled','When an agent needs you','A permission request or a question.')+
+      '<div class="group-row sub-row plain"><span class="row-text"><b>Remind me again</b></span><select data-alert="remindAfter" aria-label="Remind after">'+
+        [[0,'Never'],[2,'After 2 minutes'],[5,'After 5 minutes'],[10,'After 10 minutes']].map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('')+'</select></div>'+
+      toggle('data-alert="due" disabled','When a task is due','At the deadline time of a task that is still open.')+
+      '</div><h3>How</h3><div class="group-box">'+
+      toggle('data-alert="sound" disabled','Play a sound')+
+      toggle('data-alert="banner" disabled','Show a banner','macOS asks once whether Shishi may show banners.','bannerNote')+
+      '<div class="group-row"><span class="row-text"><b>Quiet hours</b><small id="quietNote">No sound or banner between these times.</small></span><span class="quiet-hours"><input type="time" data-alert="quietFrom" aria-label="Quiet from"> – <input type="time" data-alert="quietTo" aria-label="Quiet until"></span></div>'+
+      '<div class="group-row"><span class="row-text"><b>Try it</b><small>Plays an alert now, even in quiet hours.</small></span><button type="button" class="secondary" id="testAlert">Test</button></div>'+
+      '</div>')+
+    pane('general',
+      '<h3>Shishi</h3><div class="group-box">'+
+      '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
+        [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
+      toggle('id="menuBarChoice" disabled','Show status in the menu bar','Agent progress and unread results stay visible after the window closes.')+
+      toggle('data-setting="hotkeys" disabled','Keyboard shortcuts in every app','⌃⌥Space shows or hides the card. ⌃⌥N adds a task.','hotkeyNote')+
+      '</div><h3>Corner card</h3><div class="group-box">'+
+      toggle('data-card-pref="pinned" disabled','Keep above other windows','Otherwise the card stays behind the app you are using.')+
+      toggle('data-card-pref="allSpaces" disabled','Show on all Spaces','Otherwise it stays on the Space where you put it.')+
+      toggle('data-card-pref="snap" disabled','Snap to screen corners','Otherwise it stays exactly where you drop it.')+
+      '</div><h3>Updates</h3><div class="group-box">'+
+      '<label class="group-row toggle-label"><span class="row-text"><b>Check once a day</b><small id="updateNote">Asks GitHub for the latest release. Nothing is downloaded or installed.</small></span>'+
+        '<button type="button" class="secondary" id="checkUpdate">Check Now</button><input type="checkbox" id="updateChoice" disabled></label>'+
+      '</div>')+
+    '</div>',fromInbox?{label:'Inbox',back:listNotices}:{});
+  // Start keyboard focus on the chosen tab, not on the close button.
+  document.querySelector('.settings-tabs [aria-selected="true"]')?.focus({preventScroll:true});
+  document.querySelector('.settings-tabs').onclick=event=>{
+    const button=event.target.closest('[data-settings-tab]');
+    if(!button)return;
+    settingsTab=button.dataset.settingsTab;
+    document.querySelectorAll('[data-settings-tab]').forEach(node=>node.setAttribute('aria-selected',String(node===button)));
+    document.querySelectorAll('.settings-pane').forEach(node=>{node.hidden=node.dataset.pane!==settingsTab});
+    $('dialog').scrollTop=0;
+  };
   ProviderUI.rows();
   const bind=(box,op)=>{
     action(native(op).then(value=>{
@@ -283,7 +311,7 @@ function showConnectors() {
   const connectButton=$('codexConnection'), badge=$('codexRow').querySelector('[data-state]');
   function setCodex(enabled) {
     if(!connectButton.isConnected)return;
-    badge.textContent=enabled?(inboxErrors.get('codex')?'Temporarily unavailable':'Connected · reads finished turns from sessions on this Mac. Codex does not report when it waits for approval, so Shishi cannot show that.'):'Not connected';
+    badge.textContent=enabled?(inboxErrors.get('codex')?'Temporarily unavailable':'Connected · finished turns on this Mac. Codex cannot report when it waits for approval.'):'Not connected';
     connectButton.disabled=false;
     connectButton.textContent=enabled?'Disconnect':'Connect';
     connectButton.onclick=()=>{
@@ -304,6 +332,7 @@ function showConnectors() {
     claudeButton.textContent=repair?'Repair':state.installed?'Disconnect':'Connect';
     const approvalRow=$('approvalRow'), approvalChoice=$('approvalChoice');
     approvalRow.hidden=!state.installed;
+    $('approvalWaitRow').hidden=!state.installed||!state.approvals;
     approvalChoice.checked=!!state.approvals;
     approvalChoice.onchange=()=>{
       approvalChoice.disabled=true;

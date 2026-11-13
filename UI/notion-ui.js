@@ -42,7 +42,7 @@ async function syncNotion({quiet = false} = {}) {
 
 function showNotion() {
   const config = data.notion;
-  const navigation = {label: 'Connections', back: showConnectors};
+  const navigation = {label: 'Settings', back: () => showConnectors('sync')};
   if (!config) {
     dialog('Notion', '<p class="hint">Keep one list in step with a Notion database. Tasks you add on either side appear on the other, and checking one off checks off both.</p>' +
       '<ol class="steps selectable"><li>In Notion, open <b>Settings → Connections → Develop or manage integrations</b> and create an internal integration. Copy its secret.</li>' +

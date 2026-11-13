@@ -431,3 +431,35 @@ button.group-row:hover { background: var(--hover) }
 .agent-task-line .symbol { width: 13px; height: 13px; flex: none }
 .agent-task-line span { flex: 1; min-width: 0 }
 .agent-task-actions { display: flex; align-items: center; gap: 6px }
+
+/* Settings: four tabs, rows with their control on the right. */
+.settings-tabs { display: flex; justify-content: center; margin: 2px auto 6px; width: max-content }
+.settings-tabs button { min-width: 74px }
+.settings-tabs.menu-segment button[aria-selected="true"] { background: var(--segment-on, #fff); color: var(--ink); box-shadow: 0 .5px 1.5px rgba(0,0,0,.16) }
+@media (prefers-color-scheme: dark) { .settings-tabs { --segment-on: rgba(255,255,255,.2) } }
+.group-row select, .group-row input[type="time"] { flex: none; width: auto; max-width: 48% }
+.group-row .secondary { flex: none }
+.sub-row { padding-left: 47px }
+
+/* One segmented control for the Settings tabs, like the macOS toolbar switcher. */
+.settings-tabs.menu-segment { gap: 0; padding: 2px; border-radius: 8px; background: var(--control) }
+.settings-tabs.menu-segment button { min-width: 78px; padding: 3px 12px; border-radius: 6px; background: none; color: var(--secondary); font-size: 12.5px; font-weight: 500; box-shadow: none }
+.settings-tabs button:hover { color: var(--ink) }
+/* Settings toggles are switches, as in System Settings. */
+.group-row input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none; flex: none; position: relative; width: 32px; min-width: 32px; height: 19px; min-height: 19px; padding: 0;
+  border-radius: 999px; background: var(--pressed); box-shadow: inset 0 0 0 .5px var(--bezel-edge); cursor: default; transition: background .15s;
+}
+.group-row input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff;
+  box-shadow: 0 .5px 2px rgba(0,0,0,.3); transition: transform .15s;
+}
+.group-row input[type="checkbox"]:checked { background: var(--action) }
+.group-row input[type="checkbox"]:checked::after { transform: translateX(13px) }
+.group-row input[type="checkbox"]:disabled { opacity: .45 }
+.group-row input[type="checkbox"]:focus-visible { box-shadow: var(--focus) }
+@media (prefers-reduced-motion: reduce) { .group-row input[type="checkbox"], .group-row input[type="checkbox"]::after { transition: none } }
+.sub-row.plain { padding-left: 26px }
+.agent-send { display: inline-flex; align-items: center; gap: 5px }
+.agent-send .symbol { width: 13px; height: 13px }
+.agent-task-actions .mini-link { margin-right: 4px }
