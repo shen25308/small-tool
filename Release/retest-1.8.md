@@ -96,14 +96,21 @@ for example), the reproduction is described and its output quoted. **Verified wh
 
 ## Screenshots
 
-Taken by the macOS job from the running app (`Tests/ci/launch_check.py`), in the **screenshots** artifact of the
-build for the final commit:
+Taken by the macOS job from the running app at commit `bb25536` (run 43396646193, `Tests/ci/launch_check.py`) and
+kept in [`Previews/retest-1.8`](../Previews/retest-1.8):
 
-- Card: `retest-card-340x430-light.png`, `retest-card-340x430-dark.png`
-- 760 × 600: `retest-today-760x600-{light,dark}.png`, `retest-inbox-760x600-{light,dark}.png`
-- 1280 × 800: `retest-inbox-1280x800-{light,dark}.png`, `retest-projects-1280x800-{light,dark}.png`, `retest-plan-week-1280x800-{light,dark}.png`
+- Card at 340 × 430: `card-340x430-light.png`, `card-340x430-dark.png`
+- Workspace at 760 × 600: `today-760x600-{light,dark}.png`, `inbox-760x600-{light,dark}.png` (narrow Inbox: the reader with Back to Inbox)
+- Wide: `inbox-wide-1024x677-{light,dark}.png`, `projects-wide-1024x677-{light,dark}.png`, `plan-week-wide-1024x677-{light,dark}.png`.
+  The job asks for 1280 × 800, but the CI Mac's screen is 1024 × 768, so macOS limits the window to 1024 × 677.
+  The 1280 px layout is covered by the browser check *INBOX-LAYOUT* instead.
 
-The browser checks save their own pictures in the **ui-screenshots** artifact.
+In these captures no session log is attached to the sample result, so its verdict honestly reads *Checks reported
+passing* rather than *Checks passed*.
+
+Native facts from the same job: the card's height stayed at 535 points for the whole 6-second sample, and the
+1.7 workspace upgraded with every task and list name intact and an exact copy saved as
+`Workspace before upgrade <time>.json`.
 
 ## Not tested, and remaining limitations
 
