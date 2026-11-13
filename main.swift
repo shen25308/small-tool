@@ -812,6 +812,30 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     }
                 }
                 if op=="reminders" {eventKit.reminders(body,reply:handle)} else {eventKit.events(body,reply:handle)}
+            case "checkUpdate":
+                // On by default and can be turned off. At most once a day; "force" is the Check Now button.
+                let defaults=UserDefaults.standard
+                if let on=body["enabled"] as? Bool {defaults.set(on,forKey:"ShiShiCheckUpdates")}
+                let enabled=defaults.object(forKey:"ShiShiCheckUpdates") as? Bool ?? true
+                let current=Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+                let last=defaults.double(forKey:"ShiShiUpdateCheckedAt")
+                guard enabled, body["force"] as? Bool == true || Date().timeIntervalSince1970-last > 86400 else {
+                    reply(id,true,["enabled":enabled,"current":current,"skipped":true]);break
+                }
+                Updates.check(current:current) { [weak self] result in
+                    switch result {
+                    case .success(var value):
+                        defaults.set(Date().timeIntervalSince1970,forKey:"ShiShiUpdateCheckedAt")
+                        value["enabled"]=enabled
+                        self?.reply(id,true,value)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "openRelease":
+                guard let link=body["url"] as? String, link.hasPrefix("https://github.com/shen25308/small-tool/releases"),
+                      link.count<300, let url=URL(string:link) else {throw AppIssue("That is not a Shishi release page.")}
+                NSWorkspace.shared.open(url)
+                reply(id,true,true)
             case "chooseFolder":
                 AgentLaunch.chooseFolder { [weak self] path in self?.reply(id,true,path ?? "") }
             case "startAgent":

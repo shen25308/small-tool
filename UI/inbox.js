@@ -216,6 +216,8 @@ function showConnectors() {
     '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
       [['system','System'],['light','Light'],['dark','Dark']].map(([value,label])=>'<button type="button" data-appearance="'+value+'" aria-pressed="false">'+label+'</button>').join('')+'</div></div>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show status in the menu bar</b><small>Agent progress and unread results stay visible after the window closes.</small></span><input type="checkbox" id="menuBarChoice" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Check for updates once a day</b><small id="updateNote">Asks GitHub for the latest release. Nothing is downloaded or installed.</small></span>'+
+      '<button type="button" class="secondary" id="checkUpdate">Check Now</button><input type="checkbox" id="updateChoice" disabled></label>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Keyboard shortcuts in every app</b><small id="hotkeyNote">⌃⌥Space shows or hides the card. ⌃⌥N adds a task.</small></span><input type="checkbox" data-setting="hotkeys" disabled></label>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show usage and limits under Agents</b><small>Token counts from Claude Code\'s session files and the limits Codex records, read on this Mac only.</small></span><input type="checkbox" data-setting="usage" disabled></label>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Keep the Mac awake while an agent works</b><small>Lets the Mac sleep again when every agent has finished or is waiting for you.</small></span><input type="checkbox" data-setting="keepAwake" disabled></label>'+
@@ -252,6 +254,15 @@ function showConnectors() {
     action(native('alerts',{[key]:value}).then(showAlerts));
   }});
   $('testAlert').onclick=()=>action(native('testAlert'));
+  const showUpdate=value=>{
+    if(!$('updateChoice'))return;
+    $('updateChoice').checked=value.enabled!==false;$('updateChoice').disabled=false;
+    $('updateNote').textContent=value.skipped||!value.latest?'Asks GitHub for the latest release. Nothing is downloaded or installed. This is version '+value.current+'.'
+      :value.newer?'Version '+value.latest+' is available. You have '+value.current+'.':'You have the latest published version ('+value.current+').';
+  };
+  action(native('checkUpdate',{}).then(showUpdate));
+  $('updateChoice').onchange=()=>action(native('checkUpdate',{enabled:$('updateChoice').checked}).then(showUpdate));
+  $('checkUpdate').onclick=event=>{event.preventDefault();action(native('checkUpdate',{force:true}).then(value=>{showUpdate(value);if(value.newer)Updates.offer(value)}))};
   const settingBoxes=[...document.querySelectorAll('[data-setting]')];
   const showSettings=value=>{
     settingBoxes.forEach(box=>{box.checked=!!value[box.dataset.setting];box.disabled=false});

@@ -1,5 +1,7 @@
 # Shishi
 
+**Free, private, and honest about what your agents did.** Shishi is a task list that also watches Claude Code and Codex. Unlike agent monitors that only say an agent stopped, it reads the session log and tells you whether checks actually ran and passed. Nothing leaves your Mac unless you connect a service yourself.
+
 Shishi is a task list for people who work alongside AI. A small card sits in a corner of your screen, like a desktop widget: today's date, a progress ring, the tasks that are left, and a line to add one. Expand it for the full workspace, with smart lists, your own lists and tags in the sidebar. Claude Code, Codex and other agents report to a small Agents list while they work, and their finished replies wait in a quiet inbox, so a result never interrupts you while you type. The interface follows macOS: system fonts and accent color, a translucent sidebar, light and dark appearance, and a menu bar item.
 
 [Latest published release: 1.6.0](https://github.com/shen25308/small-tool/releases/tag/v1.6.0) · [Data and permissions](Release/data-and-permissions.md) · [1.7 repair notes](Release/ux-repair-1.7.md)
@@ -71,9 +73,31 @@ On first launch the empty card offers **Connect Claude Code** and **Try a demo**
 
 A session waiting for you comes first. Other unread results wait behind it, with a count. The hook learns which app the session runs in from the bundle identifier macOS gives your terminal.
 
+### Work with agents from your tasks
+
+- **Send a task to Claude Code.** Give a list a project folder (right-click the list → **Set Project Folder…**), then choose **Send to Claude Code** in a task's **•••** menu or in Details. Shishi opens a new Terminal or iTerm2 window in that folder (**Connections → Start agents in**) and starts Claude Code with the task, its notes and open subtasks as the prompt. The task row then shows the session live (*Claude Code working*, *needs you*), and afterwards the verdict of its report and how long it worked, for example *Completed · Checks passed · 25 min*. Checking the task off marks the report read. **Wrap Up** counts agent minutes. **Send to Codex** starts Codex the same way; Codex has no hooks, so its runs are not linked back to the task.
+- **Answer permission requests from the card** (opt-in, **Connections → Claude Code**). When Claude Code wants to run a command, the card shows the full command with **Allow** and **Deny**. Claude Code waits 15, 25, 45 or 90 seconds for your answer, then asks in the terminal as usual; while it waits, the terminal shows no prompt. It only waits while Shishi is open, and nothing is allowed without a click. New Claude Code sessions pick up the change.
+- **Open the exact tab.** **Open in Terminal** (or iTerm2) brings forward the tab the session runs in, and selects its tmux pane. For VS Code, Cursor, Zed and Windsurf it opens the window for the session's folder. macOS asks once whether Shishi may control Terminal or iTerm2.
+- **What a session is doing.** Working sessions show their last tool (*Edit billing.py · 14 tools*). A session whose process ended without a reply, for example because its terminal was closed, shows *Stopped* instead of *Working*.
+- **Usage and limits** under Agents: Claude Code tokens in the last 5 hours and this week, read from its own session files, and the Codex rate limits Codex records, with reset times. Claude's plan limits are not stored on your Mac, so Shishi shows counts rather than a percentage. Turn it off in Connections.
+- **Diagnostics.** **Connections → Diagnostics** lists the last hook deliveries (event, time, outcome). Prompts, replies and commands are never kept there.
+
+### Shortcuts, alerts and links
+
+- **Shortcuts in every app:** ⌃⌥Space shows or hides the card; ⌃⌥N brings it forward ready to add a task. They need no Accessibility permission and can be turned off in Connections.
+- **Alerts** are off until you choose them in **Connections → Alerts**: a sound and/or banner when an agent needs you (and once more if it is still waiting after 2, 5 or 10 minutes), and when a task's deadline arrives. Quiet hours silence both.
+- **Keep the Mac awake while an agent works** (optional); it lets the Mac sleep again when every agent has finished or is waiting for you.
+- **Links for Shortcuts, Raycast and scripts:** `shishi://add?text=Call%20the%20bank%20tomorrow%203pm&list=Personal&notes=...`, `shishi://open?view=today` (also `upcoming`, `all`, `done`, `inbox`), `shishi://search?q=roadmap`, `shishi://show-card`. A link can add a task or show something, never change or delete what is there.
+
 ### Stay out of the way
 
-Agent progress shows in three quiet places: the **agent capsule** at the top of the window and of the corner card, the **Agents** list in the sidebar, and the **menu bar item**, which counts working agents and unread results and lists each one. With the menu bar item on, Shishi keeps collecting results after you close its window. Turn it off in Connections to quit with the last window. The same section sets the appearance to follow the system, or to stay light or dark. The capsule spins while an agent works, glows orange when one needs you, and opens for a few seconds with the first line of a fresh result before it shrinks back. Click it to read the result or see every agent. Nothing here sends a system notification. Open a finished result from Agents to read it, or add a follow-up task from the result.
+Agent progress shows in three quiet places: the **agent capsule** at the top of the window and of the corner card, the **Agents** list in the sidebar, and the **menu bar item**, which counts working agents and unread results and lists each one. With the menu bar item on, Shishi keeps collecting results after you close its window. Turn it off in Connections to quit with the last window. The same section sets the appearance to follow the system, or to stay light or dark. The capsule spins while an agent works, glows orange when one needs you, and opens for a few seconds with the first line of a fresh result before it shrinks back. Click it to read the result or see every agent. Nothing here makes a sound or sends a notification unless you turn on Alerts. Open a finished result from Agents to read it, or add a follow-up task from the result.
+
+### Apple Reminders, Calendar and GitHub issues
+
+- **Apple Reminders** (**Connections → Apple Reminders**): keep one list in step with a Reminders list, both ways, so your tasks are on iPhone, Apple Watch and in Siri. Title, completion, deadline and priority sync every 5 minutes; if both sides changed, Reminders wins.
+- **Calendar events** (**Connections → Calendar events**): the day's events appear above Today and in each Upcoming day, and the card shows the next one. Read only.
+- **GitHub issues** (**Connections → GitHub issues**): a public repository's open issues, optionally only those assigned to someone or with a label, become tasks. A task completes when its issue closes and reopens with it. Checking a task off does not close the issue. No GitHub account is needed.
 
 ### Notion
 
@@ -98,5 +122,7 @@ Run the tests with `python3 -m unittest discover -s Tests` and `node --test Test
 If you keep the extracted app next to the source folder, `python3 build.py` uses it by default. To inspect a build, run `python3 Release/verify-release.py build/Shishi.app`. The report distinguishes bundle integrity from Developer ID distribution readiness. A publisher can provide mail OAuth client registrations in `Contents/Resources/Mail/provider-config.json` before signing.
 
 Still outside this repository: Developer ID signing and Apple notarization, and the Google and Microsoft OAuth client registrations that Gmail and Outlook need. Without them the mail connectors cannot sign in, and macOS shows a first-launch warning.
+
+**Updates.** Once a day Shishi asks GitHub for the latest published release and mentions a newer one once (**Connections → Check for updates**). It never downloads or installs anything. A Homebrew cask template is in [Release/homebrew/shishi.rb](Release/homebrew/shishi.rb); it works once a release is published.
 
 [Distribution and notarization guide](Release/distribution.md) · [Historical 1.3.1 release check](Release/checks-1.3.1.json)

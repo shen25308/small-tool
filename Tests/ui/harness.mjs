@@ -181,6 +181,14 @@ function fakeHost(seed) {
         {number: 9, title: 'Fixed long ago', state: 'closed', url: 'https://github.com/' + message.repo + '/issues/9', labels: []}
       ]};
     },
+    checkUpdate: message => {
+      state.updateChecks = [...(state.updateChecks || []), message];
+      if (message.enabled !== undefined) state.updatesOn = message.enabled;
+      const enabled = state.updatesOn !== false;
+      if (!enabled || (!message.force && state.updateChecks.length > 2)) return {enabled, current: '1.7', skipped: true};
+      return {enabled, current: '1.7', latest: state.latestRelease || '1.6.0', newer: (state.latestRelease || '1.6.0') === '1.8', url: 'https://github.com/shen25308/small-tool/releases/tag/v1.8'};
+    },
+    openRelease: message => { state.openedRelease = message.url; return true; },
     chooseFolder: () => state.folderChoice ?? '/Users/me/code/app',
     startAgent: message => { state.started = [...(state.started || []), message]; return message.terminal === 'iTerm2' ? 'iTerm2' : 'Terminal'; },
     openIssue: message => { state.openedIssue = message.url; return true; },

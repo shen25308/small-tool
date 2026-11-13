@@ -51,7 +51,7 @@ jobs:
         run: |
           xcrun swiftc -typecheck -target arm64-apple-macos26.0 \
             main.swift Engine.swift CodexInbox.swift ConnectorInbox.swift \
-            ExternalProviders.swift AgentStatus.swift CornerCard.swift ModelDownload.swift Hotkeys.swift Approvals.swift Alerts.swift SessionFocus.swift EventKitBridge.swift AgentLaunch.swift Mail/MailVault.swift
+            ExternalProviders.swift AgentStatus.swift CornerCard.swift ModelDownload.swift Hotkeys.swift Approvals.swift Alerts.swift SessionFocus.swift EventKitBridge.swift AgentLaunch.swift Updates.swift Mail/MailVault.swift
           xcrun swiftc -typecheck Tests/ci/windows.swift
       - name: Restore the pinned model and runtimes
         id: inputs

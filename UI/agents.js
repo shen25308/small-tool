@@ -147,3 +147,16 @@ window.Usage = (() => {
   setInterval(refresh, 5 * 60 * 1000);
   return {refresh, setEnabled, lines, report: () => report};
 })();
+
+// A newer published release is mentioned once per version, quietly. Shishi never downloads or installs it.
+window.Updates = (() => {
+  function offer(value) {
+    toast('Shishi ' + value.latest + ' is available.', () => action(native('openRelease', {url: value.url})), 'View');
+  }
+  setTimeout(() => native('checkUpdate', {}).then(value => {
+    if (!value?.newer || data.updateNoticed === value.latest) return;
+    offer(value);
+    action(change(state => { state.updateNoticed = value.latest; }));
+  }).catch(() => {}), 15000);
+  return {offer};
+})();

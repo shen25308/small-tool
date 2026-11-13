@@ -1289,6 +1289,21 @@ await check('send a task to Claude Code and follow it back', {}, async ({page, h
   await page.waitForFunction(receipt => window.__host.notices.external.find(n => n.id === receipt)?.read, receipt);
 });
 
+await check('update check: quiet, once per version, never installs', {}, async ({page, host}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.waitForFunction(() => !document.getElementById('updateChoice').disabled);
+  assert.match(await text(page, '#updateNote'), /latest published version \(1\.7\)/);
+  await page.evaluate(() => { window.__host.latestRelease = '1.8'; });
+  await page.click('#checkUpdate');
+  await page.waitForFunction(() => /1\.8 is available/.test(document.getElementById('updateNote').textContent));
+  assert.match(await text(page, '#toast'), /Shishi 1\.8 is available/);
+  await page.locator('#toast button', {hasText: 'View'}).click();
+  await page.waitForFunction(() => window.__host.openedRelease === 'https://github.com/shen25308/small-tool/releases/tag/v1.8');
+  await page.uncheck('#updateChoice');
+  await page.waitForFunction(() => window.__host.updatesOn === false);
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);

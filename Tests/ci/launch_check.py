@@ -121,6 +121,21 @@ hook(hook_event_name="Stop", session_id="ci-finished", prompt_id="p1", transcrip
 
 workspace = launch("--workspace")
 shot("workspace.png", workspace)
+# The shishi:// scheme is registered with macOS and a link adds a task (and nothing else).
+subprocess.run(["/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", "-f", str(app)],
+               check=False, timeout=60)
+subprocess.run(["open", "shishi://add?text=Added%20by%20a%20link%20tomorrow%20%23CI"], check=True, timeout=30)
+deadline = time.time() + 20
+while time.time() < deadline and "Added by a link" not in (support / "Workspace.json").read_text():
+    time.sleep(1)
+linked = [task for task in json.loads((support / "Workspace.json").read_text())["tasks"] if task["title"] == "Added by a link"]
+if len(linked) != 1 or linked[0].get("tag") != "CI" or not linked[0].get("planned"):
+    raise SystemExit("A shishi:// link did not add exactly one parsed task: " + json.dumps(linked))
+# While Shishi runs, the approval hook sees a fresh heartbeat, so it may wait for an answer on the card.
+alive = support / "Approvals/.alive"
+if not alive.exists() or time.time() - alive.stat().st_mtime > 30:
+    raise SystemExit("Shishi is running but the approval heartbeat is missing or stale.")
+print("Link and heartbeat checks passed.")
 # A new state while the app runs must be picked up from the watched folder.
 hook(hook_event_name="Notification", notification_type="permission_prompt",
      message="Claude needs your permission to use Bash")
