@@ -30,7 +30,10 @@ const text = (page, selector) => page.locator(selector).first().innerText();
 await check('today view and sidebar counts', {scale: 2}, async ({page, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.equal(await text(page, '#pageCount'), '5');
-  assert.deepEqual(await page.locator('#nav .tile-count').allInnerTexts(), ['5', '6', '14', '', '4']);
+  // Inbox, Today, Plan, Projects; then Waiting on AI, Needs review, Someday, All Tasks, Completed.
+  const counts = await page.locator('#nav .tile-count').allInnerTexts();
+  assert.deepEqual(counts.slice(1, 4), ['5', '6', '4']);
+  assert.deepEqual(counts.slice(6), ['', '14', '4']);
   assert.equal(await page.locator('#tasks .row').count(), 6);
   assert.equal(await page.locator('#tasks .row.done').count(), 1);
   assert.equal(await page.locator('#agentList .agent-row').count(), 4);
@@ -325,7 +328,7 @@ await check('time without a deadline date asks before closing', {}, async ({page
 
 await check('upcoming and completed views', {}, async ({page, tasks, shot}) => {
   await page.click('#nav [data-view="upcoming"]');
-  assert.equal(await text(page, '#pageTitle'), 'Upcoming');
+  assert.equal(await text(page, '#pageTitle'), 'Plan');
   const heads = await page.locator('.day-head h3').allInnerTexts();
   assert.equal(heads[0], 'Overdue');
   assert.equal(heads[1], 'Tomorrow');
@@ -381,8 +384,8 @@ await check('context menu: schedule, priority, duplicate, delete with undo', {},
 
 await check('lists and tags: create, rename, delete', {}, async ({page, host}) => {
   await page.click('#newProject');
-  await page.fill('#projectName', 'Side project');
-  await page.press('#projectName', 'Enter');
+  await page.fill('#projectInfoName', 'Side project');
+  await page.press('#projectInfoName', 'Enter');
   await page.waitForFunction(() => Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Side project'));
   assert.equal(await text(page, '#pageTitle'), 'Side project');
   await page.locator('#projects [data-name="Research notes"]').click({button: 'right'});
@@ -445,20 +448,20 @@ await check('command palette searches, navigates and creates', {}, async ({page,
 
 await check('agents list and inbox', {}, async ({page, host, shot}) => {
   await page.locator('#agentList .agent-row', {hasText: 'small-tool'}).click();
-  await page.waitForSelector('#inboxCards .result-card');
-  const card = page.locator('#inboxCards .result-card').first();
-  assert.equal(await card.locator('.result-preview').getAttribute('aria-expanded'), 'true');
+  // A finished agent opens its result in the Inbox reader, selected in the list.
+  await page.waitForSelector('#inboxItems [aria-selected="true"]');
+  assert.equal(await text(page, '#altTitle'), 'Inbox');
+  assert.match(await text(page, '#inboxReader .reader-title'), /billing/i);
   await shot('inbox');
-  await card.locator('.result-expand').click();
   await page.waitForFunction(() => window.__host.notices.external[0].read);
   // Reading the result retires the finished status.
   await page.waitForFunction(() => window.__host.agents.length === 2);
-  await card.locator('.mini-link', {hasText: 'Add Follow-up Task'}).click();
-  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title.startsWith('Follow up:')));
-  await page.click('#readAll');
+  await page.click('#inboxReader [data-reader="follow"]');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title.startsWith('Follow up:') && t.fromNotice));
+  assert.equal(await text(page, '#inboxReader [data-reader="follow"]'), 'View Follow-up');
+  await page.click('#inboxReadAll');
   await page.waitForFunction(() => window.__host.notices.codex.every(n => n.read));
   assert.equal(await page.locator('#inboxBadge').isHidden(), true);
-  await page.click('#dialog [data-close]');
   assert.equal(await page.locator('#agentList .agent-row').count(), 2);
   await page.locator('#agentList .agent-row', {hasText: 'docs-site'}).click();
   await page.locator('.menu-item', {hasText: 'Dismiss'}).click();
@@ -466,38 +469,190 @@ await check('agents list and inbox', {}, async ({page, host, shot}) => {
   assert.equal((await host()).agents[0].state, 'attention');
 });
 
+// INBOX-LAYOUT: the Inbox is a main view with a list beside a reader; narrow windows go list → reader → Back.
+await check('INBOX-LAYOUT: list beside a reader; narrow is list, reader, back', {width: 1280, height: 800}, async ({page}) => {
+  await page.click('#nav [data-view="inbox"]');
+  await page.locator('#inboxItems [data-notice]').first().click();
+  const list = await page.locator('#inboxItems').boundingBox(), reader = await page.locator('#inboxReader').boundingBox();
+  assert.ok(list.width > 250 && reader.width > 500 && reader.x >= list.x + list.width - 1, 'side by side: ' + JSON.stringify([list, reader]));
+  assert.equal(await page.locator('#dialog').evaluate(node => node.open), false, 'not a modal');
+  await page.setViewportSize({width: 900, height: 700});
+  await page.waitForFunction(() => document.getElementById('inboxView').classList.contains('narrow'));
+  assert.equal(await page.locator('#inboxReader [data-reader="back"]').isVisible(), true);
+  assert.equal(await page.locator('#inboxItems').isVisible(), false, 'the reader takes the width');
+  await page.click('#inboxReader [data-reader="back"]');
+  assert.equal(await page.locator('#inboxItems').isVisible(), true);
+  assert.equal(await page.locator('#inboxReader').isVisible(), false);
+  assert.equal(await page.locator('aside').isVisible(), true, 'the sidebar stays above 720 px');
+  await page.setViewportSize({width: 700, height: 700});
+  assert.equal(await page.locator('#sidebarToggle').isVisible(), true, 'below 720 px the sidebar is one button away');
+  await page.click('#sidebarToggle');
+  await page.click('#nav [data-view="today"]');
+  assert.equal(await text(page, '#pageTitle'), 'Today');
+});
+
+await check('Inbox: new results never replace the one being read; Show latest switches on purpose', {}, async ({page}) => {
+  await page.click('#inboxButton');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'GitHub Actions'}).click();
+  await page.evaluate(() => {
+    const host = window.__host;
+    host.notices.external.unshift({id: 'connector/' + 'e'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', time: Date.now() / 1000, read: false, thread: '', link: '', summary: 'Rewrote the install guide.'});
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+  });
+  await page.waitForFunction(() => document.querySelectorAll('#inboxItems [data-notice]').length === 5);
+  assert.match(await text(page, '#inboxReader .reader-title'), /CI · main · success/, 'the reader keeps the selected result');
+  assert.equal(await text(page, '#inboxLatest'), '1 new result · Show latest');
+  await page.click('#inboxLatest');
+  assert.match(await text(page, '#inboxReader .reader-title'), /install guide/i);
+  assert.equal(await page.locator('#inboxLatest').isHidden(), true);
+});
+
+await check('RETURN-STATE: Settings and back keep the result, its tab and the scroll position', {width: 1040, height: 600}, async ({page}) => {
+  await page.evaluate(() => {
+    const host = window.__host;
+    host.notices.external[0].summary = Array.from({length: 80}, (_, i) => 'Line ' + (i + 1) + ' of a long reply.').join('\n');
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+  });
+  await page.click('#inboxButton');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first().click();
+  await page.click('#inboxReader [data-reader-tab="original"]');
+  await page.evaluate(() => { document.getElementById('inboxReader').scrollTop = 600; document.getElementById('inboxReader').dispatchEvent(new Event('scroll')); });
+  await page.keyboard.press('Meta+Comma');
+  await page.waitForFunction(() => document.getElementById('dialog').open);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  // Results arriving while Settings was open do not reset anything either.
+  await page.evaluate(() => window.setInbox({channel: 'codex', items: window.__host.notices.codex, error: ''}));
+  assert.equal(await page.getAttribute('#inboxReader [data-reader-tab="original"]', 'aria-selected'), 'true');
+  assert.match(await text(page, '#inboxReader .reader-original'), /Line 80 of a long reply/);
+  assert.equal(await page.evaluate(() => document.getElementById('inboxReader').scrollTop), 600);
+  assert.match(await page.getAttribute('#inboxItems [aria-selected="true"]', 'data-notice'), /^connector\/a+$/);
+});
+
+await check('INBOX-SEARCH: a phrase from an archived, read reply finds it and opens the reply', {}, async ({page}) => {
+  await page.evaluate(() => {
+    const host = window.__host;
+    host.notices.codex.push({id: 'thread-9/turn-2', thread: '99999999-9999-4999-8999-999999999999', title: 'Codex · billing', time: Date.now() / 1000 - 86400 * 3, read: true, archived: true,
+      summary: 'Moved invoices to the new ledger.\n\nThe quarterly reconciliation uses the marmalade-otter checksum now.'});
+    window.setInbox({channel: 'codex', items: host.notices.codex, error: ''});
+  });
+  await page.keyboard.press('Meta+k');
+  await page.fill('#paletteInput', 'marmalade-otter');
+  await page.locator('#paletteList .palette-item', {hasText: 'Moved invoices'}).click();
+  await page.waitForSelector('#inboxReader .reader-original');
+  assert.match(await text(page, '#inboxReader .reader-original'), /marmalade-otter checksum/);
+  assert.equal(await page.inputValue('#inboxSearch'), 'marmalade-otter');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 1);
+  assert.match(await text(page, '#inboxItems'), /Archived/);
+  // The Inbox's own search finds it too, and clearing the search restores the list.
+  await page.fill('#inboxSearch', 'quarterly reconciliation');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 1);
+  await page.fill('#inboxSearch', '');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 4, 'archived results stay out of the plain Inbox');
+});
+
+await check('Inbox: snooze until tomorrow, the Snoozed filter, and a follow-up linked to its result', {}, async ({page, host}) => {
+  await page.click('#inboxButton');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'Codex'}).click();
+  await page.click('#inboxReader [data-reader="snooze"]');
+  await page.waitForFunction(() => window.__host.workspace.snoozed?.['thread-1/turn-1'] === TaskLogic.addDays(day(), 1));
+  assert.equal(await page.locator('#inboxItems [data-notice="thread-1/turn-1"]').count(), 0);
+  await page.selectOption('#inboxFilter', 'snoozed');
+  await page.locator('#inboxItems [data-notice="thread-1/turn-1"]').click();
+  assert.match(await text(page, '#inboxItems'), /Snoozed until Tomorrow/);
+  await page.click('#inboxReader [data-reader="snooze"]');
+  await page.waitForFunction(() => !window.__host.workspace.snoozed);
+  await page.click('#inboxReader [data-reader="follow"]');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.fromNotice === 'thread-1/turn-1'));
+  await page.click('#inboxReader [data-reader="follow"]');
+  await page.waitForFunction(() => /Follow up:/.test(document.getElementById('fieldTitle')?.value || ''));
+});
+
+await check('PROJECT-MODEL: areas, a project with a goal, notes without checkboxes, and its results', {}, async ({page, host}) => {
+  await page.click('#nav [data-view="projects"]');
+  assert.equal(await text(page, '#altTitle'), 'Projects');
+  assert.equal(await page.locator('.project-card').count(), 4);
+  await page.click('#newArea');
+  await page.fill('#nameField', 'Work');
+  await page.press('#nameField', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.areas?.some(area => area.name === 'Work'));
+  await page.click('#newProjectButton');
+  await page.fill('#projectInfoName', 'small-tool');
+  await page.selectOption('#projectInfoArea', {label: 'Work'});
+  await page.fill('#projectInfoGoal', 'Ship 1.8 with every retest finding resolved');
+  await page.evaluate(() => { window.__host.folderChoice = '/Users/me/code/small-tool'; });
+  await page.click('#projectInfoFolder');
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('projectInfoFolder').textContent));
+  await page.click('#projectInfo .primary');
+  await page.waitForFunction(() => Object.values(window.__host.workspace.lists).some(list => list.name === 'small-tool' && list.goal));
+  const ws = (await host()).workspace;
+  const id = Object.keys(ws.lists).find(key => ws.lists[key].name === 'small-tool');
+  assert.equal(ws.lists[id].area, ws.areas[0].id);
+  assert.equal(ws.projectFolders[id], '/Users/me/code/small-tool');
+  assert.match(await text(page, '#tasks'), /Ship 1.8 with every retest finding resolved/);
+  assert.match(await text(page, '#projects'), /Work[\s\S]*small-tool/, 'the sidebar groups projects by area');
+  // Notes: free text, saved, no checkbox.
+  await page.click('[data-project-tab="notes"]');
+  await page.fill('#projectNotes', 'Decision: keep the card result-first.');
+  await page.waitForFunction(id => window.__host.workspace.lists[id].notes === 'Decision: keep the card result-first.', id);
+  assert.equal(await page.locator('.project-notes input[type=checkbox]').count(), 0);
+  // Results: the agent result from this folder belongs here.
+  await page.click('[data-project-tab="results"]');
+  assert.match(await text(page, '.project-results'), /billing\.py/);
+  await page.locator('.project-results [data-project-result]').first().click();
+  await page.waitForSelector('#inboxReader .reader-title');
+  assert.match(await text(page, '#inboxReader .reader-crumbs'), /small-tool/);
+  // Leaving and coming back to the project opens on Tasks, with the notes kept.
+  await page.locator('#projects [data-name="small-tool"]').click();
+  await page.click('[data-project-tab="notes"]');
+  assert.equal(await page.inputValue('#projectNotes'), 'Decision: keep the card result-first.');
+});
+
+await check('Plan: list or week, with deadlines kept apart from planned days', {width: 1280, height: 800}, async ({page, tasks}) => {
+  await page.click('#nav [data-view="upcoming"]');
+  assert.equal(await text(page, '#pageTitle'), 'Plan');
+  await page.click('[data-plan-layout="week"]');
+  assert.equal(await page.locator('.week-day').count(), 7);
+  const tomorrow = await page.locator('.week-day').nth(1).innerText();
+  const planned = (await tasks()).filter(t => !t.done && (t.plannedDates || [t.planned]).includes(day(1)));
+  for (const task of planned) assert.ok(tomorrow.includes(task.title), task.title + ' shows on tomorrow');
+  // Quick add on a day of the week plans for that day.
+  await page.locator('.week-day').nth(3).locator('[data-quick]').click();
+  await page.fill('.week-day .quick-add input', 'Review the week plan');
+  await page.press('.week-day .quick-add input', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Review the week plan'));
+  assert.equal((await tasks()).find(t => t.title === 'Review the week plan').planned, day(3));
+  await page.click('[data-plan-layout="list"]');
+  assert.equal(await page.locator('.week-day').count(), 0);
+});
+
 // F04: bulk read follows the visible filter, every change can be undone, and archiving keeps the reply.
 await check('inbox read state is scoped and reversible', {}, async ({page, host, shot}) => {
   await page.click('#inboxButton');
-  await page.click('#sourceFilters [data-source="Claude Code"]');
-  assert.equal(await text(page, '#readAll'), 'Mark 1 Claude Code Read');
-  await page.click('#readAll');
+  await page.selectOption('#inboxFilter', 'source:Claude Code');
+  assert.equal(await text(page, '#inboxReadAll'), 'Mark 1 Read');
+  await page.click('#inboxReadAll');
   await page.waitForFunction(() => window.__host.notices.external[0].read);
   assert.equal((await host()).notices.codex[0].read, false, 'hidden Codex results are untouched');
-  assert.equal(await text(page, '#readEverything'), 'Mark All 1 Read');
   await page.click('#toast .undo');
   await page.waitForFunction(() => !window.__host.notices.external[0].read);
-  // One result: read, unread, archive, restore.
-  await page.click('#sourceFilters [data-source=""]');
-  const card = page.locator('#inboxCards .result-card').first();
-  await card.locator('.result-preview').click();
-  await card.locator('.result-read').click();
+  // One result: selecting reads it; unread, read, archive, restore from the reader.
+  await page.selectOption('#inboxFilter', 'inbox');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first().click();
   await page.waitForFunction(() => window.__host.notices.external[0].read);
-  assert.equal(await card.locator('.result-read').innerText(), 'Mark Unread');
-  await card.locator('.result-read').click();
+  assert.equal(await text(page, '#inboxReader [data-reader="read"]'), 'Mark Unread');
+  await page.click('#inboxReader [data-reader="read"]');
   await page.waitForFunction(() => !window.__host.notices.external[0].read);
-  await card.locator('.result-archive').click();
+  await page.click('#inboxReader [data-reader="archive"]');
   await page.waitForFunction(() => window.__host.notices.external[0].archived);
-  assert.equal(await page.locator('#inboxCards .result-card').count(), 3);
-  assert.equal(await text(page, '#sourceFilters [data-source="__archived"]'), 'Archived (1)');
-  await page.click('#sourceFilters [data-source="__archived"]');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 3);
+  await page.selectOption('#inboxFilter', 'archived');
   await shot('inbox-archived');
-  assert.equal(await page.locator('#inboxCards .result-card').count(), 1);
-  assert.match(await text(page, '#inboxCards'), /Updated billing/);
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 1);
+  assert.match(await text(page, '#inboxItems'), /billing/i);
   assert.ok((await host()).notices.external[0].summary.length > 20, 'archiving keeps the stored reply');
-  const archived = page.locator('#inboxCards .result-card').first();
-  await archived.locator('.result-preview').click();
-  await archived.locator('.result-archive').click();
+  await page.locator('#inboxItems [data-notice]').first().click();
+  await page.click('#inboxReader [data-reader="archive"]');
   await page.waitForFunction(() => !window.__host.notices.external[0].archived);
 });
 
@@ -737,7 +892,7 @@ await check('brief report: worth a look, and the full reply', {width: 340, heigh
   assert.match(await text(page, '#cardReport'), /Worth a look[\s\S]*The reply says checks failed[\s\S]*Reported failing/);
   assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open Claude Code');
   await page.click('#cardReport [data-report="read"]');
-  await page.waitForSelector('#inboxCards .result-card');
+  await page.waitForSelector('#inboxReader .reader-original');
   assert.equal(await page.locator('#shell').isVisible(), true);
 });
 
@@ -827,7 +982,7 @@ await check('card inbox button in every state', {width: 340, height: 640, compac
   // A day-old unread result is still offered, not hidden by its age.
   await page.waitForFunction(() => /api/.test(document.getElementById('cardReport').innerText));
   await page.click('#cardInbox');
-  await page.waitForSelector('#inboxCards .result-card');
+  await page.waitForSelector('#inboxItems [data-notice]');
   assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
 });
 
@@ -881,7 +1036,7 @@ await check('inbox and card agree when session facts arrive late (native capture
     window.setInbox({channel: 'external', items: host.notices.external, error: ''});
   }, id);
   await page.click('#inboxButton');
-  const row = () => page.locator('#inboxCards .result-card', {hasText: 'late-facts'}).locator('.result-state');
+  const row = () => page.locator('#inboxItems [data-notice]', {hasText: 'late-facts'}).locator('.inbox-item-status');
   assert.equal(await row().innerText(), 'Completed · Checks reported passing');
   await page.evaluate(id => {
     const host = window.__host, now = Date.now() / 1000;
@@ -901,16 +1056,20 @@ await check('full reply opens the original reply', {width: 340, height: 640, com
   await page.click('#cardReport [data-report="dismiss"]');
   await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
   await page.click('#cardReport [data-report="read"]');
-  await page.waitForSelector('#inboxCards .result-original:not([hidden])');
-  assert.match(await text(page, '#inboxCards .result-original:not([hidden])'), /Next step: review the migration before deploying/);
+  await page.waitForSelector('#inboxReader .reader-original');
+  assert.match(await text(page, '#inboxReader .reader-original'), /Next step: review the migration before deploying/);
   assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
-  // A source filter that shows the result is kept.
-  await page.click('#sourceFilters [data-source="Claude Code"]');
-  assert.equal(await text(page, '#dialog .dialog-back'), 'Card');
-  await page.click('#dialog .dialog-back');
+  // Narrow: the reader has a way back to the list. A source filter that shows the result is kept, and so are the
+  // selection and the Original Reply tab, across a trip back to the card (RETURN-STATE).
+  await page.click('#inboxReader [data-reader="back"]');
+  await page.selectOption('#inboxFilter', 'source:Claude Code');
+  await page.click('#workspaceReturn');
   await page.waitForFunction(() => compact);
   await page.click('#cardInbox');
-  await page.waitForSelector('#sourceFilters [data-source="Claude Code"].active');
+  await page.waitForSelector('#inboxItems [aria-selected="true"]');
+  assert.equal(await page.inputValue('#inboxFilter'), 'source:Claude Code');
+  await page.click('#inboxItems [aria-selected="true"]');
+  await page.waitForSelector('#inboxReader .reader-original');
 });
 
 // F12: each connection can have its own colour; status colours stay separate, and text stays readable.
@@ -927,15 +1086,15 @@ for (const dark of [false, true]) {
     if (!dark) await shot('connections-colours');
     await page.click('#dialog [data-close]');
     await page.click('#inboxButton');
-    const claude = page.locator('#inboxCards .result-card', {hasText: 'Claude Code'}).first();
+    const claude = page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first();
     assert.match(await claude.getAttribute('class'), /has-source-color/);
-    assert.match(await claude.getAttribute('style'), /--source-color: #af52de/);
-    const github = page.locator('#inboxCards .result-card', {hasText: 'GitHub Actions'}).first();
+    assert.match(await claude.getAttribute('style'), /--source-color:\s*#af52de/);
+    const github = page.locator('#inboxItems [data-notice]', {hasText: 'GitHub Actions'}).first();
     assert.doesNotMatch(await github.getAttribute('class'), /has-source-color/);
     await shot('inbox-colours' + (dark ? '-dark' : ''));
     // Contrast of the headline over the tinted card, for every preset.
     const ratios = await page.evaluate(presets => {
-      const card = document.querySelector('#inboxCards .result-card.has-source-color'), head = card.querySelector('.result-headline');
+      const card = document.querySelector('#inboxItems .inbox-item.has-source-color'), head = card.querySelector('.inbox-item-title');
       const rgb = value => value.match(/[\d.]+/g).map(Number);
       const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
       const mix = (a, b, t) => a.map((v, i) => v * (1 - t) + b[i] * t);
@@ -951,7 +1110,6 @@ for (const dark of [false, true]) {
     }, await page.evaluate(() => SourceColors.presets));
     assert.ok(Math.min(...ratios) >= 7, 'headline contrast over every tint: ' + ratios.map(r => r.toFixed(1)).join(', '));
     // Reset removes the colour.
-    await page.click('#dialog [data-close]');
     await page.click('#boardMore');
     await page.click('#openConnectors');
     await page.click('#claudeRow .source-swatch');
@@ -1342,7 +1500,7 @@ await check('shishi:// links add a task or show a view, nothing else', {}, async
   await page.locator('#toast button', {hasText: 'Undo'}).click();
   await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === 'Pay rent'));
   await page.evaluate(() => window.openURLAction({action: 'open', view: 'upcoming'}));
-  assert.equal(await text(page, '#pageTitle'), 'Upcoming');
+  assert.equal(await text(page, '#pageTitle'), 'Plan');
   await page.evaluate(() => window.openURLAction({action: 'add', text: '   '}));
   assert.match(await text(page, '#toast'), /no task title/);
   await page.evaluate(() => window.openURLAction({action: 'delete', id: 'x'}));
@@ -1632,7 +1790,7 @@ await check('saved filters in the sidebar', {}, async ({page, host}) => {
   await page.locator('#filters [data-filter]').click({button: 'right'});
   await page.locator('.menu-item', {hasText: 'Delete Filter'}).click();
   await page.waitForFunction(() => !window.__host.workspace.filters.length);
-  assert.equal(await text(page, '#pageTitle'), 'All');
+  assert.equal(await text(page, '#pageTitle'), 'All Tasks');
   await page.locator('#toast button', {hasText: 'Undo'}).click();
   await page.waitForFunction(() => window.__host.workspace.filters.length === 1);
 });

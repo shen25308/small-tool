@@ -61,6 +61,7 @@ function markAllRead(everywhere=false) {
 // Opens the inbox on one result. With original, the stored reply itself is open and in view (F09).
 // The source filter stays as it was when it already shows this result.
 function openNotice(id,{original=false}={}) {
+  if(window.InboxView){InboxView.open(id,{original});return}
   const note=allNotices().find(item=>item.id===id);
   if(note){
     if(note.archived)selectedInboxSource=ARCHIVED;
@@ -94,6 +95,7 @@ function latestResult() {
   slot.replaceChildren(ResultUI.card(latest,options));
 }
 function listNotices() {
+  if(window.InboxView){if(view!=='inbox')go('inbox');else InboxView.render();return}
   if(!$('dialog').open || !$('inboxList')){
     dialog('Inbox','<div id="inboxList"><div class="inbox-tools"><span id="inboxCount"></span><div><button id="readAll" class="mini-link"></button><button id="readEverything" class="mini-link"></button><button id="syncInbox" class="mini-link">Sync Now</button><button id="connectors" class="secondary">Settings…</button></div></div><div id="sourceFilters" class="tags"></div><p class="feedback" id="inboxWarnings"></p><div class="result-cards" id="inboxCards"></div><button class="secondary" id="olderResults" hidden>Load older results</button></div>',{});
     $('connectors').onclick=()=>showConnectors('agents',{fromInbox:true});
@@ -159,6 +161,8 @@ function updateItems(channel,items) {
   ResultUI.retain(new Set(allNotices().map(note=>note.id)));
   inboxBadge();
   latestResult();
+  if(view==='inbox')InboxView.render();
+  renderSidebarCounts();
   window.renderAgents?.();
 }
 function showHookLog(){
@@ -386,7 +390,7 @@ window.setInbox=state=>{
   inboxBadge();
   if($('dialog').open&&$('inboxList')){const top=$('dialog').scrollTop;listNotices();$('dialog').scrollTop=top}
 };
-$('inboxButton').onclick=()=>listNotices();
+$('inboxButton').onclick=()=>go('inbox');
 $('dialogBody').addEventListener('click',event=>{
   const filter=event.target.closest('[data-source]');
   if(filter){selectedInboxSource=filter.dataset.source;listNotices();return}

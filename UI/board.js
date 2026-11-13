@@ -204,6 +204,7 @@ document.addEventListener('contextmenu', event => {
     showMenu([
       {label: 'New Task', icon: 'plus', run: () => { go('p:' + name); openQuick('view'); }},
       {label: 'Rename…', icon: 'i-pencil', run: () => renameProject(name)},
+      {label: 'Project Info…', icon: 'i-list', run: () => ProjectsView.edit(name)},
       {label: data.projectFolders?.[name] ? 'Project Folder: ' + AgentTasks.shortPath(data.projectFolders[name]) : 'Set Project Folder…', icon: 'i-terminal', run: () => action(AgentTasks.chooseFolder(name))},
       data.notion?.project === name && {label: 'Sync with Notion', icon: 'i-link', run: () => syncNotion()},
       '-',
@@ -296,6 +297,13 @@ function drawPalette() {
   const listFirst = query && lists.some(item => item.label.toLocaleLowerCase().startsWith(query));
   if (listFirst) sections.push(goTo);
   if (tasks.length) sections.push(['Tasks', tasks]);
+  // Results are searched by their full reply, read or archived, and open on the reply itself (INBOX-SEARCH).
+  const found = query ? allNotices().filter(note => InboxView.matches(note, query)).slice(0, 12) : [];
+  if (found.length) sections.push(['Results', found.map(note => ({label: ResultUI.digest(note).headline || note.title, icon: 'inbox',
+    hint: ResultUI.sourceName(note) + (note.archived ? ' · Archived' : ''), run: () => leaveSheet(() => {
+      InboxView.state.query = paletteInput.value.trim();
+      InboxView.open(note.id, {original: !InboxView.matches({title: note.title, summary: '', source: note.source}, query)});
+    })})).concat([{label: 'Show all results for “' + paletteInput.value.trim() + '”', icon: 'i-search', hint: 'Inbox', run: () => leaveSheet(() => InboxView.search(paletteInput.value.trim()))}])]);
   if (lists.length && !listFirst) sections.push(goTo);
   if (commands.length) sections.push(['Commands', commands]);
   if (query) sections.push(['New', [{label: 'Add “' + paletteInput.value.trim() + '” as a task', icon: 'plus', run: () => {

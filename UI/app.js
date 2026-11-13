@@ -40,7 +40,9 @@ function matrixMarkup(tasks) {
       (inside.map(t => row(t, {project: true})).join('') || '<p class="day-empty">Nothing here.</p>') + '</section>';
   }).join('') + '</div>';
 }
-const titles = {today: 'Today', upcoming: 'Upcoming', all: 'All', someday: 'Someday', done: 'Completed'};
+const titles = {inbox: 'Inbox', today: 'Today', upcoming: 'Plan', projects: 'Projects', waiting: 'Waiting on AI', all: 'All Tasks', someday: 'Someday', done: 'Completed'};
+// Views drawn by their own module in place of the task list.
+const altViews = new Set(['inbox', 'projects']);
 // Things-style "When": This Evening keeps a task in Today but after the rest; Someday parks it without a date.
 function setWhen(id, when) {
   return patchTask(id, task => {
@@ -127,7 +129,33 @@ function change(fn) {
   return result;
 }
 function action(p) { p.catch(e => toast(e.message)); }
-function go(v) { view = v; tag = ''; quickTarget = null; render(); document.querySelector('main .content').scrollTop = 0; }
+function go(v) {
+  // "Needs review" is the Inbox with one filter; choosing Inbox again shows everything.
+  if (v === 'review') { InboxView.state.filter = 'review'; v = 'inbox'; }
+  else if (v === 'inbox' && view !== 'inbox' && InboxView.state.filter === 'review') InboxView.state.filter = 'inbox';
+  if (v.startsWith('p:') && v !== view) projectTab = 'tasks';
+  view = v; tag = ''; quickTarget = null; render(); document.querySelector('main .content').scrollTop = 0;
+}
+let projectTab = 'tasks';
+// Narrow windows: the sidebar opens over the content and closes after a choice.
+$('sidebarToggle').onclick = () => {
+  const open = !document.body.classList.contains('sidebar-open');
+  document.body.classList.toggle('sidebar-open', open);
+  $('sidebarToggle').setAttribute('aria-expanded', String(open));
+};
+document.addEventListener('click', event => {
+  if (!document.body.classList.contains('sidebar-open') || event.target.closest('#sidebarToggle')) return;
+  if (event.target.closest('aside [data-view], aside [data-board-tag]') || !event.target.closest('aside')) {
+    document.body.classList.remove('sidebar-open');
+    $('sidebarToggle').setAttribute('aria-expanded', 'false');
+  }
+});
+// Counts in the sidebar that change without anything else on screen changing.
+function renderSidebarCounts() {
+  const set = (key, n) => { const node = document.querySelector('[data-count-key="tile-' + key + '"]'); if (node) node.textContent = n || ''; };
+  set('inbox', allNotices().filter(note => !note.read && !note.archived).length);
+  set('review', allNotices().filter(note => window.InboxView?.needsReview(note)).length);
+}
 const projectTone = name => 'project-' + Math.max(0, data.projects.indexOf(name)) % 8;
 function symbol(name) { return '<span class="symbol ' + name + '" aria-hidden="true"></span>'; }
 const collapsedProjects = new Set();
@@ -153,8 +181,21 @@ function deadlineLabel(task) {
   return Number.isNaN(time.getTime()) ? date : date + ', ' + time.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
 }
 
+// A task an agent is working on, or waiting on you for, right now.
+const waitingOnAI = task => !task.done && ['working', 'blocked'].includes(window.AgentTasks?.status(task)?.tone);
+// Lists grouped by area, like folders in Things; lists with no area come first.
+function projectNav(open) {
+  const button = id => navButton('p:' + id, id, open.filter(t => t.project === id).length);
+  const loose = data.projects.filter(id => !data.lists?.[id]?.area || !(data.areas || []).some(area => area.id === data.lists[id].area));
+  return loose.map(button).join('') + (data.areas || []).map(area => {
+    const inside = data.projects.filter(id => data.lists?.[id]?.area === area.id);
+    return '<div class="area-group" data-area="' + esc(area.id) + '"><h3 class="area-name">' + esc(area.name) + '</h3>' + inside.map(button).join('') + '</div>';
+  }).join('');
+}
 function smartTile(id, label, count, icon) {
-  return '<button class="smart-tile tile-' + id + (view === id && !tag ? ' active" aria-current="page' : '') + '" data-view="' + id + '"' +
+  const inboxFilter = window.InboxView?.state.filter;
+  const current = id === 'review' ? view === 'inbox' && inboxFilter === 'review' : id === 'inbox' ? view === 'inbox' && inboxFilter !== 'review' : view === id && !tag;
+  return '<button class="smart-tile tile-' + id + (current ? ' active" aria-current="page' : '') + '" data-view="' + id + '"' +
     (id === 'today' ? ' data-target="today"' : '') + '><span class="tile-icon">' + icon + '</span><span class="tile-count" data-count-key="tile-' + id + '">' + (count || '') +
     '</span><span class="tile-label">' + label + '</span></button>';
 }
@@ -398,6 +439,27 @@ function upcomingMarkup(tasks) {
   return html;
 }
 
+// Plan as a week: seven days side by side, each a place to drop a task. Deadlines show on their day too,
+// marked "Due", and stay separate from the days a task is planned for.
+function weekMarkup(tasks) {
+  const today = day();
+  const open = tasks.filter(t => !t.done);
+  const overdue = open.filter(t => taskDate(t) && taskDate(t) < today);
+  let html = overdue.length ? '<div class="week-overdue">' + dayGroup('Overdue', overdue, {overdue: true}) + '</div>' : '';
+  html += '<div class="week-grid">';
+  for (let offset = 0; offset < 7; offset++) {
+    const date = addDays(today, offset);
+    const planned = open.filter(t => plannedDays(t).includes(date));
+    const due = open.filter(t => t.dueDate === date && !planned.includes(t));
+    const label = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : new Intl.DateTimeFormat('en-US', {weekday: 'short', month: 'short', day: 'numeric'}).format(fromISO(date));
+    html += '<section class="week-day day-group" data-target="d:' + date + '"><div class="day-head"><h3>' + esc(label) + '</h3>' + (planned.length + due.length ? '<span>' + (planned.length + due.length) + '</span>' : '') + '</div>' +
+      planned.map(t => row(t, {project: true, hideDate: true})).join('') +
+      due.map(t => row(t, {project: true})).join('') + quickAdd('d:' + date) + '</section>';
+  }
+  return html + '</div>';
+}
+let planLayout = 'list';
+
 function completedMarkup(tasks) {
   const done = tasks.filter(t => t.done).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
   if (!done.length) return emptyState('i-check-circle', 'Completed tasks appear here.');
@@ -429,12 +491,27 @@ function renderBoard() {
   const draft = draftField ? {value: draftField.value, focused: document.activeElement === draftField} : null;
   const tasks = data.tasks, open = tasks.filter(t => !t.done), today = tasks.filter(isToday), project = projectOfView();
   const now = new Date();
-  $('nav').innerHTML = smartTile('today', 'Today', today.filter(t => !t.done).length, String(now.getDate())) +
-    smartTile('upcoming', 'Upcoming', open.filter(t => taskDate(t) > day()).length, symbol('i-calendar')) +
-    smartTile('all', 'All', open.filter(t => !t.someday).length, symbol('i-tray')) +
+  // Inbox, Today, Plan and Projects first; then saved views (PROJECT-MODEL, INBOX-LAYOUT).
+  const unreadResults = allNotices().filter(note => !note.read && !note.archived).length;
+  const review = allNotices().filter(note => window.InboxView?.needsReview(note)).length;
+  $('nav').innerHTML = smartTile('inbox', 'Inbox', unreadResults, symbol('inbox')) +
+    smartTile('today', 'Today', today.filter(t => !t.done).length, String(now.getDate())) +
+    smartTile('upcoming', 'Plan', open.filter(t => taskDate(t) > day()).length, symbol('i-calendar')) +
+    smartTile('projects', 'Projects', data.projects.length, symbol('i-list')) +
+    '<h2 class="nav-heading">Views</h2>' +
+    smartTile('waiting', 'Waiting on AI', open.filter(waitingOnAI).length, symbol('i-clock')) +
+    smartTile('review', 'Needs review', review, symbol('i-bolt')) +
     smartTile('someday', 'Someday', open.filter(t => t.someday).length, symbol('i-someday')) +
+    smartTile('all', 'All Tasks', open.filter(t => !t.someday).length, symbol('i-tray')) +
     smartTile('done', 'Completed', tasks.length - open.length, symbol('i-check'));
-  $('projects').innerHTML = data.projects.map(p => navButton('p:' + p, p, open.filter(t => t.project === p).length)).join('');
+  const alt = altViews.has(view);
+  $('board').hidden = alt;
+  $('altView').hidden = !alt;
+  if (!alt) { $('altView').dataset.view = ''; $('altView').replaceChildren(); }
+  if (view === 'inbox') { $('pageTitle').textContent = 'Inbox'; window.InboxView?.render(); }
+  if (view === 'projects') window.ProjectsView?.render();
+  if (alt) { renderBoardTags(); window.Filters?.renderSidebar(); $('projects').innerHTML = projectNav(open); return; }
+  $('projects').innerHTML = projectNav(open);
   $('board').className = 'board-content ' + (project ? 'view-project ' + projectTone(project) : 'view-' + view);
   const planned = tasks.filter(isToday), finished = planned.filter(t => t.done).length;
   const ring = $('dayRing');
@@ -455,9 +532,10 @@ function renderBoard() {
   pin.setAttribute('aria-label', compact ? 'Open full workspace' : 'Switch to the floating Today list');
   $('manual').hidden = view === 'done';
 
-  const flat = view === 'today' || view === 'all' || view === 'someday' || !!filterView || !!project;
+  const flat = view === 'today' || view === 'all' || view === 'someday' || view === 'waiting' || !!filterView || !!project;
   document.querySelector('.board-content > .listhead').hidden = !flat;
-  let list = filterView ? Filters.matches(filterView) : view === 'today' ? today : project ? tasks.filter(t => t.project === project) : view === 'someday' ? open.filter(t => t.someday) : open.filter(t => !t.someday);
+  let list = filterView ? Filters.matches(filterView) : view === 'today' ? today : project ? tasks.filter(t => t.project === project) : view === 'someday' ? open.filter(t => t.someday)
+    : view === 'waiting' ? open.filter(waitingOnAI) : open.filter(t => !t.someday);
   const tags = [...new Set(list.map(t => t.tag).filter(Boolean))];
   const filterable = view === 'all' || !!project;
   if (!filterable || !(view === 'all' ? availableTaskTags() : tags).includes(tag)) tag = '';
@@ -469,21 +547,36 @@ function renderBoard() {
   const count = view === 'done' ? tasks.length - open.length : view === 'upcoming' ? open.filter(t => taskDate(t) > day()).length : list.filter(t => !t.done).length;
   $('pageCount').textContent = count || '';
 
-  $('layoutToggle').hidden = view !== 'all' || !!tag;
-  $('layoutToggle').querySelectorAll('[data-layout]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === layout)));
+  // A project's page: Tasks, Notes or Results.
+  if (project && projectTab !== 'tasks') {
+    document.querySelector('.board-content > .listhead').hidden = true;
+    $('tasks').innerHTML = ProjectsView.tabs(project) + (projectTab === 'notes' ? ProjectsView.notes(project) : ProjectsView.resultList(project));
+    $('pool').innerHTML = '';
+    $('layoutToggle').hidden = true;
+    ProjectsView.bind(project);
+    return;
+  }
+  // All: List or Matrix. Plan: List or Week.
+  $('layoutToggle').hidden = !((view === 'all' && !tag) || view === 'upcoming');
+  $('layoutToggle').innerHTML = view === 'upcoming'
+    ? '<button type="button" data-plan-layout="list" aria-pressed="' + (planLayout === 'list') + '">List</button><button type="button" data-plan-layout="week" aria-pressed="' + (planLayout === 'week') + '">Week</button>'
+    : '<button type="button" data-layout="list" aria-pressed="' + (layout === 'list') + '">List</button><button type="button" data-layout="matrix" aria-pressed="' + (layout === 'matrix') + '">Matrix</button>';
+  if (view === 'upcoming') document.querySelector('.board-content > .listhead').hidden = false;
+  $('taskSort').closest('.sort-menu').hidden = view === 'upcoming';
   if (view === 'all' && !tag && layout === 'matrix') $('tasks').innerHTML = matrixMarkup(list.filter(t => !t.done));
-  else if (view === 'upcoming') $('tasks').innerHTML = upcomingMarkup(tasks);
+  else if (view === 'upcoming') $('tasks').innerHTML = planLayout === 'week' ? weekMarkup(tasks) : upcomingMarkup(tasks);
   else if (view === 'done') $('tasks').innerHTML = completedMarkup(tasks);
   else {
     const empty = tag ? emptyState('i-tag', 'No open tasks with this tag.') : view === 'today' ? emptyState('i-sun', 'Nothing planned for today. Add a task or drag one here.')
       : view === 'someday' ? emptyState('i-someday', 'Ideas and tasks without a date wait here until you plan them.')
+      : view === 'waiting' ? emptyState('i-clock', 'No task is with an agent right now. Use “Send to Claude Code” on a task.')
       : filterView ? emptyState('i-filter', 'No tasks match “' + filterView.query + '” right now.')
       : emptyState('i-check-circle', 'No tasks here yet.');
     const listAttrs = view === 'today' ? 'class="task-list drop" data-target="today"' : 'class="task-list"';
     // Today ends with This Evening, as in Things.
     const evening = view === 'today' ? list.filter(t => t.evening && !t.done) : [];
     const main = evening.length ? list.filter(t => !evening.includes(t)) : list;
-    $('tasks').innerHTML = filters + (view === 'today' && !tag ? window.CalendarEvents?.markup(day()) || '' : '') + '<div ' + listAttrs + '>' +
+    $('tasks').innerHTML = (project ? ProjectsView.tabs(project) : '') + filters + (view === 'today' && !tag ? window.CalendarEvents?.markup(day()) || '' : '') + '<div ' + listAttrs + '>' +
       (main.map(t => row(t, {project: !project})).join('') || (evening.length ? '' : empty)) + quickAdd('view') + '</div>' +
       (evening.length ? '<section class="evening-group"><div class="day-head"><h3>This Evening</h3><span>' + evening.length + '</span></div>' +
         evening.map(t => row(t, {project: !project})).join('') + '</section>' : '');
@@ -1071,7 +1164,7 @@ window.modelProgress = progress => {
   if (progress.state === 'failed') toast(progress.message);
 };
 $('downloadModelMenu').onclick = () => capture();
-$('newProject').onclick = projectForm;
+$('newProject').onclick = () => ProjectsView.edit();
 function startNewTask() { if (view === 'done') taskForm(); else openQuick('view'); }
 $('manual').onclick = startNewTask;
 $('pin').onclick = async () => { try { await native('compact', {value: !compact}); } catch (e) { toast(e.message); } };
@@ -1170,4 +1263,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 $('layoutToggle').addEventListener('click', event => {
   const choice = event.target.closest('[data-layout]');
   if (choice) { layout = choice.dataset.layout; render(); }
+  const plan = event.target.closest('[data-plan-layout]');
+  if (plan) { planLayout = plan.dataset.planLayout; render(); }
 });

@@ -77,7 +77,7 @@ window.setAgents = rows => {
   // Task rows show their linked session's live state.
   if (agentRows.some(row => row.shishiTask) || data.tasks.some(task => task.agentStarted)) render();
   // Session facts decide inbox verdicts too; refresh an open inbox so both places agree.
-  if ($('dialog').open && $('inboxList')) { const top = $('dialog').scrollTop; listNotices(); $('dialog').scrollTop = top; }
+  if (view === 'inbox') InboxView.render();
 };
 
 function agentMenu(entry, at) {
