@@ -331,6 +331,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         addWindowControls()
         window.center()
         window.setFrameAutosaveName("ShiShiTallWorkspace")
+        // A size asked for on the command line wins over the remembered frame, for that launch only.
+        if sized?.count == 2 { window.setContentSize(NSSize(width:frame.width,height:frame.height)); window.center() }
         NSApplication.shared.servicesProvider = self
         makeMenu()
         takenShortcuts=hotkeys.setEnabled(hotkeysOn)

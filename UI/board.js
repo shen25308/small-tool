@@ -491,7 +491,14 @@ $('closePeek').onclick = () => {
 window.showForCapture = name => {
   if (name === 'settings-sync') { showConnectors('sync'); return; }
   // The retest screenshots: the Inbox reading the newest result, Projects, and the week plan.
-  if (name === 'inbox') { const first = allNotices().find(note => !note.archived); if (first) InboxView.open(first.id); else go('inbox'); return; }
+  if (name === 'inbox') {
+    // Results arrive a moment after launch; wait for one (up to 6 s) so the reader shows it.
+    go('inbox');
+    let tries = 0;
+    const pick = () => { const first = allNotices().find(note => !note.archived); if (first) InboxView.open(first.id); else if (++tries < 30) setTimeout(pick, 200); };
+    pick();
+    return;
+  }
   if (name === 'projects') { go('projects'); return; }
   if (name === 'plan-week') { planLayout = 'week'; go('upcoming'); return; }
   if (name === 'connections') {
