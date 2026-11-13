@@ -1,0 +1,144 @@
+/* The corner card. The app draws the glass and the rounded corners; this page fills it. */
+:root { --card-surface: rgba(250,250,252,.95) }
+@media (prefers-color-scheme: dark) { :root { --card-surface: rgba(38,38,40,.95) } }
+#card { display: none }
+body.compact { background: transparent }
+body.compact #card { display: flex; flex-direction: column; position: fixed; inset: 0; overflow: hidden }
+html:not(.vibrant) body.compact #card { background: var(--card-surface) }
+html.vibrant body.compact #card { background: color-mix(in srgb, var(--paper) 22%, transparent) }
+
+.card-inner { display: flex; flex: 1 1 auto; flex-direction: column; gap: 10px; min-height: 0; max-height: 100vh; padding: 22px 14px 10px }
+/* The app's move grip covers the top 24 points. This bar shows where it is. */
+body.compact #card::before { content: ""; position: absolute; top: 8px; left: 50%; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px; background: var(--faint); opacity: .7 }
+/* When space is short the report and the task list scroll inside the card; the header and footer stay put (F08). */
+.card-inner > * { flex: none }
+.card-inner > .card-report { flex: 0 1 auto; min-height: 72px; overflow-y: auto; overscroll-behavior: contain }
+.card-inner > .card-tasks { flex: 1 1 auto; min-height: 40px; margin: 0 -8px; padding: 0 8px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain }
+/* Rows keep their full height; a short card scrolls the report instead of squeezing its lines together. */
+.card-report { grid-auto-rows: max-content; align-content: start }
+.card-island-slot { display: flex; justify-content: center; margin-top: -2px }
+.card-island-slot:empty, .card-island-slot:has(.island.mode-idle) { display: none }
+#card .island { position: relative; left: auto; top: auto; transform: none }
+
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px }
+.card-weekday { display: block; color: var(--danger); font: 700 12px/1.2 var(--sans); letter-spacing: .07em }
+.card-date-line { display: flex; align-items: baseline; gap: 9px; margin-top: 1px }
+.card-day { font: 600 32px/1 var(--rounded); letter-spacing: -.02em; font-variant-numeric: tabular-nums }
+.card-summary { color: var(--secondary); font-size: 13px; font-weight: 500 }
+.card-ring { width: 40px; height: 40px }
+.card-ring .ring-track, .card-ring .ring-fill { stroke-width: 3.6 }
+.card-ring .ring-label { position: absolute; color: var(--secondary); font: 700 12px var(--rounded); letter-spacing: -.03em; font-variant-numeric: tabular-nums }
+
+.card-tasks { display: grid; align-content: start }
+#card .row { align-items: center; gap: 10px; min-height: 32px; margin: 0 -8px; padding: 6px 8px; border-radius: 10px }
+#card .row::after { display: none }
+#card .row:hover { background: color-mix(in srgb, var(--ink) 6%, transparent) }
+#card .check { width: 18px; height: 18px; margin: 0 }
+#card .row.p0 { --view-color: var(--red) }
+#card .row.p1 { --view-color: var(--orange) }
+#card .row.p0 .check:not(:hover), #card .row.p1 .check:not(:hover) { box-shadow: inset 0 0 0 1.6px var(--view-color) }
+#card .row.completing .check { box-shadow: none }
+#card .task-body { min-width: 0 }
+#card .title { overflow: hidden; font-size: 13.5px; line-height: 1.3; white-space: nowrap; text-overflow: ellipsis }
+.card-due { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums }
+.card-due.late { color: var(--danger); font-weight: 500 }
+.card-sub { flex: none; padding: 0 6px; border-radius: 999px; background: var(--control); color: var(--muted); font-size: 12px; line-height: 17px }
+.card-more { align-self: flex-start; margin-top: -6px; padding: 1px 0; color: var(--blue); font-size: 12px; font-weight: 500 }
+.card-more:hover { background: none; text-decoration: underline }
+.card-empty { display: flex; align-items: center; gap: 10px; padding: 6px 0 2px; color: var(--secondary); font-size: 13px }
+.card-empty .symbol { width: 22px; height: 22px; color: var(--green) }
+
+.card-foot { display: flex; align-items: center; gap: 2px; padding-top: 8px; border-top: .5px solid var(--hairline) }
+.card-add { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; margin: 0 }
+.card-add-icon { display: grid; place-items: center; width: 18px; height: 18px; flex: none; border-radius: 50%; background: var(--control); color: var(--muted) }
+.card-add-icon .symbol { width: 11px; height: 11px }
+.card-add:focus-within .card-add-icon { background: var(--action); color: #fff }
+#cardAddInput { min-height: 26px; padding: 0; background: none; box-shadow: none; font-size: 13px }
+.card-tool { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--muted); opacity: 0; transition: opacity .2s, background .2s }
+#card:hover .card-tool, .card-tool:focus-visible { opacity: 1 }
+.card-tool:hover { background: var(--control); color: var(--ink) }
+.card-tool[aria-pressed="true"] { color: var(--blue) }
+.card-tool .symbol { width: 14px; height: 14px }
+
+/* The brief report that appears when an agent finishes or needs you. */
+#card.has-report .card-island-slot:has(.island.mode-attention, .island.mode-done) { display: none }
+.card-report {
+  --tone: var(--green); position: relative; display: grid; gap: 6px; padding: 11px 12px 10px; border-radius: 14px;
+  background: color-mix(in srgb, var(--tone) 9%, var(--card-surface));
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--tone) 35%, transparent), 0 1px 2px rgba(0,0,0,.05);
+}
+html.vibrant .card-report { background: color-mix(in srgb, var(--tone) 12%, color-mix(in srgb, var(--paper) 70%, transparent)) }
+.card-report.verdict-review { --tone: var(--orange) }
+.card-report.verdict-blocked { --tone: var(--red) }
+.card-report.verdict-neutral { --tone: var(--gray) }
+.report-reason { color: var(--secondary); font-size: 12px; line-height: 1.4 }
+.report-evidence { margin: 0; max-height: 64px; padding: 1px 0 1px 8px; border-left: 2px solid color-mix(in srgb, var(--tone) 55%, transparent); color: var(--secondary); font-size: 12px; white-space: normal }
+.test-chip.claimed { background: var(--control); color: var(--secondary) }
+.report-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px }
+.report-head b { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap }
+.report-head span { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap }
+.report-head time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums }
+.report-close { display: grid; place-items: center; width: 18px; height: 18px; flex: none; align-self: center; border-radius: 50%; color: var(--muted) }
+.report-close:hover { background: var(--control); color: var(--ink) }
+.report-close .symbol { width: 9px; height: 9px }
+.report-verdict { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; color: var(--secondary) }
+.report-verdict > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.verdict-badge {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px 1px 6px; border-radius: 999px;
+  background: var(--tone); color: #fff; font-size: 12px; font-weight: 600; line-height: 18px;
+}
+.verdict-badge .symbol { width: 11px; height: 11px }
+.report-headline { display: -webkit-box; overflow: hidden; font-size: 13.5px; font-weight: 600; line-height: 1.35; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
+.report-points { display: grid; gap: 2px; margin: 0; padding-left: 16px; color: var(--secondary); font-size: 12px; line-height: 1.4 }
+.report-points li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.report-points li::marker { color: var(--faint) }
+.report-chips { display: flex; flex-wrap: wrap; gap: 4px }
+.report-chips code { padding: 0 6px; border-radius: 5px; background: var(--control); color: var(--secondary); font: 11px/18px var(--mono) }
+.test-chip { padding: 0 7px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 18px }
+.test-chip.passed { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--success) }
+.test-chip.none { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--warning) }
+.test-chip.failed { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--danger) }
+.report-asked { overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap }
+.report-actions { display: flex; align-items: center; gap: 6px; margin-top: 2px }
+.report-actions .primary, .report-actions .secondary { min-height: 24px; padding: 2px 11px; border-radius: 999px; font-size: 12px }
+.report-actions .mini-link { margin-left: auto }
+.report-actions .primary:last-child { margin-left: auto }
+.card-report.verdict-done .report-actions .primary { background: var(--green) }
+.report-more { justify-self: start; padding: 0; color: var(--blue); font-size: 12px }
+.report-more:hover { background: none; text-decoration: underline }
+
+/* First run: what the card is for, with one click to connect or to watch a demo. */
+.card-welcome { display: grid; gap: 6px; padding: 12px; border-radius: 14px; background: color-mix(in srgb, var(--action) 9%, var(--card-surface));
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--action) 30%, transparent) }
+html.vibrant .card-welcome { background: color-mix(in srgb, var(--action) 12%, color-mix(in srgb, var(--paper) 70%, transparent)) }
+.card-welcome b { font-size: 13.5px }
+.card-welcome p { color: var(--secondary); font-size: 12px; line-height: 1.45 }
+.card-welcome .report-actions { flex-wrap: wrap }
+/* A newer result waits here while the current report is being read. */
+.report-newer {
+  justify-self: center; display: inline-flex; align-items: center; gap: 4px; margin: -3px 0 1px; padding: 1px 10px 1px 8px;
+  border-radius: 999px; background: var(--action); color: #fff; font-size: 12px; font-weight: 600; line-height: 20px;
+}
+.report-newer .symbol { width: 11px; height: 11px; transform: rotate(-90deg) }
+.report-newer:not([hidden]) { animation: menu-in .25s ease-out }
+
+.report-fold { display: grid; place-items: center; width: 18px; height: 18px; flex: none; align-self: center; border-radius: 50%; color: var(--muted) }
+.report-fold:hover { background: var(--control); color: var(--ink) }
+.report-fold .symbol { width: 10px; height: 10px; transition: transform .2s }
+.card-report.folded .report-fold .symbol { transform: rotate(-90deg) }
+.card-report.folded > :not(.report-head):not(.report-verdict):not(.report-actions):not(.report-newer) { display: none }
+/* The inbox is always one click away, with its unread count (F06). */
+.card-inbox { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 7px; border-radius: 999px; color: var(--secondary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums }
+.card-inbox:hover { background: var(--control); color: var(--ink) }
+.card-inbox .symbol { width: 15px; height: 15px }
+.card-inbox:has(#cardInboxCount:not(:empty)) { color: var(--blue) }
+.card-report.has-source-color { box-shadow: inset 3px 0 0 var(--source-color), inset 0 0 0 .5px color-mix(in srgb, var(--tone) 35%, transparent) }
+/* Report text can be selected and copied; the move grip is separate (F15). */
+.card-report .report-reason, .card-report .report-headline, .card-report .report-points, .card-report .report-asked, .card-report .report-chips code { -webkit-user-select: text; user-select: text; cursor: text }
+.card-add-area { display: grid; gap: 4px }
+.card-add-hint:empty { display: none }
+.card-add-hint { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px; padding-left: 28px; font-size: 12px }
+.card-row-more { display: grid; place-items: center; width: 22px; height: 20px; flex: none; border-radius: 5px; color: var(--muted); opacity: 0 }
+#card .row:hover .card-row-more, #card .row:focus-within .card-row-more { opacity: 1 }
+.card-row-more:hover { background: var(--pressed); color: var(--ink) }
+.card-row-more .symbol { width: 13px; height: 13px }

@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import WebKit
+import UniformTypeIdentifiers
 
 struct Entry: Codable {
     let id, title, project, tag, priority, planned, source, quote: String
@@ -61,13 +62,38 @@ private final class WindowTitleStrip: NSView {
 final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
     private var window: NSWindow!
     private var web: WKWebView!
-    private var editorApp:NSRunningApplication?
-    private var smallWorkspaceFrame: NSRect?
-    private var expandedFrame: NSRect?
     private var compact = false
-    private var placingWindow = false
-    private var restoreTodayOnReturn = false
-    private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? true
+    private lazy var card = CornerCard()
+    private lazy var hotkeys = GlobalHotkeys { [weak self] action in self?.hotkey(action) }
+    private let keepAwake = KeepAwake()
+    private let alerts = Alerts()
+    private lazy var eventKit = EventKitBridge()
+    private var hotkeysOn: Bool { UserDefaults.standard.object(forKey:"ShiShiHotkeys") as? Bool ?? true }
+    private var keepAwakeOn: Bool { UserDefaults.standard.bool(forKey:"ShiShiKeepAwake") }
+    private var takenShortcuts: [String] = []
+    private var agentsWorking = false
+    /// ⌃⌥Space shows or hides the card from any app; ⌃⌥N shows it with the add field ready, without
+    /// taking focus from the app you were in until you type.
+    private func hotkey(_ action: GlobalHotkeys.Action) {
+        switch action {
+        case .toggleCard:
+            if compact && card.panel.isVisible { card.panel.orderOut(nil) }
+            else if compact { card.show(pinned:pinned) }
+            else { setCompact(true) }
+        case .quickAdd:
+            if !compact { setCompact(true) } else if !card.panel.isVisible { card.show(pinned:pinned) }
+            card.panel.makeKeyAndOrderFront(nil)
+            tell("focusQuickAdd",true)
+        }
+    }
+    private func settingsState() -> [String:Any] {
+        ["hotkeys":hotkeysOn,"hotkeyLabels":GlobalHotkeys.labels.sorted {$0.key.rawValue < $1.key.rawValue}.map(\.value),
+         "takenShortcuts":takenShortcuts,"keepAwake":keepAwakeOn,"keepingAwake":keepAwake.holding,
+         "usage":UserDefaults.standard.object(forKey:"ShiShiShowUsage") as? Bool ?? true]
+    }
+    private var mainBackdrop: NSVisualEffectView!
+    // Off unless chosen: a window that floats above everything is a deliberate preference.
+    private var pinned = UserDefaults.standard.object(forKey:"ShiShiTodayPinned") as? Bool ?? false
     private let modeButton = NSButton()
     private let pinButton = NSButton()
     private let titleStrip = WindowTitleStrip()
@@ -75,11 +101,32 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private var captionPosition: NSLayoutConstraint!
     private var startsWithToday: Bool {
         let args = CommandLine.arguments
-        if args.contains("--edge-results") || args.contains("--open-inbox") || args.contains("--workspace") {return false}
+        if args.contains("--open-inbox") || args.contains("--workspace") {return false}
         return args.contains("--compact-workspace") || (UserDefaults.standard.object(forKey:"ShiShiTodayMode") as? Bool ?? true)
     }
     private var ready = false
     private var pendingSource: String?
+    private var pendingURLs: [[String:String]] = []
+    /// shishi://add?text=Call%20the%20bank%20tomorrow%203pm (&notes=…&list=…), shishi://show-card,
+    /// shishi://open?view=today|upcoming|all|done|inbox, shishi://search?q=…
+    /// A link can add a task or show something, never change or delete existing data.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls.prefix(10) where url.scheme == "shishi" {
+            let action=url.host ?? ""
+            var fields:[String:String]=["action":action]
+            for item in URLComponents(url:url,resolvingAgainstBaseURL:false)?.queryItems ?? [] where ["text","title","notes","list","view","q"].contains(item.name) {
+                fields[item.name]=String((item.value ?? "").prefix(item.name=="notes" ? 4000 : 400))
+            }
+            switch action {
+            case "show-card": if !compact {setCompact(true)} else {card.show(pinned:pinned)}
+            case "add","open","search","inbox":
+                if action != "add" {openWorkspace(inbox:false)}
+                guard ready else {pendingURLs.append(fields);continue}
+                tell("openURLAction",fields)
+            default: break
+            }
+        }
+    }
     private var processing = false
     private let inboxQueue = DispatchQueue(label:"local.shishi.codex-inbox",qos:.utility)
     private var inboxTimer: DispatchSourceTimer?
@@ -98,6 +145,16 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         store: file.deletingLastPathComponent().appendingPathComponent("CodexInbox.json")
     )
     private lazy var externalInbox = ConnectorInbox(directory: file.deletingLastPathComponent().appendingPathComponent("Incoming", isDirectory:true))
+    private lazy var agentBoard = AgentBoard(directory: file.deletingLastPathComponent().appendingPathComponent("Agents", isDirectory:true))
+    private lazy var approvals = ApprovalBoard(directory: file.deletingLastPathComponent().appendingPathComponent("Approvals", isDirectory:true))
+    private func scanApprovals() {
+        let rows=approvals.pending()
+        DispatchQueue.main.async { self.tell("setApprovals",rows) }
+    }
+    private var watchers: [DirectoryWatcher] = []
+    private let menuBar = MenuBarStatus()
+    private var unreadByChannel: [String:Int] = [:]
+    private var vibrant = false
     private func updateReminders(_ workspace:Workspace) {
         let checkNow = ready
         inboxQueue.async {
@@ -115,6 +172,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             do {
                 try externalInbox.receive(source:"Reminders",title:task.title,summary:task.summary,eventID:task.id)
                 deliveredReminders.insert(task.id)
+                // Only a deadline that just arrived makes a sound; reopening Shishi after a week stays quiet.
+                if task.date >= DeadlineReminder.localMinute(Date().addingTimeInterval(-600)) {
+                    let alerts=self.alerts
+                    DispatchQueue.main.async {alerts.taskDue(title:task.title,summary:task.summary,id:task.id)}
+                }
             } catch { problem = error.localizedDescription }
         }
         return problem
@@ -147,6 +209,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             let send=force || update.changed || lastInboxErrors["codex"] != nil
             return (send ? CodexInbox.wire(update.notices) : [],send)
         }
+        scanExternal(force:force)
+        scanAgents(force:force)
+    }
+    private func scanExternal(force:Bool = false) {
         pushInbox("external",warning:postDueReminders()) {
             let update=try externalInbox.scan()
             let send=force || update.changed || lastInboxErrors["external"] != nil
@@ -154,103 +220,177 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             return (lastExternalRows,send)
         }
     }
+    private func scanAgents(force:Bool = false) {
+        let update=agentBoard.scan()
+        let waiting=update.items.filter {$0.state=="attention"}.map {(key:$0.key,title:$0.title,detail:$0.detail)}
+        DispatchQueue.main.async {self.alerts.agentsWaiting(waiting)}
+        guard force || update.changed else {return}
+        let rows=AgentBoard.wire(update.items)
+        let working=update.items.contains {$0.state=="working"}
+        DispatchQueue.main.async {
+            self.agentsWorking=working
+            self.keepAwake.update(working:working && self.keepAwakeOn)
+            self.menuBar.update(agents:update.items)
+            self.tell("setAgents",rows)
+        }
+    }
     private func startInbox() {
         guard inboxTimer == nil else {return}
         _ = inbox
         _ = codexEnabled
         _ = externalInbox
+        _ = agentBoard
         let timer=DispatchSource.makeTimerSource(queue:inboxQueue)
         timer.schedule(deadline:.now(),repeating:.seconds(10),leeway:.seconds(1))
-        timer.setEventHandler { [weak self] in self?.scanInboxes() }
+        timer.setEventHandler { [weak self] in
+            self?.approvals.heartbeat()
+            self?.scanInboxes()
+            self?.scanApprovals()
+        }
         inboxTimer=timer
         timer.resume()
-    }
-    private func showEdge(_ visible:Bool) {
-        if visible && compact,let screen=window.screen?.visibleFrame {
-            edge.avoidCovering(window.frame,on:screen)
-        }
-        edge.setVisible(visible)
+        // Hooks publish by adding a file. Watching the folders shows a result as soon as it lands.
+        let base=file.deletingLastPathComponent()
+        watchers=[
+            DirectoryWatcher(url:base.appendingPathComponent("Agents",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanAgents() },
+            DirectoryWatcher(url:base.appendingPathComponent("Approvals",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanApprovals() },
+            DirectoryWatcher(url:base.appendingPathComponent("Incoming",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanExternal() }
+        ]
     }
     private let file: URL
-    private lazy var edge: EdgeResultsPanel = {
-        let result = EdgeResultsPanel()
-        result.onVisibility = { [weak self] shown in
-            UserDefaults.standard.set(shown,forKey:"ShiShiShowsResults")
-            self?.tell("setEdgeVisible",shown)
-        }
-        result.onHistory = { [weak self] in self?.openWorkspace(inbox:true,fromEdge:true) }
-        result.onWorkspace = { [weak self] in self?.openWorkspace(inbox:false,fromEdge:true) }
-        result.onRead = { [weak self] id, channel in self?.markNotice(id,channel:channel) }
-        return result
-    }()
     private lazy var providers = ExternalProviders(resources:resources)
     private var storeUnreadable = false
     private let resources = Bundle.main.resourceURL!
+    /// The light download leaves out the offline model, and with it task capture from messages.
+    private let inference = Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/Inference")
+    /// The bundled model, or one downloaded and verified into Application Support by the light app.
+    private var modelURL: URL? {
+        [resources.appendingPathComponent("assistant.gguf"),ModelDownload.installed].first {FileManager.default.fileExists(atPath:$0.path)}
+    }
+    private var hasEngine: Bool { FileManager.default.isExecutableFile(atPath:inference.appendingPathComponent("llama-completion").path) }
+    private var hasModel: Bool { hasEngine && modelURL != nil }
+    private let modelDownload = ModelDownload()
+    private var capabilities: [String:Any] {
+        ["capture":hasModel,"canDownloadModel":hasEngine && modelURL == nil,"downloading":modelDownload.running]
+    }
 
     override init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         file = support.appendingPathComponent("ShiShiDesk/Workspace.json")
         super.init()
     }
+    private static let appearances = ["system","light","dark"]
+    private func applyAppearance(_ name:String) {
+        NSApp.appearance = name == "dark" ? NSAppearance(named:.darkAqua) : name == "light" ? NSAppearance(named:.aqua) : nil
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // "--appearance dark" overrides the saved choice for one launch, e.g. for screenshots.
+        let args = CommandLine.arguments
+        let forced = args.firstIndex(of:"--appearance").flatMap { $0+1 < args.count ? args[$0+1] : nil }
+        applyAppearance(forced.flatMap { Host.appearances.contains($0) ? $0 : nil }
+                        ?? UserDefaults.standard.string(forKey:"ShiShiAppearance") ?? "system")
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "host")
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = self
         web.underPageBackgroundColor = .windowBackgroundColor
-        let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable]
+        let style:NSWindow.StyleMask = [.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView]
         let display = NSScreen.main?.visibleFrame.size ?? NSSize(width:760,height:800)
-        let frame=NSRect(x:0,y:0,width:min(760,display.width),height:min(800,display.height))
+        // "--window-size 1280x800" sets the first window size for one launch, for screenshots at known sizes.
+        let sized = args.firstIndex(of:"--window-size").flatMap { $0+1 < args.count ? args[$0+1] : nil }?
+            .split(separator:"x").compactMap { Double($0) }
+        let wanted = sized?.count == 2 && sized![0] >= 320 && sized![1] >= 300 ? NSSize(width:sized![0],height:sized![1]) : NSSize(width:760,height:800)
+        let frame=NSRect(x:0,y:0,width:min(wanted.width,display.width),height:min(wanted.height,display.height))
         window = NSWindow(contentRect:NSWindow.contentRect(forFrameRect:frame,styleMask:style),styleMask:style,backing:.buffered,defer:false)
         window.title = "My Notes"
         window.backgroundColor = .windowBackgroundColor
         window.titlebarSeparatorStyle = .none
+        window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 635,height: 420)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.contentView = web
+        // The sidebar shows the desktop through the system sidebar material, like Finder and Reminders.
+        let backdrop = NSVisualEffectView()
+        backdrop.material = .sidebar
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .followsWindowActiveState
+        window.contentView = backdrop
+        mainBackdrop = backdrop
+        web.frame = backdrop.bounds
+        web.autoresizingMask = [.width,.height]
+        backdrop.addSubview(web)
+        // WebKit paints an opaque page unless this switch exists. Without it the page keeps a solid sidebar.
+        if web.responds(to:NSSelectorFromString("_setDrawsBackground:")) {
+            web.setValue(false,forKey:"drawsBackground")
+            web.underPageBackgroundColor = .clear
+            vibrant = true
+        }
+        menuBar.onOpen = { [weak self] inbox in self?.openWorkspace(inbox:inbox) }
+        menuBar.update(agents:[])
         addWindowControls()
         window.center()
         window.setFrameAutosaveName("ShiShiTallWorkspace")
+        // A size asked for on the command line wins over the remembered frame, for that launch only.
+        if sized?.count == 2 { window.setContentSize(NSSize(width:frame.width,height:frame.height)); window.center() }
         NSApplication.shared.servicesProvider = self
         makeMenu()
+        takenShortcuts=hotkeys.setEnabled(hotkeysOn)
         let ui = resources.appendingPathComponent("UI",isDirectory:true)
         web.loadFileURL(ui.appendingPathComponent("index.html"),allowingReadAccessTo: ui)
-        if CommandLine.arguments.contains("--edge-results") {
-            showEdge(true)
-        } else if !startsWithToday {
+        if !startsWithToday {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            if UserDefaults.standard.object(forKey:"ShiShiShowsResults") as? Bool ?? true {showEdge(true)}
         }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool {
         openWorkspace(inbox:false);return true
     }
-    private func openWorkspace(inbox:Bool,fromEdge:Bool=false) {
-        if fromEdge {
-            restoreTodayOnReturn = restoreTodayOnReturn || (compact && window.isVisible)
-            let front=NSWorkspace.shared.frontmostApplication
-            if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier {editorApp=front}
-        }
+    private func openWorkspace(inbox:Bool) {
         if compact {setCompact(false)}
-        tell("setWorkspaceReturn",fromEdge)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps:true)
-        if inbox {tell("openInbox",fromEdge ? "edge" : "main")}
-        else if fromEdge {tell("showWorkspaceHome",true)}
+        if inbox {tell("openInbox","main")}
     }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationWillTerminate(_ notification: Notification) {
+        // A permission request must never wait for a Shishi that has quit.
+        approvals.closed()
+    }
+    // With the menu bar item on, Shishi keeps collecting results after its window closes.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !menuBar.enabled }
     func webView(_ view: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if let url = action.request.url, url.isFileURL, url.lastPathComponent=="index.html" { decisionHandler(.allow) }
         else { decisionHandler(.cancel) }
+    }
+    @objc private func showSettings() {
+        if compact {setCompact(false)}
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps:true)
+        tell("openSettings","agents")
+    }
+    /// The About panel names the exact source commit, so a build can be matched to its documentation (F18).
+    @objc private func showAbout() {
+        let info=Bundle.main.infoDictionary ?? [:]
+        let commit=(info["ShishiSourceCommit"] as? String).map {String($0.prefix(12))} ?? "unknown"
+        let dirty=(info["ShishiSourceDirty"] as? Bool) == true ? " (with local changes)" : ""
+        let light=(info["ShishiVariant"] as? String) == "light"
+        let variant=(light ? "Light download" : "Full download")+(hasModel ? ", offline model installed" : ", no offline model")
+        let credits=NSAttributedString(string:"Source commit \(commit)\(dirty)\n\(variant)",
+            attributes:[.font:NSFont.systemFont(ofSize:11),.foregroundColor:NSColor.secondaryLabelColor])
+        NSApp.activate(ignoringOtherApps:true)
+        NSApp.orderFrontStandardAboutPanel(options:[.credits:credits])
     }
     private func makeMenu() {
         let bar=NSMenu()
         let appItem=NSMenuItem()
         bar.addItem(appItem)
         let appMenu=NSMenu(title:"Shishi")
+        appMenu.addItem(withTitle:"About Shishi",action:#selector(showAbout),keyEquivalent:"")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle:"Settings…",action:#selector(showSettings),keyEquivalent:",")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle:"Hide Shishi",action:#selector(NSApplication.hide(_:)),keyEquivalent:"h")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle:"Quit Shishi",action:#selector(NSApplication.terminate(_:)),keyEquivalent:"q")
         appItem.submenu=appMenu
         let editItem=NSMenuItem()
@@ -276,6 +416,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         caption.textColor = .secondaryLabelColor
         caption.translatesAutoresizingMaskIntoConstraints = false
         caption.setAccessibilityElement(false)
+        // The page shows its own large title, as Reminders and Notes do. The window title stays for Mission Control and accessibility.
+        caption.isHidden = true
         titleStrip.addSubview(caption)
         let strip = NSStackView(views:[modeButton,pinButton])
         strip.orientation = .horizontal
@@ -331,76 +473,39 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     @objc private func togglePinned() {
         pinned.toggle()
         UserDefaults.standard.set(pinned,forKey:"ShiShiTodayPinned")
-        window.level = compact && pinned ? .floating : .normal
+        card.setPinned(pinned)
         updateWindowControls()
+        tell("setPinned",pinned)
     }
     private func tell(_ function: String, _ arg: Any) {
         if function=="setInbox", let state=arg as? [String:Any],let rows=state["items"] as? [[String:Any]],let channel=state["channel"] as? String {
-            edge.accept(channel:channel,items:rows)
+            unreadByChannel[channel]=rows.filter {($0["read"] as? Bool) != true}.count
+            menuBar.update(unread:unreadByChannel.values.reduce(0,+))
         }
         web.callAsyncJavaScript("window[fn](value);",arguments:["fn":function,"value":arg],in:nil,in:.page,completionHandler:nil)
     }
     @objc private func toggleCompact() { setCompact(!compact) }
+    /// Compact mode moves the one web view into the corner card, so both views share the same page state.
     private func setCompact(_ enabled: Bool) {
         guard compact != enabled else { return }
-        placingWindow = true
-        defer {placingWindow = false}
         compact = enabled
         UserDefaults.standard.set(enabled,forKey:"ShiShiTodayMode")
         updateWindowControls()
-        smallWorkspaceFrame=nil
         if enabled {
-            expandedFrame=window.frame
-            // Keep the expanded window's saved geometry independent from the floating view.
-            window.setFrameAutosaveName("")
-            window.minSize=NSSize(width:300,height:320)
-            let screen=window.screen?.visibleFrame ?? window.frame
-            let width=min(356,screen.width), height=min(484,screen.height)
-            var rect=NSRect(x:screen.maxX-width-16,y:screen.maxY-height-16,width:width,height:height)
-            if let saved=UserDefaults.standard.string(forKey:"ShiShiTodayFrame") {
-                let frame=NSRectFromString(saved)
-                if frame.width>=300,frame.height>=320,let display=NSScreen.screens.first(where:{$0.visibleFrame.contains(frame)}) {
-                    rect=frame.intersection(display.visibleFrame)
-                }
-            }
-            window.setFrame(rect,display:true)
-            window.level = pinned ? .floating : .normal
-            window.collectionBehavior = [.canJoinAllSpaces,.fullScreenAuxiliary]
-            if edge.panel.isVisible {edge.avoidCovering(window.frame,on:screen)}
+            card.attach(web)
+            card.show(pinned:pinned)
+            window.orderOut(nil)
         } else {
-            window.level = .normal
-            window.collectionBehavior = []
-            window.minSize = NSSize(width:635,height:420)
-            if let frame=expandedFrame {window.setFrame(frame,display:true)}
-            window.setFrameAutosaveName("ShiShiTallWorkspace")
+            web.removeFromSuperview()
+            web.layer?.cornerRadius = 0
+            web.frame = mainBackdrop.bounds
+            web.autoresizingMask = [.width,.height]
+            mainBackdrop.addSubview(web)
+            card.panel.orderOut(nil)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps:true)
         }
         tell("setCompact",enabled)
-    }
-    private func rememberTodayFrame() {
-        if compact && !placingWindow && smallWorkspaceFrame == nil && window.isVisible {
-            UserDefaults.standard.set(NSStringFromRect(window.frame),forKey:"ShiShiTodayFrame")
-        }
-    }
-    func windowDidMove(_ notification:Notification) {rememberTodayFrame()}
-    func windowDidEndLiveResize(_ notification:Notification) {rememberTodayFrame()}
-    private func sizeLatestResult(expanded:Bool) {
-        guard compact, let screen=window.screen?.visibleFrame else {return}
-        let current=window.frame
-        let size:NSSize
-        if expanded {
-            guard smallWorkspaceFrame==nil else {return}
-            smallWorkspaceFrame=current
-            size=NSSize(width:max(current.width,382),height:max(current.height,475))
-        } else {
-            guard let previous=smallWorkspaceFrame else {return}
-            size=previous.size
-            smallWorkspaceFrame=nil
-        }
-        let width=min(size.width,screen.width),height=min(size.height,screen.height)
-        let left=current.midX >= screen.midX ? current.maxX-width : current.minX
-        let x=max(screen.minX,min(left,screen.maxX-width))
-        let y=max(screen.minY,min(current.maxY-height,screen.maxY-height))
-        window.setFrame(NSRect(x:x,y:y,width:width,height:height),display:true)
     }
     @objc private func captureMenu(){ receive("") }
     @objc func captureWork(_ board: NSPasteboard, userData: String?, error errorPtr: AutoreleasingUnsafeMutablePointer<NSString?>) {
@@ -468,27 +573,106 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 try bytes.write(to:file,options:.atomic)
                 updateReminders(workspace)
                 reply(id,true,true)
+            case "downloadModel":
+                // Optional, only on request: fetch the pinned model, verify it, then turn on capture.
+                if body["cancel"] as? Bool == true {modelDownload.cancel();reply(id,true,true);break}
+                guard hasEngine else {throw AppIssue("This build has no inference engine, so a model cannot be used.")}
+                guard modelURL == nil else {reply(id,true,true);break}
+                modelDownload.start { [weak self] event in
+                    guard let self else {return}
+                    switch event {
+                    case .progress(let received,let total): self.tell("modelProgress",["state":"downloading","received":received,"total":total])
+                    case .verifying: self.tell("modelProgress",["state":"verifying"])
+                    case .finished: self.tell("setCapabilities",self.capabilities);self.tell("modelProgress",["state":"installed"])
+                    case .failed(let message): self.tell("modelProgress",["state":"failed","message":message]);self.tell("setCapabilities",self.capabilities)
+                    }
+                }
+                tell("setCapabilities",capabilities)
+                reply(id,true,true)
+            case "snapshotWorkspace":
+                // Keep a dated copy of the current workspace before a backup or an upgrade replaces it.
+                // An empty reply means there is no file yet, so there is nothing to keep.
+                guard FileManager.default.fileExists(atPath:file.path) else {reply(id,true,"");break}
+                let folder=file.deletingLastPathComponent().appendingPathComponent("Backups",isDirectory:true)
+                try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
+                let stamp=ISO8601DateFormatter.string(from:Date(),timeZone:.current,formatOptions:[.withFullDate,.withTime,.withDashSeparatorInDate]).replacingOccurrences(of:":",with:".")
+                let reason=(body["reason"] as? String)=="upgrade" ? "upgrade" : "import"
+                let copy=folder.appendingPathComponent("Workspace before "+reason+" "+stamp+".json")
+                try? FileManager.default.removeItem(at:copy)
+                try FileManager.default.copyItem(at:file,to:copy)
+                reply(id,true,copy.path)
+            case "exportBackup":
+                guard let text=body["text"] as? String, !text.isEmpty, text.utf8.count <= 20_000_000 else {throw AppIssue("There is nothing to back up.")}
+                let panel=NSSavePanel()
+                panel.title="Back Up Shishi"
+                panel.nameFieldStringValue=(body["name"] as? String) ?? "Shishi Backup.json"
+                panel.allowedContentTypes=[.json]
+                panel.canCreateDirectories=true
+                NSApp.activate(ignoringOtherApps:true)
+                panel.begin { [weak self] answer in
+                    guard answer == .OK, let url=panel.url else {self?.reply(id,true,"");return}
+                    do {try Data(text.utf8).write(to:url,options:.atomic);self?.reply(id,true,url.path)}
+                    catch {self?.reply(id,false,"The backup could not be saved: "+error.localizedDescription)}
+                }
+            case "importBackup":
+                let panel=NSOpenPanel()
+                panel.title="Import a Shishi Backup"
+                panel.allowedContentTypes=[.json]
+                panel.allowsMultipleSelection=false
+                panel.canChooseDirectories=false
+                NSApp.activate(ignoringOtherApps:true)
+                panel.begin { [weak self] answer in
+                    guard answer == .OK, let url=panel.url else {self?.reply(id,true,NSNull());return}
+                    guard let size=try? url.resourceValues(forKeys:[.fileSizeKey]).fileSize, size <= 20_000_000,
+                          let bytes=try? Data(contentsOf:url), let text=String(data:bytes,encoding:.utf8) else {
+                        self?.reply(id,false,"This file could not be read as a Shishi backup.");return
+                    }
+                    self?.reply(id,true,["name":url.lastPathComponent,"text":text])
+                }
             case "ready":
                 ready=true
                 if startsWithToday {
                     setCompact(true)
-                    window.orderFrontRegardless()
-                    if UserDefaults.standard.bool(forKey:"ShiShiShowsResults") {showEdge(true)}
                 }
                 startInbox()
                 providers.startPolling { [weak self] in
                     self?.inboxQueue.async { [weak self] in self?.scanInboxes(force:true) }
                 }
-                tell("setEdgeVisible",edge.panel.isVisible)
+                tell("setPinned",pinned)
+                tell("setCapabilities",capabilities)
+                // The page pads its top edge by the title bar height because content runs underneath it.
+                tell("setChrome",["titlebar":Double(max(0,window.frame.height-window.contentLayoutRect.height)),"vibrant":vibrant] as [String:Any])
                 if CommandLine.arguments.contains("--open-inbox") {
                     tell("openInbox",true)
                 }
+                // "--show schedule" or "--show connections" opens that sheet, for screenshots of the real window.
+                let launchArgs=CommandLine.arguments
+                if let at=launchArgs.firstIndex(of:"--show"), at+1 < launchArgs.count {
+                    tell("showForCapture",launchArgs[at+1])
+                }
                 reply(id,true,true)
                 if let text=pendingSource{pendingSource=nil;receive(text)}
+                for fields in pendingURLs {tell("openURLAction",fields)}
+                pendingURLs=[]
             case "syncInboxes":
                 inboxQueue.async {
                     self.scanInboxes(force:true)
                     DispatchQueue.main.async {self.reply(id,true,true)}
+                }
+            case "noticeState":
+                guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}
+                let channel=body["channel"] as? String ?? "codex"
+                let read=body["read"] as? Bool, archived=body["archived"] as? Bool
+                let codex=inbox, external=externalInbox
+                inboxQueue.async {
+                    do {
+                        let items=channel=="external" ? try ConnectorInbox.wire(external.setState(key,read:read,archived:archived))
+                                                      : try CodexInbox.wire(codex.setState(key,read:read,archived:archived))
+                        DispatchQueue.main.async {
+                            self.tell("setInbox",["channel":channel,"items":items,"error":""])
+                            self.reply(id,true,true)
+                        }
+                    } catch {DispatchQueue.main.async {self.reply(id,false,error.localizedDescription)}}
                 }
             case "readNotice":
                 guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}
@@ -513,7 +697,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     guard let self else {return}
                     switch result {
                     case .success(let response):
-                        if body["action"] as? String=="disconnect",body["purge"] as? Bool==true {self.edge.discardPreview()}
                         self.reply(id,true,response)
                         if body["action"] as? String != "status" {
                             self.inboxQueue.async {self.scanInboxes(force:true)}
@@ -521,28 +704,6 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     case .failure(let error):self.reply(id,false,error.localizedDescription)
                     }
                 }
-            case "edgeMailPreference":
-                if let choice=body["value"] as? Bool {
-                    edge.showsMail=choice
-                    UserDefaults.standard.set(choice,forKey:"ShiShiDesktopMail")
-                    edge.discardPreview()
-                    inboxQueue.async {self.scanInboxes(force:true)}
-                }
-                reply(id,true,edge.showsMail)
-            case "returnToEdge":
-                if restoreTodayOnReturn {
-                    setCompact(true)
-                    window.orderFrontRegardless()
-                } else {window.orderOut(nil)}
-                restoreTodayOnReturn=false
-                showEdge(true)
-                if let editor=editorApp,!editor.isTerminated {editor.activate(options:[])} else {NSApp.deactivate()}
-                editorApp=nil
-                tell("setWorkspaceReturn",false)
-                reply(id,true,true)
-            case "edgeVisibility":
-                showEdge(body["value"] as? Bool == true)
-                reply(id,true,edge.panel.isVisible)
             case "openConnectorLink":
                 guard let key=body["key"] as? String else {throw AppIssue("The message ID is missing.")}
                 inboxQueue.async {
@@ -586,18 +747,210 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 }
                 reply(id,true,true)
             case "paste": reply(id,true,NSPasteboard.general.string(forType:.string) ?? "")
-            case "latestSize":
-                sizeLatestResult(expanded:body["expanded"] as? Bool == true)
+            case "copy":
+                guard let text=body["text"] as? String, !text.isEmpty, text.utf8.count <= 2_000_000 else {throw AppIssue("There is nothing to copy.")}
+                NSPasteboard.general.clearContents()
+                guard NSPasteboard.general.setString(text,forType:.string) else {throw AppIssue("The text could not be copied.")}
                 reply(id,true,true)
+            case "openAgentApp":
+                // Bring forward the app the session runs in. Opening it through Launch Services works
+                // even though Shishi itself is not the active app.
+                let wanted=body["app"] as? String ?? ""
+                let fallbacks=["com.apple.Terminal","com.googlecode.iterm2","com.mitchellh.ghostty","dev.warp.Warp-Stable",
+                               "com.microsoft.VSCode","com.todesktop.230313mzl4w4u92","dev.zed.Zed","com.anthropic.claudefordesktop"]
+                let preferred=AgentBoard.validBundle(wanted) ? [wanted] : []
+                let running=fallbacks.filter {!NSRunningApplication.runningApplications(withBundleIdentifier:$0).isEmpty}
+                guard let bundle=(preferred+running).first,
+                      let url=NSWorkspace.shared.urlForApplication(withBundleIdentifier:bundle) else {
+                    throw AppIssue("Shishi could not tell which app this session runs in. Switch to it yourself.")
+                }
+                // The exact tab, pane or folder when the hook recorded it; otherwise the app itself.
+                let place=SessionFocus.Place(body["terminal"],cwd:body["cwd"])
+                let found=SessionFocus.focus(bundle:bundle,place:place,app:url)
+                reply(id,true,["app":FileManager.default.displayName(atPath:url.path).replacingOccurrences(of:".app",with:""),"found":found])
+            case "dismissAgent":
+                guard let key=body["key"] as? String else {throw AppIssue("The agent ID is missing.")}
+                inboxQueue.async {
+                    self.agentBoard.dismiss(key)
+                    self.scanAgents(force:true)
+                    DispatchQueue.main.async {self.reply(id,true,true)}
+                }
+            case "appearance":
+                if let choice=body["value"] as? String, Host.appearances.contains(choice) {
+                    UserDefaults.standard.set(choice,forKey:"ShiShiAppearance")
+                    applyAppearance(choice)
+                }
+                reply(id,true,UserDefaults.standard.string(forKey:"ShiShiAppearance") ?? "system")
+            case "menuBar":
+                if let choice=body["value"] as? Bool {menuBar.enabled=choice}
+                reply(id,true,menuBar.enabled)
+            case "claudeCode":
+                providers.claudeCode(body["action"] as? String ?? "status",approvals:body["approvals"] as? Bool == true) { [weak self] result in
+                    switch result {
+                    case .success(let state):self?.reply(id,true,state)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "notion":
+                providers.notion(body,window:window) { [weak self] result in
+                    switch result {
+                    case .success(let state):self?.reply(id,true,state)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "openNotion":
+                let page=(body["page"] as? String ?? "").replacingOccurrences(of:"-",with:"").lowercased()
+                guard page.count==32, page.allSatisfy({$0.isASCII && $0.isHexDigit}),
+                      let url=URL(string:"https://www.notion.so/"+page), NSWorkspace.shared.open(url) else {
+                    throw AppIssue("This Notion page could not be opened.")
+                }
+                reply(id,true,true)
+            case "latestSize": reply(id,true,true)
+            case "cardSize":
+                if let height=body["height"] as? Double, height.isFinite {card.setContentHeight(CGFloat(height))}
+                reply(id,true,true)
+            case "settings":
+                if let on=body["hotkeys"] as? Bool {
+                    UserDefaults.standard.set(on,forKey:"ShiShiHotkeys")
+                    takenShortcuts=hotkeys.setEnabled(on)
+                }
+                if let on=body["usage"] as? Bool {UserDefaults.standard.set(on,forKey:"ShiShiShowUsage")}
+                if let on=body["keepAwake"] as? Bool {
+                    UserDefaults.standard.set(on,forKey:"ShiShiKeepAwake")
+                    keepAwake.update(working:on && agentsWorking)
+                }
+                reply(id,true,settingsState())
+            case "reminders","calendarEvents":
+                let handle:EventKitBridge.Reply = { [weak self] result in
+                    switch result {
+                    case .success(let value):self?.reply(id,true,value)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+                if op=="reminders" {eventKit.reminders(body,reply:handle)} else {eventKit.events(body,reply:handle)}
+            case "checkUpdate":
+                // On by default and can be turned off. At most once a day; "force" is the Check Now button.
+                let defaults=UserDefaults.standard
+                if let on=body["enabled"] as? Bool {defaults.set(on,forKey:"ShiShiCheckUpdates")}
+                let enabled=defaults.object(forKey:"ShiShiCheckUpdates") as? Bool ?? true
+                let current=Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+                let last=defaults.double(forKey:"ShiShiUpdateCheckedAt")
+                guard enabled, body["force"] as? Bool == true || Date().timeIntervalSince1970-last > 86400 else {
+                    reply(id,true,["enabled":enabled,"current":current,"skipped":true]);break
+                }
+                Updates.check(current:current) { [weak self] result in
+                    switch result {
+                    case .success(var value):
+                        defaults.set(Date().timeIntervalSince1970,forKey:"ShiShiUpdateCheckedAt")
+                        value["enabled"]=enabled
+                        self?.reply(id,true,value)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "openRelease":
+                guard let link=body["url"] as? String, link.hasPrefix("https://github.com/shen25308/small-tool/releases"),
+                      link.count<300, let url=URL(string:link) else {throw AppIssue("That is not a Shishi release page.")}
+                NSWorkspace.shared.open(url)
+                reply(id,true,true)
+            case "chooseFolder":
+                AgentLaunch.chooseFolder { [weak self] path in self?.reply(id,true,path ?? "") }
+            case "startAgent":
+                let used=try AgentLaunch.start(agent:body["agent"] as? String ?? "",folder:body["folder"] as? String ?? "",
+                                               prompt:body["prompt"] as? String ?? "",task:body["task"] as? String ?? "",
+                                               terminal:body["terminal"] as? String ?? "Terminal",support:file.deletingLastPathComponent())
+                reply(id,true,used)
+            case "openFile":
+                guard SessionFocus.openFile(body["path"] as? String ?? "",cwd:body["cwd"] as? String ?? "",bundle:body["app"] as? String ?? "") else {
+                    throw AppIssue("That file is no longer in the session's folder.")
+                }
+                reply(id,true,true)
+            case "openIssue":
+                // Only an issue page on github.com, nothing else.
+                guard let link=body["url"] as? String, link.count<300,
+                      link.range(of:#"^https://github\.com/[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}/issues/[0-9]{1,9}$"#,options:.regularExpression) != nil,
+                      let url=URL(string:link) else {throw AppIssue("That is not a GitHub issue link.")}
+                NSWorkspace.shared.open(url)
+                reply(id,true,true)
+            case "githubIssues":
+                providers.githubIssues(body) { [weak self] result in
+                    switch result {
+                    case .success(let value):self?.reply(id,true,value)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "usage":
+                providers.usage { [weak self] result in
+                    switch result {
+                    case .success(let report):self?.reply(id,true,report)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+            case "alerts":
+                alerts.update(body)
+                reply(id,true,alerts.wire)
+            case "testAlert":
+                alerts.test()
+                reply(id,true,true)
+            case "answerApproval":
+                guard let request=body["request"] as? String, let behavior=body["behavior"] as? String else {throw AppIssue("The request is missing.")}
+                let board=approvals
+                inboxQueue.async {
+                    let answered=board.answer(request,behavior:behavior)
+                    self.scanApprovals()
+                    DispatchQueue.main.async {
+                        if answered {self.reply(id,true,true)}
+                        else {self.reply(id,false,"Claude Code is no longer waiting for this answer. Check the terminal.")}
+                    }
+                }
+            case "approvalWait":
+                if let seconds=body["value"] as? Int {approvals.wait=seconds}
+                reply(id,true,approvals.wait)
+            case "hookLog":
+                // The last hook deliveries, newest first: event names and outcomes only, never content.
+                let log=file.deletingLastPathComponent().appendingPathComponent("HookLog.jsonl")
+                let lines=((try? String(contentsOf:log,encoding:.utf8)) ?? "").split(separator:"\n").suffix(100)
+                let rows=lines.reversed().compactMap { (try? JSONSerialization.jsonObject(with:Data($0.utf8))) as? [String:Any] }
+                    .map { row in ["time":row["time"] as? Double ?? 0,"source":String((row["source"] as? String ?? "").prefix(40)),
+                                   "event":String((row["event"] as? String ?? "").prefix(40)),"session":String((row["session"] as? String ?? "").prefix(8)),
+                                   "outcome":String((row["outcome"] as? String ?? "").prefix(160))] as [String:Any] }
+                reply(id,true,rows)
+            case "cardPrefs":
+                // Window behaviour of the card is a set of explicit choices.
+                if let snap=body["snap"] as? Bool {card.snapsToCorners=snap}
+                if let spaces=body["allSpaces"] as? Bool {card.allSpaces=spaces}
+                if let onTop=body["pinned"] as? Bool, onTop != pinned {togglePinned()}
+                if body["fit"] as? Bool == true {card.fitHeightToContent()}
+                reply(id,true,["snap":card.snapsToCorners,"allSpaces":card.allSpaces,"pinned":pinned,"userSized":card.userSized])
+            case "pin":
+                if let value=body["value"] as? Bool, value != pinned {togglePinned()}
+                reply(id,true,pinned)
+            case "nativeMenu":
+                // A system menu can extend past the small card, unlike anything drawn inside the page.
+                guard let items=body["items"] as? [[String:Any]] else {throw AppIssue("The menu is empty.")}
+                let menu=NSMenu()
+                menu.autoenablesItems=false
+                let choice=MenuChoice()
+                for item in items.prefix(40) {
+                    if item["separator"] as? Bool == true {menu.addItem(.separator());continue}
+                    let entry=NSMenuItem(title:String((item["title"] as? String ?? "").prefix(80)),action:#selector(MenuChoice.pick(_:)),keyEquivalent:"")
+                    entry.target=choice
+                    entry.representedObject=item["id"] as? String ?? ""
+                    entry.state=item["checked"] as? Bool == true ? .on : .off
+                    entry.isEnabled=item["enabled"] as? Bool ?? true
+                    menu.addItem(entry)
+                }
+                menu.popUp(positioning:nil,at:NSEvent.mouseLocation,in:nil)
+                reply(id,true,choice.chosen)
             case "compact": setCompact(body["value"] as? Bool == true);reply(id,true,true)
             case "extract":
+                guard hasModel, let model=modelURL else {throw AppIssue("This light download leaves out the offline model that finds tasks in messages. Download it from Connections, or use the full version.")}
                 guard !processing else{throw AppIssue("Shishi is still extracting tasks from the previous message. Try again in a moment.")}
                 guard let text=body["text"] as? String else{throw AppIssue("Enter a message first.")}
                 processing=true
                 let resources=self.resources
-                let runtime=Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/Inference")
+                let runtime=inference
                 DispatchQueue.global(qos:.userInitiated).async {
-                    let result=Result{try Engine.extract(text,resources:resources,runtime:runtime)}
+                    let result=Result{try Engine.extract(text,resources:resources,model:model,runtime:runtime)}
                     DispatchQueue.main.async {
                         self.processing=false
                         switch result {
@@ -610,6 +963,41 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             }
         } catch { reply(id,false,error.localizedDescription) }
     }
+}
+// `ShiShi --check-data` is read-only: it loads the saved workspace, Codex inbox and result receipts through the
+// same decoders the app uses, prints what it found as JSON, and exits. It never writes to the data files.
+if CommandLine.arguments.contains("--check-data") {
+    let support=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("ShiShiDesk")
+    var report:[String:Any]=["support":support.path,"version":Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+                             "commit":Bundle.main.infoDictionary?["ShishiSourceCommit"] as? String ?? "unknown"]
+    var healthy=true
+    let workspaceFile=support.appendingPathComponent("Workspace.json")
+    if let bytes=try? Data(contentsOf:workspaceFile) {
+        do {
+            let workspace=try JSONDecoder().decode(Workspace.self,from:bytes)
+            try workspace.validate()
+            report["workspace"]=["lists":workspace.projects.count,"tasks":workspace.tasks.count,
+                                 "open":workspace.tasks.filter{!$0.done}.count,"ids":workspace.tasks.map(\.id)] as [String:Any]
+        } catch {healthy=false;report["workspace"]=["error":String(describing:error)] as [String:Any]}
+    } else {report["workspace"]="none"}
+    if FileManager.default.fileExists(atPath:support.appendingPathComponent("CodexInbox.json").path) {
+        do {
+            let notices=try CodexInbox(root:FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex"),
+                                       store:support.appendingPathComponent("CodexInbox.json")).storedNotices()
+            report["codex"]=["notices":notices.count,"unread":notices.filter{!$0.read}.count,"ids":notices.map(\.id)] as [String:Any]
+        } catch {healthy=false;report["codex"]=["error":String(describing:error)] as [String:Any]}
+    } else {report["codex"]="none"}
+    if FileManager.default.fileExists(atPath:support.appendingPathComponent("Incoming").path) {
+        do {
+            let notices=try ConnectorInbox(directory:support.appendingPathComponent("Incoming",isDirectory:true)).scan().notices
+            report["results"]=["notices":notices.count,"unread":notices.filter{!$0.read}.count,
+                               "archived":notices.filter(\.archived).count,"ids":notices.map(\.id)] as [String:Any]
+        } catch {healthy=false;report["results"]=["error":String(describing:error)] as [String:Any]}
+    } else {report["results"]="none"}
+    report["healthy"]=healthy
+    let out=(try? JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys])) ?? Data()
+    print(String(decoding:out,as:UTF8.self))
+    exit(healthy ? 0 : 1)
 }
 let app=NSApplication.shared
 app.setActivationPolicy(.regular)

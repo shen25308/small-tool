@@ -1,0 +1,134 @@
+/* Inbox, Projects and Plan as main views (INBOX-LAYOUT, PROJECT-MODEL). */
+.alt-view { height: 100%; min-height: 0 }
+.alt-page { display: flex; flex-direction: column; height: 100%; min-height: 0 }
+.alt-head { flex: none; padding: 6px 28px 12px }
+.alt-head h1 { margin: 0; font: 700 26px/1.15 var(--sans); letter-spacing: -.02em; color: var(--ink) }
+.alt-head p { margin: 3px 0 0; color: var(--secondary); font-size: 13px }
+.alt-page .inbox-view { flex: 1; height: auto }
+.alt-page .projects-view { flex: 1; overflow-y: auto }
+#board[hidden], .alt-view[hidden] { display: none !important }
+.nav-heading { margin: 10px 8px 2px; color: var(--muted); font: 600 12px/1.4 var(--sans); letter-spacing: .02em; text-transform: uppercase }
+.area-name { margin: 8px 8px 2px; color: var(--muted); font: 600 12px/1.4 var(--sans) }
+
+/* Inbox: list beside a reader. */
+.inbox-view { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); height: 100%; min-height: 0; border-top: .5px solid var(--line) }
+.inbox-list-pane { display: flex; flex-direction: column; min-height: 0; border-right: .5px solid var(--line); background: var(--canvas, transparent) }
+.inbox-list-tools { display: flex; gap: 6px; padding: 10px 10px 6px }
+.inbox-list-tools select { flex: none; max-width: 46% }
+.inbox-list-tools input { flex: 1; min-width: 0 }
+.inbox-list-meta { display: flex; align-items: center; gap: 8px; min-height: 22px; padding: 0 12px 6px; color: var(--secondary); font-size: 12px }
+.inbox-list-meta span { margin-right: auto }
+.inbox-items { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 12px; display: flex; flex-direction: column; gap: 6px }
+.inbox-item { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 11px; border-radius: 9px; text-align: left; background: var(--paper);
+  box-shadow: 0 0 0 .5px var(--line); color: var(--ink) }
+.inbox-item:hover { background: var(--hover) }
+.inbox-item[aria-selected="true"] { box-shadow: 0 0 0 1.5px var(--action) }
+.inbox-item-top { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary) }
+.inbox-item-top b { color: var(--ink); font-weight: 600 }
+.inbox-item-top time { margin-left: auto; font-variant-numeric: tabular-nums }
+.inbox-item-title { font: 600 13.5px/1.3 var(--sans) }
+.inbox-item.unread .inbox-item-title { font-weight: 700 }
+.inbox-item-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--secondary); font-size: 12.5px; line-height: 1.4 }
+.inbox-item-foot { display: flex; align-items: center; gap: 0; min-height: 16px; color: var(--secondary); font-size: 12px }
+.unread-dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: var(--action) }
+.source-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--source-color, var(--muted)) }
+.inbox-reader { min-width: 0; min-height: 0; overflow-y: auto; outline: none }
+.reader-inner { max-width: 760px; padding: 18px 28px 40px }
+.reader-back { display: none; margin-bottom: 10px }
+.reader-meta { display: flex; align-items: center; gap: 10px; color: var(--secondary); font-size: 12px }
+.reader-meta time { margin-left: auto }
+.source-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 7px; background: var(--control); color: var(--ink); font: 600 12px/1.4 var(--sans) }
+.reader-title { margin: 12px 0 4px; font: 700 22px/1.25 var(--sans); letter-spacing: -.01em }
+.reader-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--secondary); font-size: 12.5px }
+.reader-verdict { display: flex; flex-direction: column; gap: 2px; margin: 14px 0 10px; padding: 10px 12px; border-radius: 9px; box-shadow: 0 0 0 .5px var(--line); background: var(--paper) }
+.reader-verdict b { font-size: 13px }
+.reader-verdict span, .reader-verdict small { color: var(--secondary); font-size: 12.5px }
+.reader-verdict.tone-done b { color: var(--success) }
+.reader-verdict.tone-review b { color: var(--warning) }
+.reader-verdict.tone-blocked b { color: var(--danger) }
+.reader-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px }
+.reader-tabs { display: flex; gap: 20px; margin: 6px 0 14px; border-bottom: .5px solid var(--line) }
+.reader-tabs button { margin-bottom: -1px; padding: 6px 0 7px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--secondary); font: 500 13px/1.3 var(--sans) }
+.reader-tabs button[aria-selected="true"] { border-bottom-color: var(--blue); color: var(--blue); font-weight: 600 }
+.reader-tabs button:hover { color: var(--ink) }
+.reader-body h3 { margin: 14px 0 6px; font-size: 13px }
+.reader-points { margin: 0; padding-left: 20px; line-height: 1.55 }
+.reader-files { display: flex; flex-wrap: wrap; gap: 6px }
+.reader-files code { padding: 2px 7px; border-radius: 6px; background: var(--control); font-size: 12px }
+.reader-quote { margin: 0; padding-left: 12px; border-left: 2px solid var(--line); color: var(--secondary) }
+.reader-original { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.55 var(--sans); user-select: text }
+.reader-text { white-space: pre-wrap; line-height: 1.55 }
+.reader-empty { display: grid; place-items: center; align-content: center; gap: 8px; height: 100%; min-height: 240px; color: var(--secondary) }
+.reader-empty .symbol { width: 28px; height: 28px; opacity: .5 }
+/* 1000 px and narrower: list, then reader with a way back. */
+.inbox-view.narrow { grid-template-columns: minmax(0, 1fr) }
+.inbox-view.narrow .inbox-reader { display: none }
+.inbox-view.narrow.showing-reader .inbox-list-pane { display: none }
+.inbox-view.narrow.showing-reader .inbox-reader { display: block }
+.inbox-view.narrow .reader-back { display: inline-flex; align-items: center; gap: 4px }
+.inbox-view.narrow .inbox-list-pane { border-right: 0 }
+
+/* Projects. */
+.projects-view { padding: 6px 28px 40px }
+.projects-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px }
+.projects-head .hint { flex: 1; margin: 0 }
+.projects-head .actions { margin: 0 }
+.project-area { margin-top: 14px }
+.project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px }
+.project-card { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 10px; text-align: left; background: var(--paper); box-shadow: 0 0 0 .5px var(--line); color: var(--ink) }
+.project-card:hover { background: var(--hover) }
+.project-card-head { display: flex; align-items: center; gap: 6px }
+.project-card-head b { font-size: 14px }
+.project-card-count { margin-left: auto; color: var(--secondary); font-size: 12px }
+.project-card-goal { color: var(--ink); font-size: 12.5px }
+.project-card-meta { color: var(--secondary); font-size: 12px }
+.project-tabs { display: inline-flex; margin: 0 0 10px }
+.project-goal { margin: -4px 0 10px; color: var(--secondary); font-size: 13px }
+.project-notes textarea { width: 100%; min-height: 280px; padding: 12px; border-radius: 9px; font: 14px/1.55 var(--sans); resize: vertical }
+.project-results { padding: 0 }
+@media (max-width: 720px) { .reader-inner, .projects-view { padding-left: 16px; padding-right: 16px } }
+
+/* The sidebar stays down to 720 px; narrower, it slides over the content from a toolbar button. */
+#sidebarToggle { display: none }
+@media (max-width: 720px) {
+  #shell { grid-template-columns: minmax(0, 1fr) }
+  #shell > aside { position: fixed; z-index: 30; inset: 0 auto 0 0; width: min(280px, 86vw); transform: translateX(-102%); transition: transform .18s ease;
+    background: var(--sidebar); box-shadow: var(--shadow) }
+  body.sidebar-open #shell > aside { transform: none }
+  #sidebarToggle { display: inline-grid }
+}
+/* A phone-narrow window (the workspace opened from the card): the agent capsule joins the toolbar row instead of
+   floating over it, and "Back to card" keeps only its arrow, so every control stays visible and clickable. */
+@media (max-width: 480px) {
+  .toolbar { gap: 4px; padding-left: 8px; padding-right: 8px }
+  .toolbar .island { position: relative; left: auto; top: auto; transform: none; flex: 0 1 auto; min-width: 0; --island-max: 150px }
+  #workspaceReturn { padding-right: 3px; font-size: 0 }
+  #workspaceReturn .symbol { font-size: 13px }
+}
+/* The Inbox scrolls inside its two panes, never as a whole page. */
+.content:has(> .alt-view:not([hidden])) { display: flex; flex-direction: column; overflow: hidden }
+.content > .alt-view:not([hidden]) { flex: 1; height: auto }
+.inbox-item-foot > span:not(:empty) + span:not(:empty):not(.unread-dot)::before { content: "·"; margin: 0 6px }
+.inbox-item-status.tone-done { color: var(--success) }
+.inbox-item-status.tone-review { color: var(--warning) }
+.inbox-item-status.tone-blocked { color: var(--danger) }
+
+/* Plan: a week of days side by side. */
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(150px, 1fr)); gap: 8px; overflow-x: auto; padding-bottom: 8px }
+.week-day { min-width: 0; margin: 0; padding: 8px 6px; border-radius: 10px; box-shadow: 0 0 0 .5px var(--line); background: var(--paper) }
+.week-day .row { flex-wrap: wrap }
+.week-day .row-trail { flex-basis: 100%; margin: -4px 0 0 30px; max-width: none }
+.week-day .row-actions, .week-day .no-tag, .week-day .no-deadline { display: none }
+.week-day .day-head { margin-bottom: 4px }
+@media (max-width: 1000px) { .week-grid { grid-template-columns: repeat(7, minmax(160px, 1fr)) } }
+
+/* SOURCE-TINT: a source's colour as a very light background (default), or only as a dot and stripe. The tint is
+   mixed into the opaque surface, so text contrast is measured against a solid colour. */
+.has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 9%, var(--paper)) }
+@media (prefers-color-scheme: dark) { .has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 16%, var(--paper)) } }
+html.dark-forced .has-source-color { --source-tint: color-mix(in srgb, var(--source-color) 16%, var(--paper)) }
+.inbox-item.has-source-color, .source-chip.has-source-color { background: var(--source-tint) }
+.inbox-item.has-source-color { box-shadow: inset 3px 0 0 var(--source-color), 0 0 0 .5px var(--line) }
+.inbox-item.has-source-color[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--source-color), 0 0 0 1.5px var(--action) }
+html.source-accent .has-source-color { --source-tint: var(--paper) }
+html.source-accent .source-chip.has-source-color { background: var(--control) }

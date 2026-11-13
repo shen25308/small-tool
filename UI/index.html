@@ -10,51 +10,107 @@
   <link rel="stylesheet" href="results.css">
   <link rel="stylesheet" href="board.css">
   <link rel="stylesheet" href="task-list.css">
-  <title>My Notes · Shishi</title>
+  <link rel="stylesheet" href="live.css">
+  <link rel="stylesheet" href="card.css">
+  <link rel="stylesheet" href="quiet.css">
+  <link rel="stylesheet" href="views.css">
+  <title>Shishi</title>
 </head>
 <body>
   <div id="shell">
     <aside aria-label="Sidebar">
-      <h2 class="side-title">My notes</h2>
-      <nav id="nav" aria-label="Lists"></nav>
-      <div class="side-heading"><h2>Projects</h2><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
-      <nav id="projects" aria-label="Projects"></nav>
-      <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
-      <nav id="labels" aria-label="Tags"></nav>
+      <div class="side-scroll">
+        <button id="sideSearch" class="side-search" title="Search and commands (⌘K)"><span class="symbol i-search" aria-hidden="true"></span>Search<kbd>⌘K</kbd></button>
+        <nav id="nav" class="smart-grid" aria-label="Lists"></nav>
+        <div class="side-heading"><h2>Projects</h2><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
+        <nav id="projects" aria-label="Projects"></nav>
+        <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
+        <nav id="labels" aria-label="Tags"></nav>
+        <div class="side-heading" id="filtersHead"><h2>Filters</h2><button id="newFilter" title="New filter" aria-label="New filter"><span class="symbol plus" aria-hidden="true"></span></button></div>
+        <nav id="filters" aria-label="Filters"></nav>
+      </div>
+      <section id="agentDock" class="agent-dock" aria-label="Agents">
+        <h2>Agents</h2>
+        <div id="agentList"></div>
+        <div id="agentUsage" class="agent-usage" hidden></div>
+      </section>
     </aside>
     <main>
+      <header class="toolbar">
+        <button id="sidebarToggle" class="tool" aria-label="Show sidebar" aria-expanded="false" title="Show sidebar"><span class="symbol i-list" aria-hidden="true"></span></button>
+        <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to card</button>
+        <div id="island" class="island mode-idle" role="button" tabindex="0" aria-label="Agents" aria-expanded="false"></div>
+        <div class="toolbar-tools">
+          <button id="focusButton" class="tool" title="Focus timer" aria-label="Focus timer" aria-haspopup="dialog"><span class="symbol i-timer" aria-hidden="true"></span><span id="focusTime" hidden></span></button>
+          <button id="inboxButton" class="tool" title="Inbox" aria-label="Inbox"><span class="symbol inbox" aria-hidden="true"></span><span id="inboxBadge" hidden></span></button>
+          <button id="searchTasks" class="tool" aria-label="Search and commands" title="Search and commands (⌘K)"><span class="symbol i-search" aria-hidden="true"></span></button>
+          <button id="boardMore" class="tool" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span class="symbol i-ellipsis" aria-hidden="true"></span></button>
+        </div>
+      </header>
       <div class="content">
-        <header class="mountain-cover">
-          <div class="mountain-art" aria-hidden="true"><i class="back-range"></i><i class="middle-range"></i><i class="front-hills"></i></div>
-          <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button>
-          <div class="cover-tools">
-            <button id="inboxButton" title="Open inbox"><span>Inbox</span><span id="inboxBadge" hidden></span></button>
-            <button id="searchTasks" aria-label="Search tasks" title="Search tasks (⌘F)"><span class="search-icon" aria-hidden="true"></span></button>
-            <button id="boardMore" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span aria-hidden="true">•••</span></button>
-          </div>
-        </header>
-        <div class="board-content">
+        <div class="board-content" id="board">
+          <section id="workspaceApprovals" class="approvals" aria-live="assertive" hidden></section>
           <section class="page-heading">
-            <div class="heading-line"><span id="viewIcon" aria-hidden="true"></span><h1 id="pageTitle">Today</h1></div>
+            <div class="heading-line"><h1 id="pageTitle">Today</h1><span id="pageCount" data-count-key="page"></span>
+              <span id="dayRing" class="progress-ring" role="img" hidden><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle class="ring-fill" cx="18" cy="18" r="15" pathLength="100"/></svg></span></div>
             <div id="dateline"></div>
-            <button id="wrapUp" title="Review today's tasks">Wrap up</button>
+            <button id="wrapUp" class="secondary" title="Review today's tasks">Wrap Up</button>
           </section>
-          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result">×</button></div><div id="latestCard"></div></section></div>
-          <div class="listhead"><div class="reader-only"><h2 id="sectionTitle"></h2><span id="count"></span></div><label class="sort-menu"><span aria-hidden="true">⇅</span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual order</option><option value="priority">Priority</option><option value="deadline">Deadline</option></select></label></div>
+          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result"><span class="symbol close-icon" aria-hidden="true"></span></button></div><div id="latestCard"></div></section></div>
+          <div class="listhead"><div class="menu-segment layout-toggle" id="layoutToggle" hidden><button type="button" data-layout="list" aria-pressed="true">List</button><button type="button" data-layout="matrix" aria-pressed="false">Matrix</button></div><label class="sort-menu"><span class="symbol i-sort" aria-hidden="true"></span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual</option><option value="priority">Priority</option><option value="deadline">Deadline</option><option value="title">Title</option></select></label></div>
           <div id="tasks"></div><div id="pool"></div>
         </div>
+        <div id="altView" class="alt-view" hidden></div>
       </div>
     </main>
   </div>
+  <section id="card" aria-label="Today card">
+    <div class="card-inner">
+      <div class="card-island-slot"></div>
+      <section id="cardApprovals" class="approvals" aria-live="assertive" hidden></section>
+      <section id="cardReport" class="card-report" aria-live="polite" hidden></section>
+      <section id="cardWelcome" class="card-welcome" hidden>
+        <b>Know when Claude Code is done</b>
+        <p>When a session finishes or needs you, a short report appears here, so you can stay in your work and decide whether to look.</p>
+        <div class="report-actions"><button type="button" class="primary" data-welcome="connect">Connect Claude Code</button><button type="button" class="secondary" data-welcome="demo">Try a demo</button><button type="button" class="mini-link" data-welcome="close">Not now</button></div>
+      </section>
+      <header class="card-head">
+        <div class="card-date"><span id="cardWeekday" class="card-weekday"></span><div class="card-date-line"><b id="cardDay" class="card-day"></b><span id="cardSummary" class="card-summary"></span></div><span id="cardNextEvent" class="card-next-event" hidden></span></div>
+        <span id="cardRing" class="progress-ring card-ring" role="img"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle class="ring-fill" cx="18" cy="18" r="15" pathLength="100"/></svg><span class="ring-label"></span></span>
+      </header>
+      <div id="cardTasks" class="card-tasks"></div>
+      <button type="button" id="cardMore" class="card-more" hidden></button>
+      <div class="card-add-area">
+      <div class="card-foot">
+        <form id="cardAdd" class="card-add"><span class="card-add-icon"><span class="symbol plus" aria-hidden="true"></span></span><input id="cardAddInput" maxlength="240" autocomplete="off" placeholder="Add a task" title="Dates and times can be typed in English or Chinese" aria-label="Add a task for today"></form>
+        <button type="button" id="cardInbox" class="card-inbox" title="Inbox" aria-label="Inbox"><span class="symbol inbox" aria-hidden="true"></span><span id="cardInboxCount"></span></button>
+        <button type="button" id="cardPin" class="card-tool" aria-pressed="true" aria-label="Keep above other windows"><span class="symbol pin" aria-hidden="true"></span></button>
+        <button type="button" id="cardExpand" class="card-tool" title="Open full workspace" aria-label="Open full workspace"><span class="symbol expand" aria-hidden="true"></span></button>
+      </div>
+      <div id="cardAddHint" class="quick-hint card-add-hint" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
   <div id="boardMenu" popover="auto" aria-label="Workspace options">
-    <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture tasks from a message</button>
-    <button id="manual"><span class="symbol plus" aria-hidden="true"></span>Add task</button>
-    <button id="peekLatest"><span class="symbol inbox" aria-hidden="true"></span>Latest result</button>
-    <button id="edgeToggle" aria-pressed="false"><span class="symbol edge" aria-hidden="true"></span><span>Show result panel</span></button>
+    <button id="manual"><span class="symbol plus" aria-hidden="true"></span>New Task<span class="shortcut">⌘N</span></button>
+    <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture Tasks from a Message</button>
+    <button id="downloadModelMenu" hidden><span class="symbol i-download" aria-hidden="true"></span>Download Offline Model…</button>
+    <div class="menu-divider"></div>
+    <button id="peekLatest"><span class="symbol i-bolt" aria-hidden="true"></span>Latest Result</button>
+    <button id="openConnectors"><span class="symbol i-gear" aria-hidden="true"></span>Settings…<span class="shortcut">⌘,</span></button>
+    <div class="menu-divider"></div>
+    <button id="exportTasks"><span class="symbol i-copy" aria-hidden="true"></span>Copy Tasks as Markdown</button>
+    <button id="backupExport"><span class="symbol i-download" aria-hidden="true"></span>Back Up to File…</button>
+    <button id="backupImport"><span class="symbol i-upload" aria-hidden="true"></span>Import Backup…</button>
     <button id="pin" aria-label="Switch to compact view">Compact view</button>
   </div>
   <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
+  <dialog id="palette" aria-label="Search and commands">
+    <div class="palette-field"><span class="symbol i-search" aria-hidden="true"></span><input id="paletteInput" type="text" placeholder="Search tasks, lists and commands" autocomplete="off" spellcheck="false" aria-controls="paletteList"></div>
+    <div id="paletteList" role="listbox"></div>
+  </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script>
+  <script src="task-logic.js"></script><script src="notion-sync.js"></script><script src="issue-sync.js"></script><script src="projects.js"></script><script src="motion.js"></script>
+  <script src="app.js"></script><script src="day-picker.js"></script><script src="backup.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="inbox-view.js"></script><script src="projects-view.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="approvals.js"></script><script src="agent-tasks.js"></script><script src="filters.js"></script><script src="notion-ui.js"></script><script src="apple.js"></script>
 </body>
 </html>

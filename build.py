@@ -1,5 +1,6 @@
 """Build the native app with Swift and reuse local, verified inference assets."""
 import argparse
+import plistlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--assets', type=Path, default=HERE.parent/'Shishi.app',
                     help='Existing app containing the licensed offline model and native runtime')
 parser.add_argument('--output', type=Path, default=HERE/'build'/'Shishi.app')
+parser.add_argument('--lite', action='store_true',
+                    help='Leave out the 1.1 GB offline model. The small inference engine stays, so the app can download and verify the model later.')
 parser.add_argument('--python-archive', type=Path,
                     help='Pinned CPython standalone archive, needed only when upgrading an older assets bundle')
 args = parser.parse_args()
@@ -18,7 +21,7 @@ assets = args.assets.resolve()/'Contents'
 dest = args.output.resolve()
 if (dest/'Contents') == assets or dest.exists():
     raise SystemExit('Choose an unused output path. The supplied app is never overwritten.')
-for file in ['Resources/assistant.gguf','Frameworks/Inference/llama-completion','Resources/Licenses']:
+for file in (['Frameworks/Inference/llama-completion','Resources/Licenses'] + ([] if args.lite else ['Resources/assistant.gguf'])):
     if not (assets/file).exists():
         raise SystemExit(f'Missing offline asset: {file}')
 dest.parent.mkdir(parents=True,exist_ok=True)
@@ -38,16 +41,25 @@ with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
         if not args.python_archive:
             raise SystemExit('Supply --python-archive with the official archive pinned in Release/prepare_runtime.py.')
         subprocess.run([sys.executable,str(HERE/'Release/prepare_runtime.py'),str(args.python_archive.resolve()),str(contents.resolve())],check=True)
-    shutil.copyfile(assets/'Resources'/'assistant.gguf',res/'assistant.gguf')
+    if not args.lite:
+        shutil.copyfile(assets/'Resources'/'assistant.gguf',res/'assistant.gguf')
     shutil.copytree(HERE/'UI',res/'UI')
-    for folder in ['Connectors','GrokBuild','Mail']:
+    for folder in ['Connectors','ClaudeCode','GrokBuild','Mail']:
         shutil.copytree(HERE/folder,res/folder,ignore=shutil.ignore_patterns('__pycache__','*.swift','*.pyc'))
     for name in ['AppIcon.icns','tasks.gbnf']:
         shutil.copy2(HERE/name,res/name)
-    shutil.copy2(HERE/'Info.plist',contents/'Info.plist')
+    # Stamp the exact source commit into the bundle so a build can be matched to its documentation.
+    with open(HERE/'Info.plist','rb') as source:
+        info = plistlib.load(source)
+    git = lambda *a: subprocess.run(['git','-C',str(HERE),*a],capture_output=True,text=True).stdout.strip()
+    info['ShishiSourceCommit'] = git('rev-parse','HEAD') or 'unknown'
+    info['ShishiSourceDirty'] = bool(git('status','--porcelain','--untracked-files=no'))
+    info['ShishiVariant'] = 'light' if args.lite else 'full'
+    with open(contents/'Info.plist','wb') as target:
+        plistlib.dump(info,target)
     native_sources = [
         'main.swift', 'Engine.swift', 'CodexInbox.swift', 'ConnectorInbox.swift',
-        'EdgeResultsPanel.swift', 'ExternalProviders.swift', 'Mail/MailVault.swift'
+        'ExternalProviders.swift', 'AgentStatus.swift', 'CornerCard.swift', 'ModelDownload.swift', 'Hotkeys.swift', 'Approvals.swift', 'Alerts.swift', 'SessionFocus.swift', 'EventKitBridge.swift', 'AgentLaunch.swift', 'Updates.swift', 'Mail/MailVault.swift'
     ]
     subprocess.run(['xcrun', 'swiftc', '-O', '-target', 'arm64-apple-macos26.0',
                     '-module-cache-path', str(Path(tmp)/'cache'),

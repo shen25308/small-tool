@@ -18,3 +18,87 @@
   --sf-tray: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAQAAAAAYLlVAAADtElEQVR42u2ZTWxUVRTHfzPTjm0d2nGIsdVSrY2lfrCwiQUjbFoDwagIcSEalMCChGgkuBFD1CZiYlKNcWFCTCy60cSPBSQqCKGMkZBoUsBgSQnWqbQC0zZIp3U6b+b9XZRYnZn3MdPXEOM7b/feuff87j33no+8gLi+EsQH8AF8AB/AB/ABrrNUuAZtpYkaAo6aJmmGGSTnHUANT7CL2wm6MA8gTEZ4m48wXGk7PLV6TUkZKk2yGtebijrO7rgD9TzDTmoxOcVRLiMXzorxMMuI8TwZ3uGqvXrAdsZFrOdVWjDYx17GyLhyQZjFbGYbYS7wEoe4Uq4Lwlqt05Km9amanDfzX0+jPlRG0k96XNV2mtafKtWuI8oqoz7dXaJ5hFoU14xyOq4VClnrWcWBAPeyjnbgEh8zWMYF/4VeRoBlbKDB5v5YkDWrRwlJw+pWpIz1I1SjlzUuU6PaobtKc0Gdnla/pCl9obYyzc8u45BSko5pi9Uyir2s1rM6LFMZxbVqHuYRWqXDmpEU11rVuAMIqUv9MjSjM9o0T/MIbVC/ssrqSz2qSjcATdqvtEwNqkdhDwBC6tbvMpXSQbU4A9TqfV2RlNQrutkD87MnqlejkibVqzongC06JymtD3SHR+YRWqr3lJY0pM1OueBJGoA+vmWMiE3CNYtEjmrLqDLCETpYTj1r2GefCwZoJcifJBmzTDzD7OZsHkIFTbxFs2VYu4kGqoA4XWTtAtGvrpJtt2rzxt2ina5GfpcfD8oryZYUuK6KRpdjA24qohfps0iij9FDFcu5Ie99lA4gzet8YlFV7WCb+5JsglHGi375mj1U0cY6PmfsH+Y7WQEYfMVvRcfdyGQpVbEwLW7UEN+QJcgbPEfsb/Mb2UWINHHOWOWc+VbFc2h7eIhbibGbRzjBJPW08QBRxAW6i1xPj8ryOfmZrbzLUqKspAOTCioIk2WIF+hfuL5gTnIcZztb6aSe8LVducgBPuNE3g1fIABI8T0J9tLGbYSZJskACS66LFk9AACDIRKcpJogOdJMl+77+QHMZoQUqf9icyp7gNmtDHkOFrw2o/KdFSw4YDmgkcUeA8SIASLDjP0ZSNBMhDVMcJUpV92ts1RSRxftQJpL+W17PsCP3E+ElUSIMcCEJwBRHqST+4A/OO3UmLTqoDJaGDF0tLDLKMwba/WDpmXI9NB0ToamdFLrC7NUsfb8Tp6ig3uoK8j65UmGJOfZT7xYjxnw/5j4AD6AD+AD+AD/e4C/APHa1xh/wFrWAAAAAElFTkSuQmCC");
   --sf-xmark: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAQAAAAAYLlVAAAEAElEQVR42u2Z32tbZRzGPydJk50mjbRLUcZ+YEdxtWM64nAwL2SIY3TrJlVRFNy1MPwXvPXSG8H7Ck7EtiiKA0U3nQ5Ht1m1rLMX65hsdrVNbZOas+bxIllt7Tk573sS2E2+5zLvj+/7fb7vc57nxBEPNmK0Emgl0EqglYBfpMjikmjaHmlyOP4/+m2yh/304/ELV5hucPM47bzAdrJc4Wd+M0tgHy9xnBKf4XGDVaKztUOKbZyin07OMsykz1ra/HygaUlSSdc1oC4R+cnpiMZVUkVSWe+oe/MYvwr8yVKtEx7mVe4xyUyk03cwwEF2kcRBFPibFTMIJullN2kcOniZP0gxy4olEDFS9PIiebqACmUmuUXRZ6RP4WIa0hmVVQ1Pl3VCrmXxs8prSsXaGn/pqvqU9RvpP71bT2ms1gkVLeqyBrXTeHNHOb2hT1XUqiTptt7XUaUV9xvtf9fvssR5HLLkcMiwl2dYYYl5AyDipMhzkDxurfjjXOQSxYC5geeIaUgjuh9lDWtACYPzd+gxjWuuNq+kaR3QQ8Hj6y2VVp9GNFtbalFTOqndIdt367S+18pa8T/XAbmKBc+Ivx1czHsUKbKVNjqBJGlSwALzgcXP8DpH2E+GGBUW+ISzfMdyPeDq8b1YZoRHgR204bCFk8CdAHasst4r7KELEB43GeUShZCeCcXUVV5ntLyGaRA7rmc9aV4X1ae0nLD160FQjVU8ltjBFjJAnCRJ7uJtOJlDlkGe4xBpYogCPzDKOUpUwpYPf+WKWUboxyETwI7/Zz2Pa3zJhywacaYhudRjR2PWs72GJuxoxXrmTGjKjh4V9lqwXgMQ+LPjqE5rwpz1GoPAjx2LmlPZnPUag6AaRWYYJk4/PYCLC0CFAmP8yJS1brBOoMqOPcTo2cAVtxnjp1DWa7gH7j879ZqKNc6TpDm9pe3hrNcMCKpa7zCHaFun9F0Oc51YFO2YsDYZKXoZIl+bKRzA5SjXSETQjtYQbGQ9T6U1GKJpR4OX0fri5xjkTZ4khQPc4WPeJUWCTsAhwxPMULJrxYSFydqs9S5wnm1UImlHawiCtF5U7WjJhPW0XhTtaNUDYVrPVjta9kC41rPTjtY9YKr1TLWjFQQ2Ws9EO1pCYKf1wrWjNQRRtJ61s26Kw23EWSea4nAbcdbNcLiNOOumOFwjZ31CPabX8BjP87SNwzVy1jEW+H3z9fXrgWfZZ+lw/bXj6AZ2PM4UX+CZJJAhBUCBKU4x4/ttyyRWeY9vKHGMdsAl6bebXwLnSCDKTHCBWxFE1n9R4gYf0c4uMkzwK/+YJfAVokyJb/na0OHWd9ZbeZxHGOOqXwJO62+7VgKtBFoJPOgE/gXQddaXZ55C8QAAAABJRU5ErkJggg==");
 }
+
+/* Line icons drawn for Shishi. They tint through the same mask as the system symbols above. */
+:root {
+  --g-search: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
+  --g-calendar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='3.5'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E");
+  --g-tray: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 13.5l2.2-7.2A2 2 0 0 1 7.6 5h8.8a2 2 0 0 1 1.9 1.3l2.2 7.2v4a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z'/%3E%3Cpath d='M3.5 13.5h4.8l1.2 2.5h5l1.2-2.5h4.8'/%3E%3C/svg%3E");
+  --g-check-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.8'/%3E%3Cpath d='M8.2 12.4l2.6 2.6 5-5.6'/%3E%3C/svg%3E");
+  --g-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 12.6l4.2 4.2 8.8-9.8'/%3E%3C/svg%3E");
+  --g-list: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6.5h11M9 12h11M9 17.5h11'/%3E%3Cpath d='M4.4 6.5h.01M4.4 12h.01M4.4 17.5h.01' stroke-width='2.8'/%3E%3C/svg%3E");
+  --g-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E");
+  --g-clock: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.8'/%3E%3Cpath d='M12 7.2V12l3.2 2'/%3E%3C/svg%3E");
+  --g-timer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='13.5' r='7.5'/%3E%3Cpath d='M12 9.8v3.9M9.5 3h5M18.2 7l1.3-1.3'/%3E%3C/svg%3E");
+  --g-repeat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 2.5l3.5 3.5L17 9.5'/%3E%3Cpath d='M3.5 11V9.5A3.5 3.5 0 0 1 7 6h13.5'/%3E%3Cpath d='M7 21.5L3.5 18 7 14.5'/%3E%3Cpath d='M20.5 13v1.5A3.5 3.5 0 0 1 17 18H3.5'/%3E%3C/svg%3E");
+  --g-note: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 6.5h14M5 12h14M5 17.5h9'/%3E%3C/svg%3E");
+  --g-checklist: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.8 6.8l1.9 1.9 3-3.6M3.8 15.8l1.9 1.9 3-3.6M12.5 7h8M12.5 16h8'/%3E%3C/svg%3E");
+  --g-ellipsis: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='none'%3E%3Ccircle cx='5.5' cy='12' r='1.7'/%3E%3Ccircle cx='12' cy='12' r='1.7'/%3E%3Ccircle cx='18.5' cy='12' r='1.7'/%3E%3C/svg%3E");
+  --g-chevron-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.5 6l6 6-6 6'/%3E%3C/svg%3E");
+  --g-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+  --g-xmark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 6.5l11 11M17.5 6.5l-11 11'/%3E%3C/svg%3E");
+  --g-trash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7'/%3E%3C/svg%3E");
+  --g-flag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 21V4M5.5 4.5h12l-2.6 4 2.6 4h-12'/%3E%3C/svg%3E");
+  --g-terminal: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4.5' width='18' height='15' rx='3.5'/%3E%3Cpath d='M7.5 9.5l3 2.5-3 2.5M13 14.8h3.8'/%3E%3C/svg%3E");
+  --g-bolt: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13 2.8L5 13.5h6l-1 7.7 8-10.7h-6z'/%3E%3C/svg%3E");
+  --g-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8a2.5 2.5 0 0 1 2.5-2.5h3.2l2 2.2H18a2.5 2.5 0 0 1 2.5 2.5v6.3A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5z'/%3E%3C/svg%3E");
+  --g-tag: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 11.8V5a1.5 1.5 0 0 1 1.5-1.5h6.8l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-6.2 6.2a1.5 1.5 0 0 1-2.1 0z'/%3E%3Cpath d='M8 8h.01' stroke-width='2.8'/%3E%3C/svg%3E");
+  --g-copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8.5' y='8.5' width='11.5' height='11.5' rx='2.5'/%3E%3Cpath d='M15.5 8.5V6.5A2.5 2.5 0 0 0 13 4H6.5A2.5 2.5 0 0 0 4 6.5V13a2.5 2.5 0 0 0 2.5 2.5h2'/%3E%3C/svg%3E");
+  --g-arrow-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E");
+  --g-link: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13.8a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.6l-1.2 1.2'/%3E%3Cpath d='M14 10.2a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.6l1.2-1.2'/%3E%3C/svg%3E");
+  --g-filter: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round'%3E%3Cpath d='M4 7h16M7 12h10M10 17h4'/%3E%3C/svg%3E");
+  --g-moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z'/%3E%3C/svg%3E");
+  --g-someday: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='4.5' width='17' height='4.5' rx='1'/%3E%3Cpath d='M5 9v9.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4'/%3E%3C/svg%3E");
+  --g-gear: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.9a7.6 7.6 0 0 0-2.6-1.5L14 2.4h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.4l-2.4-.9-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4.9 2-3.4z'/%3E%3C/svg%3E");
+  --g-sort: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 4.5v15M3.8 8.2l3.7-3.7 3.7 3.7M16.5 19.5v-15M12.8 15.8l3.7 3.7 3.7-3.7'/%3E%3C/svg%3E");
+  --g-pencil: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20l1.2-4.6L16.4 4.2a1.6 1.6 0 0 1 2.3 0l1.1 1.1a1.6 1.6 0 0 1 0 2.3L8.6 18.8z'/%3E%3C/svg%3E");
+  --g-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='none'%3E%3Cpath d='M8 5.2a.8.8 0 0 1 1.2-.7l10.4 6.8a.8.8 0 0 1 0 1.4L9.2 19.5A.8.8 0 0 1 8 18.8z'/%3E%3C/svg%3E");
+  --g-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='none'%3E%3Crect x='6.5' y='6.5' width='11' height='11' rx='2.5'/%3E%3C/svg%3E");
+  --g-sun: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4'/%3E%3C/svg%3E");
+  --g-moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z'/%3E%3C/svg%3E");
+  --g-person-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='3.5'/%3E%3Cpath d='M5 20a7 7 0 0 1 14 0'/%3E%3C/svg%3E");
+  --g-menubar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='3'/%3E%3Cpath d='M3 9.5h18M15.5 7.3h2.5'/%3E%3C/svg%3E");
+  --g-download: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v11M7.5 11l4.5 4.5 4.5-4.5M5 19.5h14'/%3E%3C/svg%3E");
+  --g-upload: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 15.5V4.5M7.5 9L12 4.5 16.5 9M5 19.5h14'/%3E%3C/svg%3E");
+  --g-duplicate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='12' height='12' rx='2.5'/%3E%3Cpath d='M8 20h9.5a2.5 2.5 0 0 0 2.5-2.5V8'/%3E%3C/svg%3E");
+}
+.i-search { --glyph: var(--g-search) }
+.i-calendar { --glyph: var(--g-calendar) }
+.i-tray { --glyph: var(--g-tray) }
+.i-check-circle { --glyph: var(--g-check-circle) }
+.i-check { --glyph: var(--g-check) }
+.i-list { --glyph: var(--g-list) }
+.i-plus { --glyph: var(--g-plus) }
+.i-clock { --glyph: var(--g-clock) }
+.i-timer { --glyph: var(--g-timer) }
+.i-repeat { --glyph: var(--g-repeat) }
+.i-note { --glyph: var(--g-note) }
+.i-checklist { --glyph: var(--g-checklist) }
+.i-ellipsis { --glyph: var(--g-ellipsis) }
+.i-chevron-right { --glyph: var(--g-chevron-right) }
+.i-chevron-down { --glyph: var(--g-chevron-down) }
+.i-xmark { --glyph: var(--g-xmark) }
+.i-trash { --glyph: var(--g-trash) }
+.i-flag { --glyph: var(--g-flag) }
+.i-terminal { --glyph: var(--g-terminal) }
+.i-bolt { --glyph: var(--g-bolt) }
+.i-folder { --glyph: var(--g-folder) }
+.i-tag { --glyph: var(--g-tag) }
+.i-copy { --glyph: var(--g-copy) }
+.i-arrow-right { --glyph: var(--g-arrow-right) }
+.i-link { --glyph: var(--g-link) }
+.i-sort { --glyph: var(--g-sort) }
+.i-pencil { --glyph: var(--g-pencil) }
+.i-play { --glyph: var(--g-play) }
+.i-stop { --glyph: var(--g-stop) }
+.i-sun { --glyph: var(--g-sun) }
+.i-moon { --glyph: var(--g-moon) }
+.i-person-wave { --glyph: var(--g-person-wave) }
+.i-menubar { --glyph: var(--g-menubar) }
+.i-download { --glyph: var(--g-download) }
+.i-gear { --glyph: var(--g-gear) }
+.i-filter { --glyph: var(--g-filter) }
+.i-moon { --glyph: var(--g-moon) }
+.i-someday { --glyph: var(--g-someday) }
+.i-upload { --glyph: var(--g-upload) }
+.i-duplicate { --glyph: var(--g-duplicate) }

@@ -1,0 +1,1911 @@
+// End-to-end checks of the UI against a stand-in host. Usage: node Tests/ui/check.mjs [screenshot-folder]
+import assert from 'node:assert/strict';
+import {mkdirSync} from 'node:fs';
+import {launch, open, sampleWorkspace} from './harness.mjs';
+
+const shots = process.argv[2];
+if (shots) mkdirSync(shots, {recursive: true});
+const browser = await launch();
+const results = [];
+async function check(name, options, body) {
+  if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
+  const session = await open(browser, options);
+  const {page} = session;
+  const host = () => page.evaluate(() => window.__host);
+  // Lists are stored by ID; checks read them by name, the way a person sees them.
+  const tasks = async () => { const ws = (await host()).workspace; return ws.tasks.map(task => ({...task, project: ws.lists?.[task.project]?.name ?? task.project})); };
+  const shot = async file => { if (shots) await page.screenshot({path: shots + '/' + file + '.png'}); };
+  try {
+    await body({page, host, tasks, shot});
+    assert.deepEqual(session.problems, [], 'the page logged errors');
+    results.push('ok   ' + name);
+  } catch (error) {
+    results.push('FAIL ' + name + '\n     ' + String(error.message).split('\n').slice(0, process.env.STACK ? 30 : 6).join('\n     '));
+    if (shots) await page.screenshot({path: shots + '/FAILED-' + name.replace(/\W+/g, '-') + '.png'}).catch(() => {});
+  } finally { await session.context.close(); }
+}
+const day = offset => { const d = new Date(); d.setDate(d.getDate() + offset); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const text = (page, selector) => page.locator(selector).first().innerText();
+
+// READABILITY: every visible piece of text on the main screens reads at 4.5:1 or more against the opaque surface
+// behind it, and none is smaller than 12 px. Decorative marks (#, separators, placeholders) are excluded.
+const contrastAudit = () => {
+  // Colours come back as rgb()/rgba() or, for color-mix(), as color(srgb r g b / a) with 0–1 channels.
+  const parse = value => {
+    const m = value.match(/[\d.]+/g);
+    if (!m) return [0, 0, 0, 0];
+    const n = m.map(Number);
+    return value.startsWith('color(') ? [n[0] * 255, n[1] * 255, n[2] * 255, n[3] ?? 1] : n;
+  };
+  const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+  const over = (top, bottom) => { const a = top[3] ?? 1; return [0, 1, 2].map(i => top[i] * a + bottom[i] * (1 - a)).concat(1); };
+  // The page's own background, then each ancestor's background laid over it.
+  function backdrop(node) {
+    const chain = [];
+    for (let el = node; el; el = el.parentElement) chain.push(getComputedStyle(el).backgroundColor);
+    let colour = parse(getComputedStyle(document.documentElement).colorScheme.includes('dark') && matchMedia('(prefers-color-scheme: dark)').matches ? 'rgb(30,30,31)' : 'rgb(255,255,255)');
+    for (const value of chain.reverse()) { const c = parse(value); if (c.length === 3) c.push(1); if (c[3] > 0) colour = over(c, colour); }
+    return colour;
+  }
+  const problems = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    const value = text.textContent.trim();
+    const el = text.parentElement;
+    if (!value || !el || /^[#·•›|,()\-–—]+$/.test(value) || el.closest('[hidden], [aria-hidden="true"], .island, .symbol, kbd, .unread-dot, .tile-icon, #inboxBadge, #toast, option, script, style, dialog:not([open])')) continue;
+    const box = el.getBoundingClientRect();
+    if (!box.width || !box.height || box.bottom < 0 || box.top > innerHeight || box.right < 0 || box.left > innerWidth) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden' || Number(style.opacity) < .99) continue;
+    const back = backdrop(el), fore = over(parse(style.color).length === 3 ? [...parse(style.color), 1] : parse(style.color), back);
+    const [x, y] = [lum(fore), lum(back)].sort((p, q) => q - p);
+    const ratio = (x + .05) / (y + .05), size = parseFloat(style.fontSize);
+    if (size < 1) continue; // Text replaced by a drawn mark (the priority "!!"), kept for VoiceOver.
+    if (ratio < 4.5 || size < 12) problems.push(value.slice(0, 30) + ' (' + el.className + ') ' + ratio.toFixed(2) + ':1 ' + size + 'px');
+  }
+  return problems;
+};
+
+await check('today view and sidebar counts', {scale: 2}, async ({page, shot}) => {
+  assert.equal(await text(page, '#pageTitle'), 'Today');
+  assert.equal(await text(page, '#pageCount'), '5');
+  // Inbox, Today, Plan, Projects; then Waiting on AI, Needs review, Someday, All Tasks, Completed.
+  const counts = await page.locator('#nav .tile-count').allInnerTexts();
+  assert.deepEqual(counts.slice(1, 4), ['5', '6', '4']);
+  assert.deepEqual(counts.slice(6), ['', '14', '4']);
+  assert.equal(await page.locator('#tasks .row').count(), 6);
+  assert.equal(await page.locator('#tasks .row.done').count(), 1);
+  assert.equal(await page.locator('#agentList .agent-row').count(), 4);
+  assert.match(await text(page, '#agentList .agent-row'), /web-app[\s\S]*Needs you/);
+  assert.equal(await text(page, '#inboxBadge'), '2');
+  // Nothing may hide under the title bar strip, which the window uses for dragging.
+  const top = await page.evaluate(() => Math.min(...[...document.querySelectorAll('button')].filter(b => b.offsetParent).map(b => b.getBoundingClientRect().top)));
+  assert.ok(top >= 28, 'a control sits under the title bar: ' + top);
+  await shot('workspace-light');
+});
+
+await check('dark appearance', {dark: true, scale: 2}, async ({page, shot}) => {
+  const background = await page.evaluate(() => getComputedStyle(document.querySelector('main')).backgroundColor);
+  assert.equal(background, 'rgb(30, 30, 31)');
+  await shot('workspace-dark');
+});
+
+await check('quick add parses natural language', {}, async ({page, tasks, shot}) => {
+  await page.click('#tasks [data-quick="view"]');
+  const field = page.locator('.quick-add input');
+  await field.fill('Call the bank tomorrow 3pm #Finance !p1 every week');
+  assert.deepEqual(await page.locator('.quick-hint .chip').allInnerTexts(), ['P1', 'Finance', 'Every week', 'Tomorrow', '3:00 PM']);
+  await shot('quick-add');
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call the bank'));
+  const added = (await tasks()).find(t => t.title === 'Call the bank');
+  assert.deepEqual([added.planned, added.dueDate, added.dueTime, added.tag, added.priority, added.repeat, added.project, added.source, added.quote, added.done],
+    [day(1), day(1), '15:00', 'Finance', 'P1', 'weekly', 'AI Task List', '', '', false]);
+  // The field stays open and focused for the next task.
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('.quick-add') != null), true);
+  await field.fill('Plain task');
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Plain task'));
+  assert.equal((await tasks()).find(t => t.title === 'Plain task').planned, day(0));
+  await field.press('Escape');
+  assert.equal(await page.locator('.quick-add').count(), 0);
+  // A list section adds to that list without scheduling it.
+  await page.click('#pool [data-quick="p:' + await page.evaluate(() => Projects.byName(data, 'Personal')) + '"]');
+  await page.locator('.quick-add input').fill('Buy stamps');
+  await page.locator('.quick-add input').press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy stamps'));
+  const stamps = (await tasks()).find(t => t.title === 'Buy stamps');
+  assert.deepEqual([stamps.project, stamps.planned], ['Personal', '']);
+});
+
+// F10, F14: parsing is visible, reversible, leaves reference numbers alone, and reads Chinese dates.
+await check('quick add chips can be kept as text', {scale: 2}, async ({page, tasks, shot}) => {
+  await page.click('#tasks [data-quick="view"]');
+  const field = page.locator('.quick-add input');
+  await field.fill('Review invoice #123 and meeting @10am');
+  assert.equal(await page.locator('.quick-hint .chip').count(), 0);
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Review invoice #123 and meeting @10am'));
+  assert.equal((await tasks()).find(t => t.title.startsWith('Review invoice')).tag, '');
+  await field.fill('Call the bank tomorrow 3pm #Finance');
+  await shot('quick-add-chips');
+  await page.click('.quick-hint .chip[data-kind="date"] .chip-keep');
+  assert.deepEqual(await page.locator('.quick-hint .chip').allInnerTexts(), ['Finance', '3:00 PM']);
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call the bank tomorrow'));
+  const kept = (await tasks()).find(t => t.title === 'Call the bank tomorrow');
+  assert.deepEqual([kept.planned, kept.dueDate, kept.dueTime, kept.tag], [day(0), day(0), '15:00', 'Finance']);
+  await field.fill('Email the \\#design channel');
+  await field.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Email the #design channel'));
+});
+
+await check('Chinese dates in the card', {width: 340, height: 640, compact: true, scale: 2}, async ({page, tasks, shot}) => {
+  await page.fill('#cardAddInput', '明天下午3点 给Maya发报告');
+  assert.deepEqual(await page.locator('#cardAddHint .chip').allInnerTexts(), ['Tomorrow', '3:00 PM']);
+  await shot('card-chinese-chips');
+  await page.press('#cardAddInput', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === '给Maya发报告'));
+  const task = (await tasks()).find(t => t.title === '给Maya发报告');
+  assert.deepEqual([task.planned, task.dueDate, task.dueTime], [day(1), day(1), '15:00']);
+  assert.equal(await page.locator('#cardAddHint .chip').count(), 0);
+});
+
+// F05: repeating tasks keep their rule, and completing is reversible.
+await check('repeating tasks: complete, undo, reopen, edited successor', {}, async ({page, tasks}) => {
+  const series = async () => (await tasks()).filter(t => t.title === "Prepare Friday's update");
+  const complete = () => page.locator('#tasks .row:not(.done)', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  const reopen = () => page.locator('#tasks .row.done', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  await complete();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  let [first, next] = await series();
+  assert.deepEqual([first.done, first.repeat, first.next, next.done, next.repeat, next.planned, next.previous],
+                   [true, 'weekly', next.id, false, 'weekly', day(7), first.id], 'both keep the rule and are linked');
+  assert.match(first.completedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d$/);
+  assert.equal(first.series, first.id);
+  assert.equal(next.series, first.id);
+  // Undo from the message reopens it and removes the untouched successor.
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+  [first] = await series();
+  assert.deepEqual([first.done, first.repeat, first.next], [false, 'weekly', undefined]);
+  // Completing twice in a row creates one successor, not two.
+  await complete();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  await reopen();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+  await complete();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  // Edit the successor, then reopen the original: the edit is kept, and removing it is an explicit choice.
+  await page.evaluate(() => { const next = window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update" && !t.done); next.notes = 'Include the metrics'; data = structuredClone(window.__host.workspace); render(); });
+  await reopen();
+  await page.waitForFunction(() => /already changed, so it was kept/.test(document.getElementById('toast').textContent));
+  assert.equal((await series()).length, 2);
+  assert.equal(await text(page, '#toast .undo'), 'Remove It');
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+  assert.equal((await series()).find(t => !t.done && t.notes)?.notes, 'Include the metrics');
+});
+
+await check('UX-N06: a successor moved to other days, the evening or Someday is not deleted silently', {}, async ({page, tasks}) => {
+  const series = async () => (await tasks()).filter(t => t.title === "Prepare Friday's update");
+  const complete = () => page.locator('#tasks .row:not(.done)', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  const reopen = () => page.locator('#tasks .row.done', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  for (const edit of [
+    next => { next.plannedDates = [next.planned, next.planned.slice(0, 8) + '28'].sort(); },
+    next => { next.evening = true; },
+    next => { next.someday = true; }
+  ]) {
+    await complete();
+    await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+    await page.evaluate(source => {
+      const next = window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update" && !t.done);
+      (0, eval)('(' + source + ')')(next);
+      data = structuredClone(window.__host.workspace); render();
+    }, edit.toString());
+    await page.click('#nav [data-view="done"]');
+    await reopen();
+    await page.waitForFunction(() => /already changed, so it was kept/.test(document.getElementById('toast').textContent));
+    assert.equal((await series()).length, 2, 'the changed successor stays until the person chooses');
+    // Clean up: remove it explicitly, then go back to Today.
+    await page.click('#toast .undo');
+    await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+    await page.click('#nav [data-view="today"]');
+  }
+});
+
+await check('UX-N05/N08: Someday keeps the deadline; quick add in Someday stays in Someday', {}, async ({page, tasks}) => {
+  const id = (await tasks()).find(t => t.dueDate && !t.done).id;
+  const before = (await tasks()).find(t => t.id === id);
+  await page.evaluate(id => action(setWhen(id, 'someday')), id);
+  await page.waitForFunction(id => window.__host.workspace.tasks.find(t => t.id === id).someday, id);
+  let task = (await tasks()).find(t => t.id === id);
+  assert.deepEqual([task.dueDate, task.dueTime], [before.dueDate, before.dueTime], 'moving to Someday keeps the deadline');
+  await page.evaluate(id => action(setWhen(id, 'today')), id);
+  await page.waitForFunction(id => !window.__host.workspace.tasks.find(t => t.id === id).someday, id);
+  task = (await tasks()).find(t => t.id === id);
+  assert.equal(task.dueDate, before.dueDate, 'and coming back keeps it too');
+  // From the menu, a move to Someday can be undone, restoring the planned days exactly (U07).
+  const planned = (await tasks()).find(t => !t.done && t.planned && !t.someday);
+  await page.evaluate(id => action(moveWhen(id, 'someday', 'Moved to Someday')), planned.id);
+  await page.waitForFunction(id => window.__host.workspace.tasks.find(t => t.id === id).someday, planned.id);
+  await page.click('#toast .undo');
+  await page.waitForFunction(id => !window.__host.workspace.tasks.find(t => t.id === id).someday, planned.id);
+  const back = (await tasks()).find(t => t.id === planned.id);
+  assert.deepEqual([back.planned, back.plannedDates, back.dueDate], [planned.planned, planned.plannedDates, planned.dueDate]);
+  // Quick add while looking at Someday.
+  await page.click('#nav [data-view="someday"]');
+  await page.evaluate(() => openQuick('view'));
+  await page.fill('.quick-add input', 'Learn watercolour');
+  await page.press('.quick-add input', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Learn watercolour'));
+  assert.equal((await tasks()).find(t => t.title === 'Learn watercolour').someday, true);
+  assert.match(await text(page, '#tasks'), /Learn watercolour/, 'the new task is visible where it was typed');
+  // An explicit date wins, and the person is told where the task went.
+  await page.evaluate(() => openQuick('view'));
+  await page.fill('.quick-add input', 'Book flights tomorrow');
+  await page.press('.quick-add input', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Book flights'));
+  const dated = (await tasks()).find(t => t.title === 'Book flights');
+  assert.equal(dated.someday, undefined);
+  assert.equal(dated.planned, day(1));
+  assert.match(await text(page, '#toast'), /Book flights[\s\S]*Tomorrow[\s\S]*not in Someday/);
+});
+
+// F02: what you type in Details is never lost by closing, Escape or relaunching.
+await check('details autosave survives close, escape and relaunch', {}, async ({page, host, tasks, shot}) => {
+  const open = title => page.locator('#tasks .row', {hasText: title}).locator('.task-body').click();
+  await open('Review the product roadmap');
+  await page.fill('#fieldNotes', 'Ask Maya about Q3');
+  await page.waitForFunction(() => document.getElementById('saveState').textContent === 'Saved' && window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').notes === 'Ask Maya about Q3');
+  await shot('details-saved');
+  await page.click('#dialog .dialog-head [data-close]');
+  await open('Review the product roadmap');
+  assert.equal(await page.inputValue('#fieldNotes'), 'Ask Maya about Q3');
+  // Escape right after typing still saves: closing waits for the pending save.
+  await page.fill('#fieldNotes', 'Ask Maya about Q3 and Q4');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  assert.equal((await tasks()).find(t => t.title === 'Review the product roadmap').notes, 'Ask Maya about Q3 and Q4');
+  // Revert is explicit and restores the task as it was when Details opened.
+  await open('Review the product roadmap');
+  await page.fill('#fieldNotes', 'Scratch that');
+  await page.waitForSelector('#revertTask:not([hidden])');
+  await page.click('#revertTask');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').notes === 'Ask Maya about Q3 and Q4');
+  // A new task exists once it has a title; Discard removes it on purpose.
+  await page.keyboard.press('Meta+k'); await page.fill('#paletteInput', 'New Task'); await page.keyboard.press('Escape');
+  await page.evaluate(() => taskForm());
+  await page.fill('#fieldTitle', 'Draft the launch email');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Draft the launch email'));
+  await page.click('#removeTask');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === 'Draft the launch email'));
+  // Closing an untitled new task creates nothing.
+  await page.evaluate(() => taskForm());
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  assert.equal((await tasks()).some(t => !t.title), false);
+});
+
+await check('details survive a relaunch', {}, async ({page, host}) => {
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.fill('#fieldNotes', 'Check the iPad layout');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').notes === 'Check the iPad layout');
+  // Start the page again from exactly what the app was asked to store.
+  const again = await open(browser, {workspace: (await host()).workspace});
+  try {
+    await again.page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+    assert.equal(await again.page.inputValue('#fieldNotes'), 'Check the iPad layout');
+  } finally { await again.context.close(); }
+});
+
+await check('UX-N03/N04: an untitled new task keeps its notes through Close, Escape, ⌘, and native Settings', {}, async ({page, tasks}) => {
+  const start = async () => {
+    await page.evaluate(() => taskForm(newTask()));
+    await page.fill('#fieldNotes', 'Call the venue about the deposit');
+    await page.fill('#subtaskNew', 'Ask about parking');
+  };
+  for (const [leave, settings] of [
+    [() => page.click('#dialog [data-close]'), false],
+    [() => page.keyboard.press('Escape'), false],
+    [() => page.keyboard.press('Meta+Comma'), true],
+    [() => page.evaluate(() => window.openSettings('agents')), true]
+  ]) {
+    await start();
+    await leave();
+    await page.waitForSelector('#closePrompt:not([hidden])');
+    assert.match(await text(page, '#closePrompt'), /no title yet/);
+    assert.equal(await page.locator('#fieldTitle').count(), 1, 'the draft is still on screen');
+    assert.equal(await page.inputValue('#fieldNotes'), 'Call the venue about the deposit');
+    // Keep editing, give it a title, then leave the same way: it is saved with notes and the typed subtask.
+    await page.click('#closePrompt [data-choice="0"]');
+    await page.fill('#fieldTitle', 'Book the venue');
+    await leave();
+    await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Book the venue'));
+    const saved = (await tasks()).find(t => t.title === 'Book the venue');
+    assert.equal(saved.notes, 'Call the venue about the deposit');
+    assert.deepEqual(saved.subtasks.map(item => item.title), ['Ask about parking'], 'a typed but unconfirmed subtask is kept');
+    // Then it goes where it was asked to: closed, or on to Settings.
+    if (settings) await page.waitForFunction(() => /Settings/.test(document.getElementById('dialogTitle')?.textContent || '') && document.querySelector('#dialog').open);
+    else await page.waitForFunction(() => !document.querySelector('#dialog').open);
+    await page.evaluate(() => { closeDialog(true); window.__host.workspace.tasks = window.__host.workspace.tasks.filter(t => t.title !== 'Book the venue'); data.tasks = data.tasks.filter(t => t.title !== 'Book the venue'); });
+  }
+  // Discarding is an explicit choice.
+  await start();
+  await page.keyboard.press('Escape');
+  await page.click('#closePrompt [data-choice="1"]');
+  await page.waitForFunction(() => !document.querySelector('#dialog').open);
+  assert.equal((await tasks()).some(t => t.notes === 'Call the venue about the deposit'), false);
+  // An existing task with a pending subtask: ⌘, saves it before Settings opens.
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.fill('#subtaskNew', 'Check dark mode');
+  await page.keyboard.press('Meta+Comma');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').subtasks?.some(s => s.title === 'Check dark mode'));
+  await page.waitForFunction(() => /Settings/.test(document.getElementById('dialogTitle')?.textContent || ''));
+});
+
+// F07: a time with no date is never dropped silently.
+await check('time without a deadline date asks before closing', {}, async ({page, tasks, shot}) => {
+  await page.locator('#tasks .row', {hasText: 'Prepare Friday'}).locator('.task-body').click();
+  await page.fill('#fieldDueTime', '15:30');
+  assert.match(await text(page, '#saveState'), /Not saved: the time needs a deadline date/);
+  assert.equal(await page.getAttribute('#fieldDueTime', 'aria-invalid'), 'true');
+  await page.click('#taskForm .primary');
+  await page.waitForSelector('#closePrompt:not([hidden])');
+  assert.match(await text(page, '#closePrompt'), /15:30 has no deadline date/);
+  await shot('time-needs-date');
+  await page.click('#closePrompt [data-choice="0"]');
+  assert.equal(await page.evaluate(() => document.getElementById('dialog').open), true, 'Keep Editing keeps the sheet open');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#closePrompt:not([hidden])');
+  await page.click('#closePrompt [data-choice="1"]');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  const task = (await tasks()).find(t => t.title === "Prepare Friday's update");
+  assert.deepEqual([task.dueDate, task.dueTime], [day(0), '15:30']);
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.fill('#fieldDueTime', '09:00');
+  await page.click('#taskForm .primary');
+  await page.click('#closePrompt [data-choice="2"]');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  const other = (await tasks()).find(t => t.title === 'Review QA feedback');
+  assert.deepEqual([other.dueDate, other.dueTime], [undefined, undefined]);
+});
+
+await check('upcoming and completed views', {}, async ({page, tasks, shot}) => {
+  await page.click('#nav [data-view="upcoming"]');
+  assert.equal(await text(page, '#pageTitle'), 'Plan');
+  const heads = await page.locator('.day-head h3').allInnerTexts();
+  assert.equal(heads[0], 'Overdue');
+  assert.equal(heads[1], 'Tomorrow');
+  assert.equal(heads.at(-1), 'Later');
+  assert.equal(heads.length, 9);
+  // Tasks are grouped by the day they are scheduled for, falling back to their deadline.
+  assert.match(await page.locator('.day-group', {hasText: 'Tomorrow'}).first().innerText(), /Review the prototype/);
+  await shot('upcoming');
+  await page.locator('.day-group', {hasText: 'Tomorrow'}).first().locator('[data-quick]').click();
+  await page.locator('.quick-add input').fill('Water the plants');
+  await page.locator('.quick-add input').press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Water the plants'));
+  assert.equal((await tasks()).find(t => t.title === 'Water the plants').planned, day(1));
+  await page.keyboard.press('Escape');
+
+  await page.keyboard.press('Meta+5');
+  assert.equal(await text(page, '#pageTitle'), 'Completed');
+  assert.deepEqual((await page.locator('.day-head h3').allInnerTexts()).slice(0, 2), ['Today', 'Yesterday']);
+  await shot('completed');
+  await page.click('[data-clear-done]');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.done));
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.done).length === 4);
+});
+
+await check('context menu: schedule, priority, duplicate, delete with undo', {}, async ({page, tasks, shot}) => {
+  const row = page.locator('#pool .row', {hasText: 'Test reminders'});
+  await row.click({button: 'right'});
+  await page.waitForSelector('.menu');
+  await shot('context-menu');
+  await page.locator('.menu .menu-segment button', {hasText: 'Tomorrow'}).click();
+  await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === 'Test reminders').planned === d, day(1));
+  await page.locator('#pool .row', {hasText: 'Test reminders'}).click({button: 'right'});
+  await page.locator('.menu-segment button', {hasText: 'P0'}).click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Test reminders').priority === 'P0');
+  await page.locator('#pool .row', {hasText: 'Test reminders'}).click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Duplicate'}).click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === 'Test reminders').length === 2);
+  await page.locator('#pool .row', {hasText: 'Test reminders'}).first().click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Move to List'}).click();
+  await page.locator('.task-picker [data-name="Personal"]').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Test reminders' && window.__host.workspace.lists[t.project]?.name === 'Personal'));
+  await page.locator('#pool .row', {hasText: 'Test reminders'}).first().click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Copy Title'}).click();
+  await page.waitForFunction(() => window.__host.clipboard === 'Test reminders');
+  await page.locator('#pool .row', {hasText: 'Test reminders'}).first().click({button: 'right'});
+  await page.locator('.menu-item.danger').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === 'Test reminders').length === 1);
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === 'Test reminders').length === 2);
+  assert.equal((await tasks()).length, sampleWorkspace().tasks.length + 1);
+});
+
+await check('lists and tags: create, rename, delete', {}, async ({page, host}) => {
+  await page.click('#newProject');
+  await page.fill('#projectInfoName', 'Side project');
+  await page.press('#projectInfoName', 'Enter');
+  await page.waitForFunction(() => Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Side project'));
+  assert.equal(await text(page, '#pageTitle'), 'Side project');
+  await page.locator('#projects [data-name="Research notes"]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Rename'}).click();
+  await page.fill('#nameField', 'Research');
+  await page.press('#nameField', 'Enter');
+  await page.waitForFunction(() => Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Research'));
+  let state = (await host()).workspace;
+  const named = name => Object.keys(state.lists).find(id => state.lists[id].name === name);
+  assert.equal(state.tasks.filter(t => t.project === named('Research')).length, 3, 'the same tasks, under the same list ID');
+  assert.equal(named('Research notes'), undefined);
+  await page.locator('#projects [data-name="Research"]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Delete List'}).click();
+  await page.selectOption('#moveTarget', {label: 'Personal'});
+  await page.click('#deleteList .primary');
+  await page.waitForFunction(() => !Object.values(window.__host.workspace.lists || {}).some(list => list.name === 'Research'));
+  state = (await host()).workspace;
+  assert.equal(state.tasks.length, sampleWorkspace().tasks.length);
+  assert.equal(state.tasks.every(t => state.projects.includes(t.project)), true);
+  await page.locator('#labels [data-board-tag="Feedback"]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Delete Tag'}).click();
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.tag === 'Feedback'));
+  assert.equal(await page.locator('#labels [data-board-tag="Feedback"]').count(), 0);
+  await page.click('#labels [data-board-tag="This week"]');
+  assert.equal(await text(page, '#pageTitle'), 'This week');
+  assert.equal(await page.locator('#tasks .row').count(), 2);
+});
+
+await check('command palette searches, navigates and creates', {}, async ({page, tasks, shot}) => {
+  await page.keyboard.press('Meta+k');
+  await page.waitForSelector('#palette[open]');
+  await shot('palette');
+  await page.fill('#paletteInput', 'pricing');
+  assert.match(await text(page, '.palette-item.active'), /Compare pricing pages/);
+  await shot('palette-search');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#taskForm');
+  assert.equal(await page.inputValue('#fieldTitle'), 'Compare pricing pages');
+  await page.click('#dialog [data-close]');
+  await page.click('#searchTasks');
+  await page.fill('#paletteInput', 'personal');
+  await page.keyboard.press('Enter');
+  assert.equal(await text(page, '#pageTitle'), 'Personal');
+  await page.keyboard.press('Meta+k');
+  await page.fill('#paletteInput', 'Book flights friday !p0');
+  await page.keyboard.press('ArrowUp');
+  assert.match(await text(page, '.palette-item.active'), /Add “Book flights friday !p0” as a task/);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Book flights'));
+  const added = (await tasks()).find(t => t.title === 'Book flights');
+  assert.deepEqual([added.priority, added.project], ['P0', 'Personal']);
+  await page.keyboard.press('Meta+k');
+  await page.fill('#paletteInput', 'markdown');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__host.clipboard.includes('## AI Task List'));
+  const markdown = (await page.evaluate(() => window.__host.clipboard));
+  assert.match(markdown, /- \[x\] Draft the product brief \(P0, #Product insights\)/);
+  assert.match(markdown, /  - \[x\] Collect comments/);
+});
+
+await check('agents list and inbox', {}, async ({page, host, shot}) => {
+  await page.locator('#agentList .agent-row', {hasText: 'small-tool'}).click();
+  // A finished agent opens its result in the Inbox reader, selected in the list.
+  await page.waitForSelector('#inboxItems [aria-selected="true"]');
+  assert.equal(await text(page, '#altTitle'), 'Inbox');
+  assert.match(await text(page, '#inboxReader .reader-title'), /billing/i);
+  await shot('inbox');
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+  // Reading the result retires the finished status.
+  await page.waitForFunction(() => window.__host.agents.length === 2);
+  await page.click('#inboxReader [data-reader="follow"]');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title.startsWith('Follow up:') && t.fromNotice));
+  assert.equal(await text(page, '#inboxReader [data-reader="follow"]'), 'View Follow-up');
+  await page.click('#inboxReadAll');
+  await page.waitForFunction(() => window.__host.notices.codex.every(n => n.read));
+  assert.equal(await page.locator('#inboxBadge').isHidden(), true);
+  assert.equal(await page.locator('#agentList .agent-row').count(), 2);
+  await page.locator('#agentList .agent-row', {hasText: 'docs-site'}).click();
+  await page.locator('.menu-item', {hasText: 'Dismiss'}).click();
+  await page.waitForFunction(() => window.__host.agents.length === 1);
+  assert.equal((await host()).agents[0].state, 'attention');
+});
+
+// INBOX-LAYOUT: the Inbox is a main view with a list beside a reader; narrow windows go list → reader → Back.
+await check('INBOX-LAYOUT: list beside a reader; narrow is list, reader, back', {width: 1280, height: 800}, async ({page}) => {
+  await page.click('#nav [data-view="inbox"]');
+  await page.locator('#inboxItems [data-notice]').first().click();
+  const list = await page.locator('#inboxItems').boundingBox(), reader = await page.locator('#inboxReader').boundingBox();
+  assert.ok(list.width > 250 && reader.width > 500 && reader.x >= list.x + list.width - 1, 'side by side: ' + JSON.stringify([list, reader]));
+  assert.equal(await page.locator('#dialog').evaluate(node => node.open), false, 'not a modal');
+  await page.setViewportSize({width: 900, height: 700});
+  await page.waitForFunction(() => document.getElementById('inboxView').classList.contains('narrow'));
+  assert.equal(await page.locator('#inboxReader [data-reader="back"]').isVisible(), true);
+  assert.equal(await page.locator('#inboxItems').isVisible(), false, 'the reader takes the width');
+  await page.click('#inboxReader [data-reader="back"]');
+  assert.equal(await page.locator('#inboxItems').isVisible(), true);
+  assert.equal(await page.locator('#inboxReader').isVisible(), false);
+  assert.equal(await page.locator('aside').isVisible(), true, 'the sidebar stays above 720 px');
+  await page.setViewportSize({width: 700, height: 700});
+  assert.equal(await page.locator('#sidebarToggle').isVisible(), true, 'below 720 px the sidebar is one button away');
+  await page.click('#sidebarToggle');
+  await page.click('#nav [data-view="today"]');
+  assert.equal(await text(page, '#pageTitle'), 'Today');
+});
+
+await check('Inbox: new results never replace the one being read; Show latest switches on purpose', {}, async ({page}) => {
+  await page.click('#inboxButton');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'GitHub Actions'}).click();
+  await page.evaluate(() => {
+    const host = window.__host;
+    host.notices.external.unshift({id: 'connector/' + 'e'.repeat(64), source: 'Claude Code', title: 'Claude Code · docs-site', time: Date.now() / 1000, read: false, thread: '', link: '', summary: 'Rewrote the install guide.'});
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+  });
+  await page.waitForFunction(() => document.querySelectorAll('#inboxItems [data-notice]').length === 5);
+  assert.match(await text(page, '#inboxReader .reader-title'), /CI · main · success/, 'the reader keeps the selected result');
+  assert.equal(await text(page, '#inboxLatest'), '1 new result · Show latest');
+  await page.click('#inboxLatest');
+  assert.match(await text(page, '#inboxReader .reader-title'), /install guide/i);
+  assert.equal(await page.locator('#inboxLatest').isHidden(), true);
+});
+
+await check('RETURN-STATE: Settings and back keep the result, its tab and the scroll position', {width: 1040, height: 600}, async ({page}) => {
+  await page.evaluate(() => {
+    const host = window.__host;
+    host.notices.external[0].summary = Array.from({length: 80}, (_, i) => 'Line ' + (i + 1) + ' of a long reply.').join('\n');
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+  });
+  await page.click('#inboxButton');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first().click();
+  await page.click('#inboxReader [data-reader-tab="original"]');
+  await page.evaluate(() => { document.getElementById('inboxReader').scrollTop = 600; document.getElementById('inboxReader').dispatchEvent(new Event('scroll')); });
+  await page.keyboard.press('Meta+Comma');
+  await page.waitForFunction(() => document.getElementById('dialog').open);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('dialog').open);
+  // Results arriving while Settings was open do not reset anything either.
+  await page.evaluate(() => window.setInbox({channel: 'codex', items: window.__host.notices.codex, error: ''}));
+  assert.equal(await page.getAttribute('#inboxReader [data-reader-tab="original"]', 'aria-selected'), 'true');
+  assert.match(await text(page, '#inboxReader .reader-original'), /Line 80 of a long reply/);
+  assert.equal(await page.evaluate(() => document.getElementById('inboxReader').scrollTop), 600);
+  assert.match(await page.getAttribute('#inboxItems [aria-selected="true"]', 'data-notice'), /^connector\/a+$/);
+});
+
+await check('INBOX-SEARCH: a phrase from an archived, read reply finds it and opens the reply', {}, async ({page}) => {
+  await page.evaluate(() => {
+    const host = window.__host;
+    host.notices.codex.push({id: 'thread-9/turn-2', thread: '99999999-9999-4999-8999-999999999999', title: 'Codex · billing', time: Date.now() / 1000 - 86400 * 3, read: true, archived: true,
+      summary: 'Moved invoices to the new ledger.\n\nThe quarterly reconciliation uses the marmalade-otter checksum now.'});
+    window.setInbox({channel: 'codex', items: host.notices.codex, error: ''});
+  });
+  await page.keyboard.press('Meta+k');
+  await page.fill('#paletteInput', 'marmalade-otter');
+  await page.locator('#paletteList .palette-item', {hasText: 'Moved invoices'}).click();
+  await page.waitForSelector('#inboxReader .reader-original');
+  assert.match(await text(page, '#inboxReader .reader-original'), /marmalade-otter checksum/);
+  assert.equal(await page.inputValue('#inboxSearch'), 'marmalade-otter');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 1);
+  assert.match(await text(page, '#inboxItems'), /Archived/);
+  // The Inbox's own search finds it too, and clearing the search restores the list.
+  await page.fill('#inboxSearch', 'quarterly reconciliation');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 1);
+  await page.fill('#inboxSearch', '');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 4, 'archived results stay out of the plain Inbox');
+});
+
+await check('Inbox: snooze until tomorrow, the Snoozed filter, and a follow-up linked to its result', {}, async ({page, host}) => {
+  await page.click('#inboxButton');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'Codex'}).click();
+  await page.click('#inboxReader [data-reader="snooze"]');
+  await page.waitForFunction(() => window.__host.workspace.snoozed?.['thread-1/turn-1'] === TaskLogic.addDays(day(), 1));
+  assert.equal(await page.locator('#inboxItems [data-notice="thread-1/turn-1"]').count(), 0);
+  await page.selectOption('#inboxFilter', 'snoozed');
+  await page.locator('#inboxItems [data-notice="thread-1/turn-1"]').click();
+  assert.match(await text(page, '#inboxItems'), /Snoozed until Tomorrow/);
+  await page.click('#inboxReader [data-reader="snooze"]');
+  await page.waitForFunction(() => !window.__host.workspace.snoozed);
+  await page.click('#inboxReader [data-reader="follow"]');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.fromNotice === 'thread-1/turn-1'));
+  await page.click('#inboxReader [data-reader="follow"]');
+  await page.waitForFunction(() => /Follow up:/.test(document.getElementById('fieldTitle')?.value || ''));
+});
+
+await check('PROJECT-MODEL: areas, a project with a goal, notes without checkboxes, and its results', {}, async ({page, host}) => {
+  await page.click('#nav [data-view="projects"]');
+  assert.equal(await text(page, '#altTitle'), 'Projects');
+  assert.equal(await page.locator('.project-card').count(), 4);
+  await page.click('#newArea');
+  await page.fill('#nameField', 'Work');
+  await page.press('#nameField', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.areas?.some(area => area.name === 'Work'));
+  await page.click('#newProjectButton');
+  await page.fill('#projectInfoName', 'small-tool');
+  await page.selectOption('#projectInfoArea', {label: 'Work'});
+  await page.fill('#projectInfoGoal', 'Ship 1.8 with every retest finding resolved');
+  await page.evaluate(() => { window.__host.folderChoice = '/Users/me/code/small-tool'; });
+  await page.click('#projectInfoFolder');
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('projectInfoFolder').textContent));
+  await page.click('#projectInfo .primary');
+  await page.waitForFunction(() => Object.values(window.__host.workspace.lists).some(list => list.name === 'small-tool' && list.goal));
+  const ws = (await host()).workspace;
+  const id = Object.keys(ws.lists).find(key => ws.lists[key].name === 'small-tool');
+  assert.equal(ws.lists[id].area, ws.areas[0].id);
+  assert.equal(ws.projectFolders[id], '/Users/me/code/small-tool');
+  assert.match(await text(page, '#tasks'), /Ship 1.8 with every retest finding resolved/);
+  assert.match(await text(page, '#projects'), /Work[\s\S]*small-tool/, 'the sidebar groups projects by area');
+  // Notes: free text, saved, no checkbox.
+  await page.click('[data-project-tab="notes"]');
+  await page.fill('#projectNotes', 'Decision: keep the card result-first.');
+  await page.waitForFunction(id => window.__host.workspace.lists[id].notes === 'Decision: keep the card result-first.', id);
+  assert.equal(await page.locator('.project-notes input[type=checkbox]').count(), 0);
+  // Results: the agent result from this folder belongs here.
+  await page.click('[data-project-tab="results"]');
+  assert.match(await text(page, '.project-results'), /billing\.py/);
+  await page.locator('.project-results [data-project-result]').first().click();
+  await page.waitForSelector('#inboxReader .reader-title');
+  assert.match(await text(page, '#inboxReader .reader-crumbs'), /small-tool/);
+  // Leaving and coming back to the project opens on Tasks, with the notes kept.
+  await page.locator('#projects [data-name="small-tool"]').click();
+  await page.click('[data-project-tab="notes"]');
+  assert.equal(await page.inputValue('#projectNotes'), 'Decision: keep the card result-first.');
+});
+
+await check('Plan: list or week, with deadlines kept apart from planned days', {width: 1280, height: 800}, async ({page, tasks}) => {
+  await page.click('#nav [data-view="upcoming"]');
+  assert.equal(await text(page, '#pageTitle'), 'Plan');
+  await page.click('[data-plan-layout="week"]');
+  assert.equal(await page.locator('.week-day').count(), 7);
+  const tomorrow = await page.locator('.week-day').nth(1).innerText();
+  const planned = (await tasks()).filter(t => !t.done && (t.plannedDates || [t.planned]).includes(day(1)));
+  for (const task of planned) assert.ok(tomorrow.includes(task.title), task.title + ' shows on tomorrow');
+  // Quick add on a day of the week plans for that day.
+  await page.locator('.week-day').nth(3).locator('[data-quick]').click();
+  await page.fill('.week-day .quick-add input', 'Review the week plan');
+  await page.press('.week-day .quick-add input', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Review the week plan'));
+  assert.equal((await tasks()).find(t => t.title === 'Review the week plan').planned, day(3));
+  await page.click('[data-plan-layout="list"]');
+  assert.equal(await page.locator('.week-day').count(), 0);
+});
+
+// F04: bulk read follows the visible filter, every change can be undone, and archiving keeps the reply.
+await check('inbox read state is scoped and reversible', {}, async ({page, host, shot}) => {
+  await page.click('#inboxButton');
+  await page.selectOption('#inboxFilter', 'source:Claude Code');
+  assert.equal(await text(page, '#inboxReadAll'), 'Mark 1 Read');
+  await page.click('#inboxReadAll');
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+  assert.equal((await host()).notices.codex[0].read, false, 'hidden Codex results are untouched');
+  await page.click('#toast .undo');
+  await page.waitForFunction(() => !window.__host.notices.external[0].read);
+  // One result: selecting reads it; unread, read, archive, restore from the reader.
+  await page.selectOption('#inboxFilter', 'inbox');
+  await page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first().click();
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+  assert.equal(await text(page, '#inboxReader [data-reader="read"]'), 'Mark Unread');
+  await page.click('#inboxReader [data-reader="read"]');
+  await page.waitForFunction(() => !window.__host.notices.external[0].read);
+  await page.click('#inboxReader [data-reader="archive"]');
+  await page.waitForFunction(() => window.__host.notices.external[0].archived);
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 3);
+  await page.selectOption('#inboxFilter', 'archived');
+  await shot('inbox-archived');
+  assert.equal(await page.locator('#inboxItems [data-notice]').count(), 1);
+  assert.match(await text(page, '#inboxItems'), /billing/i);
+  assert.ok((await host()).notices.external[0].summary.length > 20, 'archiving keeps the stored reply');
+  await page.locator('#inboxItems [data-notice]').first().click();
+  await page.click('#inboxReader [data-reader="archive"]');
+  await page.waitForFunction(() => !window.__host.notices.external[0].archived);
+});
+
+await check('connections: Claude Code, menu bar, Notion', {}, async ({page, host, tasks, shot}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.waitForFunction(() => document.querySelector('#claudeConnection')?.textContent === 'Connect' && !document.querySelector('#claudeConnection').disabled);
+  await page.waitForFunction(() => !document.querySelector('#menuBarChoice').disabled);
+  await shot('connections');
+  await page.click('#claudeConnection');
+  await page.waitForFunction(() => document.querySelector('#claudeConnection').textContent === 'Disconnect');
+  assert.match(await text(page, '#claudeRow [data-state]'), /Connected/);
+  await page.click('[data-settings-tab="general"]');
+  await page.waitForSelector('#appearanceChoice [data-appearance="system"][aria-pressed="true"]');
+  await page.click('#appearanceChoice [data-appearance="dark"]');
+  await page.waitForFunction(() => window.__host.appearance === 'dark' && document.querySelector('[data-appearance="dark"]').getAttribute('aria-pressed') === 'true');
+  await page.waitForFunction(() => document.querySelectorAll('[data-card-pref]:not([disabled])').length === 3);
+  assert.deepEqual(await page.$$eval('[data-card-pref]', boxes => boxes.map(box => [box.dataset.cardPref, box.checked])), [['pinned', false], ['allSpaces', false], ['snap', true]]);
+  await page.check('[data-card-pref="snap"]').catch(() => {});
+  await page.uncheck('[data-card-pref="snap"]');
+  await page.waitForFunction(() => window.__host.card.snap === false);
+  await page.uncheck('#menuBarChoice');
+  await page.waitForFunction(() => window.__host.menuBar === false);
+  await page.click('[data-settings-tab="sync"]');
+  await page.click('#notionRow');
+  await page.fill('#notionDatabase', 'https://www.notion.so/acme/Team-tasks-11111111222233334444555555555555?v=1');
+  await shot('notion-connect');
+  await page.click('#notionForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.notion && window.__host.notionPushes.length === 0 && window.__host.workspace.tasks.some(t => t.notion));
+  let state = (await host()).workspace;
+  assert.deepEqual([state.notion.title, state.lists[state.notion.project].name], ['Team tasks', 'Team tasks']);
+  const imported = state.tasks.find(t => t.title === 'Plan the launch post');
+  assert.deepEqual([state.lists[imported.project].name, imported.dueDate, imported.priority, imported.tag, imported.done], ['Team tasks', day(1), 'P1', 'Marketing', false]);
+  assert.equal(state.tasks.some(t => t.title === 'Old finished page'), false);
+  await page.waitForSelector('#notionSync:not([disabled])');
+  await shot('notion-connected');
+  await page.click('#dialog [data-close]');
+  // A task added to the linked list is created in Notion, and completing the imported one is sent too.
+  await page.click('#projects [data-name="Team tasks"]');
+  await page.click('#tasks [data-quick="view"]');
+  await page.locator('.quick-add input').fill('Draft the changelog');
+  await page.locator('.quick-add input').press('Enter');
+  await page.keyboard.press('Escape');
+  await page.locator('#tasks .row', {hasText: 'Plan the launch post'}).locator('.check').click();
+  await page.locator('#projects [data-name="Team tasks"]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Sync with Notion'}).click();
+  await page.waitForFunction(() => window.__host.notionPushes.length === 2);
+  const pushes = (await host()).notionPushes;
+  assert.deepEqual(pushes.map(change => [change.page ? 'update' : 'create', change.fields]).sort((a, b) => a[0].localeCompare(b[0])),
+    [['create', {title: 'Draft the changelog', done: false}], ['update', {done: true}]]);
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Draft the changelog')?.notion?.id);
+  // Nothing more to send on the next sync.
+  await page.locator('#projects [data-name="Team tasks"]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Sync with Notion'}).click();
+  await page.waitForFunction(() => /up to date/.test(document.getElementById('toast').textContent));
+  assert.equal((await host()).notionPushes.length, 2);
+  assert.equal((await tasks()).every(t => typeof t.title === 'string' && typeof t.source === 'string' && typeof t.quote === 'string'), true);
+});
+
+await check('focus timer and wrap up', {}, async ({page, host, shot}) => {
+  await page.click('#focusButton');
+  await page.waitForSelector('.focus-pop');
+  await page.locator('.focus-pop [data-length="15"]').click();
+  await shot('focus');
+  await page.locator('.focus-pop [data-start]').click();
+  await page.waitForSelector('#focusButton.running');
+  assert.match(await text(page, '#focusTime'), /^1[45]:\d\d$/);
+  // Jump to the end of the session.
+  await page.evaluate(() => { focusSession.end = Date.now() - 1; });
+  await page.waitForFunction(() => Object.values(window.__host.workspace.focusLog || {})[0] === 15, null, {timeout: 5000});
+  assert.equal(await page.locator('#focusButton.running').count(), 0);
+  await page.click('#wrapUp');
+  await page.waitForSelector('.stat-grid');
+  assert.deepEqual(await page.locator('.stat b').allInnerTexts(), ['1', '5', '3', '15']);
+  await shot('wrap-up');
+  await page.click('#copyWrap');
+  await page.waitForFunction(() => window.__host.clipboard.includes('## Still open'));
+  await page.click('#carryOver');
+  await page.waitForFunction(() => document.querySelectorAll('#tasks .row:not(.done)').length === 0);
+  const state = (await host()).workspace;
+  assert.equal(state.tasks.filter(t => !t.done && t.planned === day(1)).length >= 5, true);
+});
+
+// Both the source row and the drop targets must be on screen for a real drag.
+await check('drag a task into Today and onto a list', {height: 1500}, async ({page}) => {
+  const source = page.locator('#pool .row', {hasText: 'Compare pricing pages'});
+  await source.dragTo(page.locator('#tasks .task-list'));
+  await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === 'Compare pricing pages').planned === d, day(0));
+  await page.locator('#tasks .row', {hasText: 'Compare pricing pages'}).dragTo(page.locator('#projects [data-name="Personal"]'));
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Compare pricing pages').project === Object.keys(window.__host.workspace.lists).find(id => window.__host.workspace.lists[id].name === 'Personal'));
+});
+
+const weekdayNow = () => new Intl.DateTimeFormat('en-US', {weekday: 'long'}).format(new Date()).toUpperCase();
+
+await check('corner card', {width: 340, height: 420, compact: true}, async ({page, host, tasks}) => {
+  assert.equal(await page.locator('#shell').isHidden(), true);
+  assert.equal(await text(page, '#cardWeekday'), weekdayNow());
+  assert.equal(await text(page, '#cardDay'), String(new Date().getDate()));
+  assert.equal(await text(page, '#cardSummary'), '5 tasks left');
+  assert.equal(await text(page, '#cardRing .ring-label'), '1/6');
+  assert.equal(await page.locator('#cardTasks .row').count(), 5);
+  assert.equal(await page.locator('#cardTasks .row.p0').count(), 1);
+  assert.equal(await text(page, '#cardTasks .row:has-text("Send the release checklist") .card-due'), 'Tomorrow');
+  assert.match(await text(page, '#cardTasks .row:has-text("Review QA feedback")'), /Review QA feedback/);
+  // The agent capsule moved into the card and reports the agent that needs you.
+  assert.equal(await page.locator('.card-island-slot #island').count(), 1);
+  assert.match(await page.getAttribute('#island', 'class'), /mode-attention/);
+  // The waiting agent's report replaces the capsule, so the news is not shown twice.
+  assert.equal(await page.locator('.card-island-slot').isHidden(), true);
+  assert.match(await text(page, '#cardReport'), /web-app[\s\S]*Needs you[\s\S]*Claude needs your permission to use Bash/);
+  // The card tells the app how tall it needs to be.
+  await page.waitForFunction(() => window.__host.cardHeight > 150);
+  const shown = await page.evaluate(() => Math.ceil(document.querySelector('.card-inner').getBoundingClientRect().height));
+  assert.ok((await host()).cardHeight >= shown);
+
+  await page.fill('#cardAddInput', 'Stretch at 5pm');
+  await page.press('#cardAddInput', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Stretch'));
+  const stretch = (await tasks()).find(t => t.title === 'Stretch');
+  assert.deepEqual([stretch.planned, stretch.dueDate, stretch.dueTime], [day(0), day(0), '17:00']);
+  assert.equal(await text(page, '#cardSummary'), '6 tasks left');
+  assert.equal(await page.locator('#cardMore').isHidden(), true);
+
+  await page.locator('#cardTasks .row', {hasText: 'Review the product roadmap'}).locator('.check').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
+  assert.equal(await text(page, '#cardRing .ring-label'), '2/7');
+  // An overdue task finished today stays in today's tally.
+  await page.locator('#cardTasks .row', {hasText: 'Review QA feedback'}).locator('.check').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').done);
+  assert.equal(await text(page, '#cardRing .ring-label'), '3/7');
+
+  // Report text can be selected: pressing in the page never starts a window drag (F15).
+  const selected = await page.evaluate(() => { const node = document.querySelector('#cardReport .report-reason'); getSelection().selectAllChildren(node); return getSelection().toString(); });
+  assert.ok(selected.length > 5);
+  await page.evaluate(() => getSelection().removeAllRanges());
+
+  await page.evaluate(() => { window.__host.menuChoice = 'Move to Tomorrow'; });
+  await page.locator('#cardTasks .row', {hasText: 'Prepare Friday'}).click({button: 'right'});
+  await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update").planned === d, day(1));
+  const menu = (await host()).lastMenu;
+  // Window behaviour is explicit, and off by default (F16).
+  assert.deepEqual(['Keep Above Other Windows', 'Show on All Spaces', 'Snap to Screen Corners'].map(title => menu.find(item => item.title === title)?.checked), [false, false, true]);
+  await page.evaluate(() => { window.__host.menuChoice = 'Show on All Spaces'; });
+  await page.locator('.card-head').click({button: 'right'});
+  await page.waitForFunction(() => window.__host.card.allSpaces === true);
+
+  await page.hover('#card');
+  await page.click('#cardPin');
+  await page.waitForFunction(() => window.__host.pinned === true && document.getElementById('cardPin').getAttribute('aria-pressed') === 'true');
+
+  // Details open in the full workspace, not inside the small card.
+  await page.locator('#cardTasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
+  await page.waitForSelector('#taskForm');
+  assert.equal(await page.locator('#shell').isVisible(), true);
+  assert.equal(await page.locator('.toolbar #island').count(), 1);
+});
+
+await check('brief report: decide whether to open the agent', {width: 340, height: 600, compact: true, scale: 2}, async ({page, host, shot}) => {
+  const report = () => text(page, '#cardReport');
+  // 1. An agent waiting for permission comes first.
+  assert.match(await page.getAttribute('#cardReport', 'class'), /verdict-blocked/);
+  assert.match(await report(), /Needs you[\s\S]*You asked: Deploy the preview build/);
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in Terminal');
+  await shot('report-needs-you');
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => window.__host.openedApp === 'com.apple.Terminal');
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => !window.__host.agents.some(agent => agent.state === 'attention'));
+
+  // 2. Then the newest unread result, with a verdict.
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
+  assert.match(await page.getAttribute('#cardReport', 'class'), /verdict-done/);
+  const done = await report();
+  for (const part of [/Completed · Checks passed/, /Checks ran and passed\./, /Updated billing\.py and added 12 tests/, /billing\.py/, /Checks passed/, /You asked: Refactor billing\.py/, /5 min/, /1 more result/]) assert.match(done, part);
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in iTerm');
+  await page.waitForTimeout(100);
+  await shot('report-done');
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => window.__host.notices.external[0].read);
+
+  // 3. The Codex result opens its own conversation.
+  await page.waitForFunction(() => /api-server/.test(document.getElementById('cardReport').innerText));
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open in Codex');
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => window.__host.openedThread && window.__host.notices.codex[0].read);
+  await page.waitForFunction(() => document.getElementById('cardReport').hidden);
+  assert.doesNotMatch(await page.getAttribute('#card', 'class') || '', /has-report/);
+});
+
+// F03: a newer result never replaces the report under your pointer, focus or selection.
+await check('report stays put while being read', {width: 340, height: 640, compact: true}, async ({page, host}) => {
+  const head = () => text(page, '#cardReport .report-head b');
+  const arrive = (key, place) => page.evaluate(([key, place]) => {
+    window.__host.agents.push({key: key.repeat(64), source: 'Claude Code', title: 'Claude Code · ' + place, detail: 'Claude needs your permission to run git push', state: 'attention', receipt: '', time: Date.now() / 1000});
+    window.setAgents(window.__host.agents);
+  }, [key, place]);
+  assert.equal(await head(), 'web-app');
+  await page.hover('#cardReport .report-headline');
+  await arrive('9', 'payments');
+  await page.waitForSelector('#cardReport .report-newer:not([hidden])');
+  assert.equal(await head(), 'web-app', 'the report under the pointer is not replaced');
+  // Actions stay bound to the report being read.
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => !window.__host.agents.some(agent => agent.title.endsWith('web-app')));
+  assert.ok((await host()).agents.some(agent => agent.title.endsWith('payments')));
+  // Selected text also holds the report.
+  await page.mouse.move(5, 600);
+  await page.waitForFunction(() => document.querySelector('#cardReport .report-head b')?.textContent === 'payments');
+  await page.evaluate(() => { const node = document.querySelector('#cardReport .report-headline'); getSelection().selectAllChildren(node); });
+  await arrive('8', 'search');
+  await page.waitForTimeout(400);
+  assert.equal(await head(), 'payments');
+  assert.equal(await page.locator('#cardReport .report-newer').isVisible(), true);
+  await page.click('#cardReport .report-newer');
+  await page.waitForFunction(() => document.querySelector('#cardReport .report-head b')?.textContent === 'search');
+  // An idle card follows the newest result.
+  await page.evaluate(() => getSelection().removeAllRanges());
+  await page.mouse.move(5, 600);
+  await page.waitForTimeout(1500);
+  await arrive('7', 'mobile');
+  await page.waitForFunction(() => document.querySelector('#cardReport .report-head b')?.textContent === 'mobile');
+});
+
+await check('brief report: worth a look, and the full reply', {width: 340, height: 600, compact: true}, async ({page}) => {
+  await page.evaluate(() => {
+    const now = Date.now() / 1000;
+    window.__host.agents = [];
+    window.__host.notices.codex = [];
+    window.__host.notices.external = [{id: 'connector/' + 'd'.repeat(64), source: 'Claude Code', title: 'Claude Code · api', time: now - 30, read: false, thread: '', link: '',
+      summary: 'Added the refund endpoint in `routes/refunds.ts`.\n\n2 tests failed in `refunds.test.ts`: the currency rounding is off.'}];
+    window.__host.agents.push({key: 'b'.repeat(64), source: 'Claude Code', title: 'Claude Code · api', detail: '', state: 'done', receipt: 'connector/' + 'd'.repeat(64), time: now - 30, task: 'Add a refund endpoint', started: now - 400, app: ''});
+    window.setInbox({channel: 'codex', items: [], error: ''});
+    window.setInbox({channel: 'external', items: window.__host.notices.external, error: ''});
+    window.setAgents(window.__host.agents);
+  });
+  await page.waitForFunction(() => /verdict-review/.test(document.getElementById('cardReport').className));
+  assert.match(await text(page, '#cardReport'), /Worth a look[\s\S]*The reply says checks failed[\s\S]*Reported failing/);
+  assert.equal(await text(page, '#cardReport [data-report="open"]'), 'Open Claude Code');
+  await page.click('#cardReport [data-report="read"]');
+  await page.waitForSelector('#inboxReader .reader-original');
+  assert.equal(await page.locator('#shell').isVisible(), true);
+});
+
+await check('first run: connect Claude Code or watch the demo', {width: 340, height: 640, compact: true, empty: true, workspace: null, scale: 2}, async ({page, host, shot}) => {
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  assert.match(await text(page, '#cardWelcome'), /Know when Claude Code is done[\s\S]*Connect Claude Code[\s\S]*Try a demo/);
+  await shot('first-run');
+  await page.click('[data-welcome="demo"]');
+  await page.waitForFunction(() => document.getElementById('cardWelcome').hidden);
+  assert.match(await page.getAttribute('#island', 'class'), /mode-working/);
+  // The waiting session's report comes first, then the finished one, with facts from its session log.
+  await page.waitForFunction(() => /Needs you/.test(document.getElementById('cardReport').innerText), null, {timeout: 8000});
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => /demo-shop/.test(document.getElementById('cardReport').innerText), null, {timeout: 9000});
+  assert.match(await text(page, '#cardReport'), /Completed · Checks passed[\s\S]*refunds\.ts[\s\S]*Checks ran and passed/);
+  await shot('demo-report');
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => /real session/.test(document.getElementById('toast').textContent));
+  await page.waitForFunction(() => document.getElementById('cardReport').hidden);
+  assert.equal((await host()).openedApp, undefined, 'the demo never opens a real app');
+  // Nothing from the demo reached the app.
+  assert.equal(((await host()).workspace?.tasks || []).length, 0);
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  await page.click('[data-welcome="connect"]');
+  await page.waitForFunction(() => window.__host.claude.installed && document.getElementById('cardWelcome').hidden);
+});
+
+await check('first run: not now', {width: 340, height: 640, compact: true, empty: true, workspace: null}, async ({page}) => {
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  await page.click('[data-welcome="close"]');
+  await page.waitForFunction(() => window.__host.workspace?.welcomed === true && document.getElementById('cardWelcome').hidden);
+});
+
+await check('light download: no task capture', {lite: true}, async ({page}) => {
+  await page.click('#boardMore');
+  assert.equal(await page.locator('#openCapture').isHidden(), true);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Meta+k');
+  await page.fill('#paletteInput', 'capture');
+  assert.doesNotMatch(await text(page, '#paletteList'), /Capture Tasks/);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.openMessage('Please send the deck by Friday.'));
+  await page.waitForSelector('#captureManual');
+  assert.match(await text(page, '#dialogBody'), /light download leaves out/);
+  await page.click('#captureManual');
+  await page.waitForSelector('#taskForm');
+});
+
+await check('light download: optional verified model download', {lite: true}, async ({page, host}) => {
+  // Nothing downloads on its own. The menu offers it, and the dialog says what happens.
+  assert.equal((await host()).modelRequests, undefined);
+  await page.click('#boardMore');
+  assert.equal(await page.locator('#downloadModelMenu').isVisible(), true);
+  await page.click('#downloadModelMenu');
+  assert.match(await text(page, '#dialogBody'), /1\.1 GB[\s\S]*checksum/);
+  await page.click('#downloadModel');
+  await page.waitForFunction(() => /Downloading: 559 MB of 1,117 MB \(50%\)|Checking the file/.test(document.querySelector('#modelStatus')?.textContent || ''));
+  // Once installed and verified, Capture Tasks opens in place.
+  await page.waitForSelector('#recognize');
+  assert.equal((await host()).modelRequests, 1);
+  await page.keyboard.press('Escape');
+  await page.click('#boardMore');
+  assert.equal(await page.locator('#openCapture').isVisible(), true);
+  assert.equal(await page.locator('#downloadModelMenu').isVisible(), false);
+});
+
+await check('back to card after jumping to the workspace', {width: 340, height: 600, compact: true}, async ({page}) => {
+  await page.locator('#cardTasks .row', {hasText: 'Organize the review notes'}).locator('.task-body').click();
+  await page.waitForSelector('#taskForm');
+  await page.click('#dialog [data-close]');
+  assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
+  assert.equal(await text(page, '#workspaceReturn'), 'Back to card');
+  await page.click('#workspaceReturn');
+  await page.waitForFunction(() => compact && document.getElementById('workspaceReturn').hidden);
+});
+
+// F06: the inbox is reachable from the card in every state, with its count.
+await check('card inbox button in every state', {width: 340, height: 640, compact: true, empty: true, workspace: null}, async ({page}) => {
+  await page.waitForSelector('#cardWelcome:not([hidden])');
+  assert.equal(await page.locator('#cardInbox').isVisible(), true, 'first run');
+  assert.equal(await text(page, '#cardInboxCount'), '');
+  await page.evaluate(() => {
+    window.__host.notices.codex = [{id: 'old/1', thread: '11111111-1111-4111-8111-111111111111', title: 'Codex · api', time: Date.now() / 1000 - 30 * 3600, read: false, summary: 'Fixed the export.'}];
+    window.setInbox({channel: 'codex', items: window.__host.notices.codex, error: ''});
+  });
+  assert.equal(await text(page, '#cardInboxCount'), '1');
+  // A day-old unread result is still offered, not hidden by its age.
+  await page.waitForFunction(() => /api/.test(document.getElementById('cardReport').innerText));
+  await page.click('#cardInbox');
+  await page.waitForSelector('#inboxItems [data-notice]');
+  assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
+});
+
+// F08: at 340 × 430 everything essential stays reachable; long parts scroll inside the card.
+await check('compact card at a constrained height', {width: 340, height: 430, compact: true, scale: 2}, async ({page, host, shot}) => {
+  const add = await page.locator('#cardAddInput').boundingBox();
+  assert.ok(add.y + add.height <= 430, 'the add field is on screen: ' + (add.y + add.height));
+  assert.equal(await page.locator('#cardInbox').isVisible(), true);
+  const scrolls = await page.evaluate(() => ['#cardTasks', '#cardReport'].map(id => { const node = document.querySelector(id); return node.scrollHeight > node.clientHeight + 1 && getComputedStyle(node).overflowY === 'auto'; }));
+  assert.ok(scrolls.some(Boolean), 'something scrolls inside the card');
+  await page.waitForFunction(() => window.__host.cardHeight > 430);
+  await shot('card-430');
+  const before = await page.evaluate(() => document.getElementById('cardReport').scrollHeight);
+  await page.click('#cardReport .report-fold');
+  assert.match(await page.getAttribute('#cardReport', 'class'), /folded/);
+  const after = await page.evaluate(() => document.getElementById('cardReport').scrollHeight);
+  assert.ok(after < before, 'folding the report frees room: ' + before + ' -> ' + after);
+  await page.fill('#cardAddInput', 'Still reachable');
+  await page.press('#cardAddInput', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Still reachable'));
+});
+
+// F09: Full reply opens the stored reply in one action and keeps where you were.
+await check('card report keeps its lines and asks for room (native capture)', {width: 340, height: 474, compact: true}, async ({page, host}) => {
+  // Seen in the macOS capture: the headline was squeezed under the next line, the task list scrolled
+  // sideways, and the card asked for less height than its content needed.
+  await page.waitForTimeout(800);
+  const layout = await page.evaluate(() => {
+    const report = document.querySelector('.card-report');
+    const parts = [...report.children].filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect());
+    const overlaps = parts.slice(1).filter((box, i) => box.top < parts[i].bottom - 1).length;
+    const sideways = [...document.querySelectorAll('#card *')].filter(node => node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== 'visible' && getComputedStyle(node).overflowX !== 'hidden').map(node => node.id || node.className);
+    const headline = report.querySelector('.report-headline');
+    const squeezed = [...report.children].filter(node => node.getClientRects().length && node.scrollHeight > node.clientHeight + 1).map(node => node.className);
+    return {overlaps, sideways, squeezed, headline: headline.clientHeight};
+  });
+  assert.equal(layout.overlaps, 0, 'report lines overlap');
+  assert.deepEqual(layout.squeezed, [], 'report lines squeezed into less height than their text');
+  assert.ok(layout.headline >= 17, 'headline height ' + layout.headline);
+  assert.deepEqual(layout.sideways, [], 'something scrolls sideways');
+  assert.ok((await host()).cardHeight > 474, 'the card asks for the height its content needs: ' + (await host()).cardHeight);
+});
+
+await check('inbox and card agree when session facts arrive late (native capture)', {}, async ({page}) => {
+  // Seen in the macOS capture: the app sends the inbox before the agent statuses, and the inbox row kept
+  // "Checks reported passing" while the card showed "Checks passed" for the same result.
+  const id = 'connector/' + '9'.repeat(64);
+  await page.evaluate(id => {
+    const host = window.__host, now = Date.now() / 1000;
+    host.notices.external.unshift({id, source: 'Claude Code', title: 'Claude Code · late-facts', time: now, read: false, thread: '', link: '', summary: 'Done. All tests pass.'});
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+  }, id);
+  await page.click('#inboxButton');
+  const row = () => page.locator('#inboxItems [data-notice]', {hasText: 'late-facts'}).locator('.inbox-item-status');
+  assert.equal(await row().innerText(), 'Completed · Checks reported passing');
+  await page.evaluate(id => {
+    const host = window.__host, now = Date.now() / 1000;
+    host.agents.push({key: '9'.repeat(64), source: 'Claude Code', title: 'Claude Code · late-facts', detail: 'Done.', state: 'done', receipt: id, time: now, task: 'Fix it', started: now - 60,
+      facts: {files: ['a.py'], fileCount: 1, commands: 1, failedTools: 0, tests: 'passed', testCommand: 'pytest -q'}});
+    window.setAgents(host.agents);
+  }, id);
+  await page.waitForTimeout(400);
+  assert.equal(await row().innerText(), 'Completed · Checks passed', 'after facts arrive');
+  // Reading the result clears its session status; the verdict must not fall back to the reply's claim.
+  await page.evaluate(id => { const host = window.__host; host.agents = host.agents.filter(agent => agent.receipt !== id); window.setAgents(host.agents); }, id);
+  await page.waitForTimeout(300);
+  assert.equal(await row().innerText(), 'Completed · Checks passed');
+});
+
+await check('full reply opens the original reply', {width: 340, height: 640, compact: true}, async ({page}) => {
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
+  await page.click('#cardReport [data-report="read"]');
+  await page.waitForSelector('#inboxReader .reader-original');
+  assert.match(await text(page, '#inboxReader .reader-original'), /Next step: review the migration before deploying/);
+  assert.equal(await page.locator('#workspaceReturn').isVisible(), true);
+  // Narrow: the reader has a way back to the list. A source filter that shows the result is kept, and so are the
+  // selection and the Original Reply tab, across a trip back to the card (RETURN-STATE).
+  await page.click('#inboxReader [data-reader="back"]');
+  await page.selectOption('#inboxFilter', 'source:Claude Code');
+  await page.click('#workspaceReturn');
+  await page.waitForFunction(() => compact);
+  await page.click('#cardInbox');
+  await page.waitForSelector('#inboxItems [aria-selected="true"]');
+  assert.equal(await page.inputValue('#inboxFilter'), 'source:Claude Code');
+  await page.click('#inboxItems [aria-selected="true"]');
+  await page.waitForSelector('#inboxReader .reader-original');
+});
+
+// F12: each connection can have its own colour; status colours stay separate, and text stays readable.
+for (const dark of [false, true]) {
+  await check('connection colours' + (dark ? ', dark' : ''), {dark, scale: 2}, async ({page, host, shot}) => {
+    await page.click('#boardMore');
+    await page.click('#openConnectors');
+    await page.click('#claudeRow .source-swatch');
+    await page.click('.color-picker [title="Purple"]');
+    await page.waitForFunction(() => window.__host.workspace.sourceColors?.['Claude Code'] === '#af52de');
+    await page.click('#codexRow .source-swatch');
+    await page.fill('.color-picker input[type=color]', '#30d158');
+    await page.waitForFunction(() => window.__host.workspace.sourceColors?.Codex === '#30d158');
+    if (!dark) await shot('connections-colours');
+    await page.click('#dialog [data-close]');
+    await page.click('#inboxButton');
+    const claude = page.locator('#inboxItems [data-notice]', {hasText: 'Claude Code'}).first();
+    assert.match(await claude.getAttribute('class'), /has-source-color/);
+    assert.match(await claude.getAttribute('style'), /--source-color:\s*#af52de/);
+    // SOURCE-TINT: GitHub has a quiet default colour, and the tint really changes the background.
+    const github = page.locator('#inboxItems [data-notice]', {hasText: 'GitHub Actions'}).first();
+    assert.match(await github.getAttribute('class'), /has-source-color/);
+    const backgrounds = await page.evaluate(() => [...document.querySelectorAll('#inboxItems .inbox-item')].map(node => getComputedStyle(node).backgroundColor));
+    const paper = await page.evaluate(() => { const i = document.createElement('i'); i.style.background = 'var(--paper)'; document.body.append(i); const c = getComputedStyle(i).backgroundColor; i.remove(); return c; });
+    assert.ok(backgrounds.filter(value => value !== paper).length >= 3, 'tinted backgrounds: ' + backgrounds.join(' | '));
+    await shot('inbox-colours' + (dark ? '-dark' : ''));
+    // Every text on every tint, for every preset and a few extreme custom colours, reads at 4.5:1 or more.
+    for (const color of [...(await page.evaluate(() => SourceColors.presets.map(([, hex]) => hex))), '#000000', '#ffffff', '#ffd60a', '#ff0000', '#0000ff']) {
+      await page.evaluate(color => document.querySelectorAll('#inboxItems .inbox-item').forEach(node => { node.classList.add('has-source-color'); node.style.setProperty('--source-color', color); }), color);
+      assert.deepEqual(await page.evaluate(contrastAudit).then(list => list.filter(item => /inbox-item/.test(item))), [], 'contrast on ' + color);
+    }
+    // Accent only: no background tint, the dot and stripe stay.
+    await page.evaluate(() => SourceColors.setStyle('accent'));
+    await page.waitForFunction(() => window.__host.workspace.sourceStyle === 'accent');
+    assert.equal(await claude.evaluate(node => getComputedStyle(node).backgroundColor), paper);
+    await page.evaluate(() => SourceColors.setStyle('tint'));
+    // Reset removes the colour.
+    await page.click('#boardMore');
+    await page.click('#openConnectors');
+    await page.click('#claudeRow .source-swatch');
+    await page.click('.color-picker [data-color=""]');
+    await page.waitForFunction(() => !window.__host.workspace.sourceColors?.['Claude Code']);
+  });
+}
+
+await check('corner card when everything is done', {width: 340, height: 420, compact: true}, async ({page}) => {
+  for (let i = 0; i < 5; i++) {
+    await page.locator('#cardTasks .row .check').first().click();
+    await page.waitForFunction(n => document.querySelectorAll('#cardTasks .row').length === n, 4 - i);
+  }
+  assert.equal(await text(page, '#cardSummary'), 'All done');
+  assert.match(await text(page, '#cardTasks'), /Everything for today is done/);
+  assert.match(await page.getAttribute('#cardRing', 'class'), /complete/);
+});
+
+for (const dark of [false, true]) {
+  await check('corner card on the desktop' + (dark ? ', dark' : ''), {width: 1280, height: 800, compact: true, desktop: true, dark, scale: 2}, async ({shot}) => {
+    await shot('card-desktop' + (dark ? '-dark' : ''));
+  });
+}
+
+await check('agent capsule leaves the toolbar buttons free in a narrow window', {width: 760, height: 680}, async ({page}) => {
+  await page.waitForTimeout(2700);
+  await page.evaluate(() => {
+    window.__host.agents.push({key: 'a'.repeat(64), source: 'Claude Code', title: 'Claude Code · billing', detail: 'Updated billing.py and added 12 tests. All checks pass.', state: 'done', receipt: '', time: Date.now() / 1000});
+    window.setAgents(window.__host.agents);
+  });
+  await page.waitForFunction(() => /mode-flash/.test(document.getElementById('island').className));
+  for (const open of [false, true]) {
+    if (open) { await page.click('#island'); await page.waitForFunction(() => /mode-panel/.test(document.getElementById('island').className)); }
+    const [island, tools] = await page.evaluate(() => [document.getElementById('island'), document.querySelector('.toolbar-tools')].map(node => {
+      const box = node.getBoundingClientRect(); return {left: box.left, right: box.left + parseFloat(node.style.width || box.width)};
+    }));
+    assert.ok(island.right <= tools.left, 'the capsule reaches ' + island.right + ', the toolbar starts at ' + tools.left);
+  }
+});
+
+await check('motion: agent island, completion and progress', {motion: true, scale: 2}, async ({page, host, shot}) => {
+  // The title no longer carries a progress ring: next to a number it read as a loading spinner. The card keeps its ring.
+  assert.equal(await page.locator('#dayRing').isVisible(), false);
+  assert.match(await page.getAttribute('#island', 'class'), /mode-attention/);
+  // Results that were already there at launch do not flash. A fresh one does.
+  await page.waitForTimeout(2700);
+  await page.evaluate(() => {
+    const now = Date.now() / 1000;
+    window.__host.agents = window.__host.agents.filter(agent => agent.state !== 'attention')
+      .map(agent => agent.state === 'working' ? {...agent, state: 'done', time: now, detail: 'Rewrote the docs navigation and fixed 3 broken links.'} : agent);
+    window.setAgents(window.__host.agents);
+  });
+  await page.waitForFunction(() => /mode-flash/.test(document.getElementById('island').className));
+  assert.match(await text(page, '#island'), /docs-site[\s\S]*Completed · Checks not verified[\s\S]*Rewrote the docs navigation/);
+  await page.waitForTimeout(700);
+  await shot('island-flash');
+  await page.click('#island');
+  await page.waitForFunction(() => /mode-panel/.test(document.getElementById('island').className));
+  assert.equal(await page.locator('#island .agent-row').count(), 3);
+  await page.waitForTimeout(700);
+  await shot('island-panel');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !/mode-panel/.test(document.getElementById('island').className));
+
+  const row = page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await row.locator('.check').click();
+  assert.match(await row.getAttribute('class'), /completing/);
+  assert.equal((await host()).workspace.tasks.find(t => t.title === 'Review the product roadmap').done, false, 'the task waits for its animation');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
+  assert.equal(await page.locator('.burst').count() <= 1, true);
+  await page.waitForTimeout(900);
+  await shot('motion-after-complete');
+});
+
+await check('plan a task on several days and a range', {}, async ({page, tasks, shot}) => {
+  const row = page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await row.hover();
+  await row.locator('[data-act="schedule"]').click();
+  const picker = page.locator('.plan-picker');
+  await picker.waitFor();
+  // Add two separate days, then a three-day range, then remove one day.
+  const pick = date => picker.locator('[data-day="' + date + '"]').click();
+  const settle = () => page.waitForTimeout(150);
+  await pick(day(2)); await settle();
+  let planned = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual(planned.plannedDates, [day(0), day(2)]);
+  assert.equal(planned.planned, day(0));
+  await shot('plan-days');
+  // Ranges that cross a month end show the next month first.
+  const pickAny = async date => {
+    for (let i = 0; i < 3 && !(await picker.locator('[data-day="' + date + '"]').count()); i++) await picker.locator('[data-month="1"]').click();
+    await pick(date); await settle();
+  };
+  await picker.locator('[data-mode="range"]').click();
+  await pickAny(day(5)); await pickAny(day(7));
+  planned = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual(planned.plannedDates, [day(0), day(2), day(5), day(6), day(7)]);
+  await picker.locator('[data-remove="' + day(6) + '"]').click(); await settle();
+  planned = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual(planned.plannedDates, [day(0), day(2), day(5), day(7)]);
+  await picker.locator('[data-plan-done]').click();
+  // Upcoming lists the task under each planned day.
+  await page.click('#nav [data-view="upcoming"]');
+  const groups = await page.locator('.day-group').evaluateAll(nodes => nodes.filter(node => node.textContent.includes('Review the product roadmap')).length);
+  assert.equal(groups, 3, 'shown on day +2, +5 and +7');
+  // Completing it completes the whole task once, not one day at a time.
+  await page.click('#nav [data-view="today"]');
+  await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).locator('[data-act="toggle"]').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').done);
+  assert.equal((await tasks()).filter(t => t.title === 'Review the product roadmap').length, 1);
+});
+
+await check('planned days in details, and not overdue while a day remains', {}, async ({page, tasks}) => {
+  // "Review QA feedback" was planned yesterday. Adding tomorrow keeps it off the overdue list.
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.click('#plannedToggle');
+  assert.equal(await page.getAttribute('#plannedToggle', 'aria-expanded'), 'true');
+  await page.locator('#plannedPicker [data-day="' + day(1) + '"]').click();
+  assert.match(await text(page, '#plannedToggle'), /and/);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(d => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').plannedDates?.includes(d), day(1));
+  const task = (await tasks()).find(t => t.title === 'Review QA feedback');
+  assert.deepEqual(task.plannedDates, [day(-1), day(1)]);
+  assert.equal(task.planned, day(1));
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).count(), 0, 'no longer overdue in Today');
+});
+
+await check('row actions without right-click', {}, async ({page}) => {
+  const row = page.locator('#tasks .row', {hasText: 'Organize the review notes'});
+  // Hidden until hover or keyboard focus, then visible and labelled.
+  assert.equal(await row.locator('.row-actions').evaluate(node => getComputedStyle(node).opacity), '0');
+  await row.locator('.task-body').focus();
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(200);
+  assert.equal(await row.locator('.row-actions').evaluate(node => getComputedStyle(node).opacity), '1');
+  assert.deepEqual(await row.locator('.row-icon').evaluateAll(nodes => nodes.map(n => n.getAttribute('title'))), ['Plan days', 'Details', 'More']);
+  await row.locator('[data-act="more"]').click();
+  const labels = await page.locator('.menu button').allInnerTexts();
+  assert.ok(labels.some(label => label.includes('Choose Days')), 'More offers multi-day planning');
+  assert.ok(labels.some(label => label.includes('Edit Details')));
+  await page.keyboard.press('Escape');
+  await row.locator('[data-act="edit"].row-icon').click();
+  await page.locator('#dialog[open]').waitFor();
+  assert.equal(await page.inputValue('#fieldTitle'), 'Organize the review notes');
+});
+
+await check('backup: export, preview, import and undo', {}, async ({page, host, tasks}) => {
+  await page.click('#boardMore');
+  await page.click('#backupExport');
+  await page.waitForFunction(() => window.__host.backupFile);
+  const backup = JSON.parse((await host()).backupFile);
+  assert.equal(backup.format, 'shishi-backup');
+  assert.equal(backup.version, 1);
+  assert.equal(backup.workspace.tasks.length, 18);
+  assert.doesNotMatch(JSON.stringify(backup), /token|secret|password/i);
+  // Change something, then restore the backup on top of it.
+  await page.evaluate(() => window.__host.workspace.tasks.length);
+  await page.locator('#tasks .row', {hasText: 'Organize the review notes'}).locator('[data-act="toggle"]').click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Organize the review notes').done);
+  backup.workspace.tasks = backup.workspace.tasks.slice(0, 3);
+  await page.evaluate(text => { window.__host.importFile = {name: 'Shishi Backup.json', text}; }, JSON.stringify(backup));
+  await page.click('#boardMore');
+  await page.click('#backupImport');
+  await page.locator('#confirmImport').waitFor();
+  assert.match(await text(page, '#dialogBody'), /3\s*Tasks[\s\S]*replaces your current 18 tasks/);
+  await page.click('#confirmImport');
+  await page.waitForFunction(() => window.__host.workspace.tasks.length === 3);
+  assert.equal((await host()).snapshots, 2, 'a copy is saved at the upgrade to list IDs, and again before the import');
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.length === 18);
+  assert.equal((await tasks()).find(t => t.title === 'Organize the review notes').done, true, 'undo restores the data from before the import');
+});
+
+await check('backup: invalid files change nothing', {}, async ({page, tasks}) => {
+  const tries = [
+    ['not json', /not valid JSON/],
+    [JSON.stringify({format: 'something-else'}), /not a Shishi backup/],
+    [JSON.stringify({format: 'shishi-backup', version: 9, workspace: {version: 1, projects: ['A'], tasks: []}}), /newer version/],
+    [JSON.stringify({format: 'shishi-backup', version: 1, workspace: {version: 1, projects: ['A'], tasks: [{id: 'x', title: 'T', project: 'B', dueTime: '09:00'}]}}), /list that is not in the backup[\s\S]*time without a valid date/],
+    [JSON.stringify({format: 'shishi-backup', version: 1, workspace: {version: 1, projects: ['A'], tasks: [], notion: {token: 'abc'}}}), /look like credentials/]
+  ];
+  for (const [body, pattern] of tries) {
+    await page.evaluate(text => { window.__host.importFile = {name: 'bad.json', text}; }, body);
+    await page.click('#boardMore');
+    await page.click('#backupImport');
+    await page.locator('#dialog[open] .import-problems').waitFor();
+    assert.match(await text(page, '#dialogBody'), pattern);
+    assert.equal(await page.locator('#confirmImport').count(), 0);
+    await page.click('#dialog [data-close]');
+    await page.locator('#dialog[open]').waitFor({state: 'detached'}).catch(() => {});
+    await page.waitForFunction(() => !document.querySelector('#dialog').open);
+  }
+  assert.equal((await tasks()).length, 18);
+});
+
+await check('UX-N01/N02: malformed backups are explained; empty backups confirm; a failed safety copy stops the import', {}, async ({page, host, tasks}) => {
+  const wrap = workspace => JSON.stringify({format: 'shishi-backup', version: 1, workspace: {version: 1, projects: ['A'], ...workspace}});
+  const openImport = async body => {
+    await page.evaluate(text => { window.__host.importFile = {name: 'backup.json', text}; }, body);
+    await page.click('#boardMore');
+    await page.click('#backupImport');
+    await page.locator('#dialog[open] #dialogBody .actions').waitFor();
+    return text(page, '#dialogBody');
+  };
+  const closeIt = async () => { await page.evaluate(() => closeDialog(true)); await page.waitForFunction(() => !document.querySelector('#dialog').open); };
+  const tries = [
+    [wrap({}), /no task list/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', dueDate: '2026-99-99'}]}), /invalid deadline/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', dueDate: '2026-02-30'}]}), /invalid deadline/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', dueDate: '2026-11-13', dueTime: '99:99'}]}), /time without a valid date/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', notes: {text: 'hi'}}]}), /notes are not text/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', plannedDates: ['2026-13-01']}]}), /invalid planned days/]
+  ];
+  for (const [body, pattern] of tries) {
+    const shown = await openImport(body);
+    assert.match(shown, pattern);
+    assert.match(shown, /Nothing was changed/);
+    assert.equal(await page.locator('#confirmImport').count(), 0);
+    await closeIt();
+  }
+  assert.equal((await tasks()).length, 18, 'malformed backups keep every task');
+  // A valid backup with no tasks can be imported, but only after a plain warning.
+  const shown = await openImport(wrap({tasks: []}));
+  assert.match(shown, /has no tasks[\s\S]*removes all 18 of your current tasks/);
+  assert.match(await page.locator('#confirmImport').innerText(), /Replace with Empty Backup/);
+  // The safety copy fails: the import stops, the old tasks stay, and no success is claimed.
+  await page.evaluate(() => { window.__host.failSnapshot = 'The backup folder is not writable.'; });
+  await page.click('#confirmImport');
+  await page.waitForFunction(() => /not writable/.test(document.getElementById('dialogBody').textContent + document.getElementById('toast').textContent));
+  assert.equal((await tasks()).length, 18);
+  assert.doesNotMatch(await text(page, '#toast'), /Imported/);
+  await closeIt();
+  // With the copy working again, the empty backup imports.
+  await page.evaluate(() => { window.__host.failSnapshot = ''; });
+  await openImport(wrap({tasks: []}));
+  await page.click('#confirmImport');
+  await page.waitForFunction(() => window.__host.workspace.tasks.length === 0);
+});
+
+await check('NATIVE-01: the card measures its content, settles, and shrinks again', {compact: true, width: 340, height: 900, emulateCard: true}, async ({page}) => {
+  await page.waitForTimeout(1500);
+  const settled = await page.evaluate(() => ({sizes: window.__host.cardSizes, height: window.__host.windowHeight}));
+  assert.ok(settled.sizes.length <= 4, 'the card settles instead of resizing again and again: ' + settled.sizes.length + ' calls, ' + settled.sizes.slice(0, 8).join(', '));
+  assert.ok(settled.height < 760, 'it does not grow to the maximum with only a few tasks: ' + settled.height);
+  // Content shrinks (tasks done): the card follows it down.
+  const before = settled.height;
+  await page.evaluate(() => { const today = day(); data.tasks.forEach(t => { if (t.planned === today) t.done = true; }); render(); });
+  await page.waitForTimeout(800);
+  const after = await page.evaluate(() => window.__host.windowHeight);
+  assert.ok(after < before, 'Fit to content shrinks: ' + before + ' → ' + after);
+  const calls = await page.evaluate(() => window.__host.cardSizes.length);
+  await page.waitForTimeout(800);
+  assert.equal(await page.evaluate(() => window.__host.cardSizes.length), calls, 'and stays put');
+});
+
+for (const dark of [false, true]) {
+  await check('READABILITY: text contrast and size on the main screens' + (dark ? ', dark' : ''), {dark, width: 1280, height: 800}, async ({page}) => {
+    const seen = [];
+    for (const go_ of ['today', 'upcoming', 'inbox', 'projects', 'all']) {
+      await page.evaluate(v => go(v), go_);
+      if (go_ === 'inbox') await page.locator('#inboxItems [data-notice]').first().click();
+      await page.waitForTimeout(150);
+      seen.push(...(await page.evaluate(contrastAudit)).map(problem => go_ + ': ' + problem));
+    }
+    assert.deepEqual([...new Set(seen)], [], 'text below 4.5:1 or 12 px');
+  });
+  await check('READABILITY: the compact card' + (dark ? ', dark' : ''), {dark, width: 340, height: 430, compact: true}, async ({page}) => {
+    await page.waitForTimeout(300);
+    assert.deepEqual([...new Set(await page.evaluate(contrastAudit))], [], 'text below 4.5:1 or 12 px on the card');
+  });
+}
+
+await check('native capture flags open the right sheets', {}, async ({page}) => {
+  await page.evaluate(() => window.showForCapture('schedule'));
+  await page.locator('#plannedPicker:not([hidden]) .day-picker').waitFor();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#dialog').open);
+  await page.evaluate(() => window.showForCapture('connections'));
+  await page.locator('.color-picker').waitFor();
+});
+
+await check('agents: current tool, stopped sessions, settings and diagnostics', {}, async ({page, host}) => {
+  // A working session shows what it is doing now; a session whose process died shows Stopped.
+  assert.match(await text(page, '#agentList'), /Working · Edit billing\.py · 14 tools/);
+  await page.evaluate(() => {
+    const rows = window.__host.agents.map(row => row.state === 'working' ? {...row, state: 'idle', ended: true, activity: '', detail: 'The session ended without a final reply.'} : row);
+    window.setAgents(rows);
+  });
+  assert.match(await text(page, '#agentList'), /Stopped · The session ended without a final reply\./);
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  const hotkeys = page.locator('[data-setting="hotkeys"]'), awake = page.locator('[data-setting="keepAwake"]');
+  await page.waitForFunction(() => !document.querySelector('[data-setting="hotkeys"]').disabled);
+  assert.deepEqual([await hotkeys.isChecked(), await awake.isChecked()], [true, false]);
+  await awake.check();
+  await page.waitForFunction(() => window.__host.settings.keepAwake === true);
+  await page.click('[data-settings-tab="general"]');
+  assert.match(await text(page, '#hotkeyNote'), /⌃⌥Space shows or hides the card\. ⌃⌥N adds a task\./);
+  await hotkeys.uncheck();
+  await page.waitForFunction(() => window.__host.settings.hotkeys === false);
+  await page.click('[data-settings-tab="agents"]');
+
+  await page.click('#hookLogBox summary');
+  await page.locator('#hookLog .hook-outcome').first().waitFor();
+  assert.match(await text(page, '#hookLog'), /PostToolUse[\s\S]*session 1a2b3c4d[\s\S]*delivered[\s\S]*Unreadable event[\s\S]*problem:/);
+});
+
+await check('global shortcut focuses the card add field', {width: 340, height: 600, compact: true}, async ({page}) => {
+  await page.evaluate(() => window.focusQuickAdd());
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'cardAddInput');
+});
+
+await check('approve a permission request from the card', {width: 340, height: 640, compact: true, scale: 2}, async ({page, host, shot}) => {
+  const now = Date.now() / 1000;
+  await page.evaluate(now => window.setApprovals([
+    {id: 'a'.repeat(32), session: 's', source: 'Claude Code', project: 'web-app', tool: 'Bash', detail: 'rm -rf node_modules && npm install', reason: 'Clean install', time: now, expires: now + 25}
+  ]), now);
+  const box = page.locator('#cardApprovals');
+  await box.waitFor();
+  assert.match(await box.innerText(), /web-app[\s\S]*Claude Code wants to use Bash: Clean install[\s\S]*rm -rf node_modules && npm install[\s\S]*Then it asks in the terminal/);
+  assert.match(await box.locator('[data-left]').innerText(), /^2[45] s$/);
+  // The same session's request is not repeated as a "Needs you" report while Allow and Deny are on the card.
+  await page.evaluate(() => window.setAgents(window.__host.agents.map(row => row.state === 'attention' ? {...row, approval: 'a'.repeat(32)} : row)));
+  await page.waitForFunction(() => !/Needs you/.test(document.getElementById('cardReport').innerText));
+  await shot('card-approval');
+  await box.locator('[data-answer="allow"]').click();
+  await page.waitForFunction(() => window.__host.answers?.length === 1);
+  assert.deepEqual((await host()).answers[0], {request: 'a'.repeat(32), behavior: 'allow'});
+  assert.equal(await box.isHidden(), true);
+  assert.match(await text(page, '#toast'), /Allowed/);
+  // An answer that arrives too late says so, and an expired request disappears by itself.
+  await page.evaluate(now => window.setApprovals([{id: 'gone', project: 'api', tool: 'Edit', detail: 'a.py', time: now, expires: now + 30},
+                                                   {id: 'b'.repeat(32), project: 'old', tool: 'Bash', detail: 'ls', time: now - 30, expires: now + 1.2}]), now);
+  await page.locator('#cardApprovals [data-approval="gone"] [data-answer="deny"]').click();
+  await page.waitForFunction(() => /no longer waiting/.test(document.getElementById('toast').textContent));
+  await page.waitForFunction(() => !document.querySelector('[data-approval]'), null, {timeout: 5000});
+});
+
+await check('approvals and alerts in Connections', {}, async ({page, host}) => {
+  await page.evaluate(() => { window.__host.claude = {installed: true, working: true, cli: true, problem: '', approvals: false}; });
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.locator('#approvalRow:not([hidden])').waitFor();
+  await page.check('#approvalChoice');
+  await page.waitForFunction(() => window.__host.claude.approvals === true);
+  assert.match(await text(page, '#toast'), /Permission requests now come to Shishi first/);
+  await page.selectOption('#approvalWait', '45');
+  await page.waitForFunction(() => window.__host.approvalWait === 45);
+  await page.click('[data-settings-tab="alerts"]');
+  // Alerts are off until chosen; sound and banner follow the two triggers.
+  await page.waitForFunction(() => !document.querySelector('[data-alert="needsYou"]').disabled);
+  assert.equal(await page.locator('[data-alert="sound"]').isDisabled(), true);
+  await page.check('[data-alert="needsYou"]');
+  await page.waitForFunction(() => window.__host.alerts.needsYou === true && !document.querySelector('[data-alert="sound"]').disabled);
+  await page.fill('[data-alert="quietFrom"]', '22:00');
+  await page.locator('[data-alert="quietFrom"]').dispatchEvent('change');
+  await page.fill('[data-alert="quietTo"]', '08:00');
+  await page.locator('[data-alert="quietTo"]').dispatchEvent('change');
+  await page.waitForFunction(() => window.__host.alerts.quietTo === '08:00');
+  assert.match(await text(page, '#quietNote'), /from 22:00 to 08:00/);
+  await page.selectOption('[data-alert="remindAfter"]', '10');
+  await page.waitForFunction(() => window.__host.alerts.remindAfter === 10);
+  await page.click('#testAlert');
+  await page.waitForFunction(() => window.__host.testAlerts === 1);
+  // Reconnecting keeps the approval choice.
+  await page.click('[data-settings-tab="agents"]');
+  await page.click('#claudeConnection');
+  await page.waitForFunction(() => window.__host.claude.installed === false);
+  await page.click('#claudeConnection');
+  await page.waitForFunction(() => window.__host.claude.installed === true);
+});
+
+await check('usage and limits under Agents, exact tab', {width: 1040, height: 760}, async ({page, host}) => {
+  await page.locator('#agentUsage:not([hidden])').waitFor();
+  const usage = await text(page, '#agentUsage');
+  assert.match(usage, /Claude Code\s*1\.2M \/ 5 h · 8\.4M \/ week/);
+  assert.match(usage, /Codex\s*42% \/ 5 h · 83% \/ week/);
+  assert.match(await page.locator('.usage-row').nth(1).getAttribute('title'), /42% of the 5-hour limit, resets[\s\S]*83% of the weekly limit, resets/);
+  assert.equal(await page.locator('.usage-row.high').count(), 1, 'a limit above 80% stands out');
+  assert.match(await page.locator('.usage-row').first().getAttribute('title'), /counts, not a percentage/);
+  // Turning usage off hides it.
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.waitForFunction(() => !document.querySelector('[data-setting="usage"]').disabled);
+  await page.uncheck('[data-setting="usage"]');
+  await page.waitForFunction(() => document.getElementById('agentUsage').hidden);
+  await page.keyboard.press('Escape');
+});
+
+await check('open the exact terminal tab, and say when only the app opened', {width: 340, height: 640, compact: true}, async ({page, host}) => {
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => window.__host.openedApp === 'com.apple.Terminal');
+  assert.deepEqual((await host()).openedPlace, {terminal: {tty: 'ttys004'}, cwd: '/Users/me/code/web-app'});
+  await page.evaluate(() => { window.__host.focusResult = 'app'; });
+  await page.click('#cardReport [data-report="open"]');
+  await page.waitForFunction(() => /Privacy → Automation/.test(document.getElementById('toast').textContent));
+});
+
+await check('shishi:// links add a task or show a view, nothing else', {}, async ({page, tasks}) => {
+  await page.evaluate(() => window.openURLAction({action: 'add', text: 'Pay rent tomorrow 9am !p1', list: 'personal', notes: 'From Shortcuts'}));
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Pay rent'));
+  const added = (await tasks()).find(t => t.title === 'Pay rent');
+  assert.deepEqual([added.project, added.dueDate, added.dueTime, added.priority, added.notes], ['Personal', day(1), '09:00', 'P1', 'From Shortcuts']);
+  assert.match(await text(page, '#toast'), /Added “Pay rent” from a link/);
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === 'Pay rent'));
+  await page.evaluate(() => window.openURLAction({action: 'open', view: 'upcoming'}));
+  assert.equal(await text(page, '#pageTitle'), 'Plan');
+  await page.evaluate(() => window.openURLAction({action: 'add', text: '   '}));
+  assert.match(await text(page, '#toast'), /no task title/);
+  await page.evaluate(() => window.openURLAction({action: 'delete', id: 'x'}));
+  assert.equal((await tasks()).length, 18);
+  await page.evaluate(() => window.openURLAction({action: 'search', q: 'roadmap'}));
+  await page.locator('#palette[open]').waitFor();
+  assert.equal(await page.inputValue('#paletteInput'), 'roadmap');
+});
+
+await check('Apple Reminders: sync a list both ways', {}, async ({page, host, tasks}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.click('[data-settings-tab="sync"]');
+  await page.click('#remindersRow');
+  await page.locator('#remindersForm').waitFor();
+  await page.selectOption('#remindersList', 'L2');
+  await page.selectOption('#remindersProject', 'Personal');
+  await page.click('#remindersForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy milk'));
+  const milk = (await tasks()).find(t => t.title === 'Buy milk');
+  assert.deepEqual([milk.project, milk.reminder.id], ['Personal', 'R1']);
+  assert.equal((await tasks()).some(t => t.title === 'Old reminder'), false, 'completed reminders are not imported');
+  // Personal's own open tasks went to Reminders and are now linked.
+  await page.waitForFunction(() => window.__host.reminderPushes?.length);
+  const personal = (await tasks()).filter(t => t.project === 'Personal');
+  assert.ok(personal.every(t => t.reminder?.id), 'every task in the list is linked');
+  assert.match(await text(page, '#remindersStatus'), /Personal” · \d+ tasks linked/);
+  assert.equal((await host()).workspace.reminders.title, 'Errands');
+  await page.click('#remindersDisconnect');
+  await page.waitForFunction(() => !window.__host.workspace.reminders);
+  assert.equal((await tasks()).some(t => t.reminder), false);
+});
+
+await check('UX-N07: renamed or deleted synced lists never come back after a sync or relaunch', {}, async () => {
+  // Data from before list IDs, with two connections on "Personal", as an older Shishi stored it.
+  const reopen = async workspace => {
+    const again = await open(browser, {workspace});
+    await again.page.evaluate(() => { window.__host.issues = [{number: 31, title: 'Crash on login', state: 'open', url: 'https://github.com/acme/app/issues/31'}]; });
+    return again;
+  };
+  let session = await reopen({...structuredClone(sampleWorkspace()), reminders: {list: 'L2', title: 'Errands', project: 'Personal'},
+    github: {repo: 'acme/app', assignee: '', label: '', project: 'Personal'}});
+  try {
+    const p = session.page;
+    const names = async () => p.evaluate(() => window.__host.workspace.projects.map(id => window.__host.workspace.lists[id].name));
+    assert.deepEqual(await names(), sampleWorkspace().projects, 'the upgrade keeps every list in order');
+    assert.equal(await p.evaluate(() => window.__host.snapshots), 1, 'a copy was saved before the upgrade');
+    await p.locator('#projects [data-name="Personal"]').click({button: 'right'});
+    await p.locator('.menu-item', {hasText: 'Rename'}).click();
+    await p.fill('#nameField', 'Home');
+    await p.press('#nameField', 'Enter');
+    await p.waitForFunction(() => Object.values(window.__host.workspace.lists).some(list => list.name === 'Home'));
+    await p.evaluate(() => Promise.all([syncReminders({quiet: true}), syncIssues({quiet: true})]));
+    await p.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy milk') && window.__host.workspace.tasks.some(t => t.github?.number === 31));
+    let ws = await p.evaluate(() => window.__host.workspace);
+    const home = ws.projects.find(id => ws.lists[id].name === 'Home');
+    assert.equal((await names()).includes('Personal'), false, 'the old name is not recreated');
+    assert.equal((await names()).filter(name => name === 'Home').length, 1, 'and the list is not split');
+    assert.deepEqual([ws.reminders.project, ws.github.project, ws.tasks.find(t => t.title === 'Buy milk').project, ws.tasks.find(t => t.github?.number === 31).project], [home, home, home, home]);
+    // Relaunch from what was stored, sync again: still one "Home".
+    const stored = ws;
+    await session.context.close();
+    session = await reopen(stored);
+    const q = session.page;
+    await q.evaluate(() => Promise.all([syncReminders({quiet: true}), syncIssues({quiet: true})]));
+    ws = await q.evaluate(() => window.__host.workspace);
+    assert.deepEqual(ws.projects.map(id => ws.lists[id].name), stored.projects.map(id => stored.lists[id].name));
+    assert.equal(await q.evaluate(() => window.__host.snapshots || 0), 0, 'no second upgrade');
+    // Delete "Home" with its tasks: both syncs stop, and syncing again creates nothing.
+    await q.locator('#projects [data-name="Home"]').click({button: 'right'});
+    await q.locator('.menu-item', {hasText: 'Delete List'}).click();
+    assert.match(await text(q, '#dialogBody'), /Reminders and GitHub issues syncs with this list/);
+    await q.selectOption('#moveTarget', '');
+    await q.click('#deleteList .primary');
+    await q.waitForFunction(() => !Object.values(window.__host.workspace.lists).some(list => list.name === 'Home'));
+    ws = await q.evaluate(() => window.__host.workspace);
+    assert.equal(ws.reminders, undefined);
+    assert.equal(ws.github, undefined);
+    await q.evaluate(() => Promise.all([syncReminders({quiet: true}), syncIssues({quiet: true})]));
+    ws = await q.evaluate(() => window.__host.workspace);
+    assert.equal(ws.projects.some(id => ['Home', 'Personal', 'Errands', 'app'].includes(ws.lists[id].name)), false);
+  } finally { await session.context.close(); }
+});
+
+await check('upgrade to list IDs: no safety copy, no upgrade', {}, async ({page}) => {
+  const session = await open(browser, {workspace: sampleWorkspace(), failSnapshot: 'The disk is full.'});
+  try {
+    const p = session.page;
+    await p.waitForFunction(() => /could not save a copy/.test(document.getElementById('tasks').textContent));
+    assert.equal(await p.evaluate(() => window.__host.saves), 0, 'the old file is not touched');
+    assert.deepEqual(await p.evaluate(() => window.__host.workspace.projects), sampleWorkspace().projects);
+    session.problems.length = 0;
+  } finally { await session.context.close(); }
+});
+
+await check('calendar events in Today, Upcoming and the card', {}, async ({page, host}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.click('[data-settings-tab="sync"]');
+  await page.check('#calendarChoice');
+  await page.waitForFunction(() => window.__host.workspace.calendar?.enabled);
+  await page.evaluate(() => closeDialog(true));
+  await page.locator('#tasks .calendar-event').first().waitFor();
+  assert.match(await text(page, '#tasks .calendar-events'), /11:30 PM\s*Standup/);
+  assert.equal((await host()).calendarAsked.days, 8);
+  await page.click('#nav [data-view="upcoming"]');
+  const groups = await page.locator('.day-group').allInnerTexts();
+  assert.match(groups.find(g => g.startsWith('Tomorrow')), /All day\s*Holiday/);
+  assert.ok(groups.some(g => /3:00 PM\s*Design review/.test(g)));
+  await page.evaluate(() => window.setCompact(true));
+  await page.waitForFunction(() => !document.getElementById('cardNextEvent').hidden);
+  assert.equal(await text(page, '#cardNextEvent'), 'Next: 11:30 PM Standup');
+});
+
+await check('GitHub issues become tasks', {}, async ({page, host, tasks}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.click('[data-settings-tab="sync"]');
+  await page.click('#issuesRow');
+  await page.fill('#issuesRepo', 'acme/missing');
+  await page.click('#issuesForm .primary');
+  await page.waitForFunction(() => /exists and is public/.test(document.getElementById('issuesFeedback').textContent));
+  await page.fill('#issuesRepo', 'acme/app');
+  await page.fill('#issuesAssignee', 'octocat');
+  await page.click('#issuesForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.github?.number === 12));
+  const task = (await tasks()).find(t => t.github?.number === 12);
+  assert.deepEqual([task.title, task.project], ['Crash on login', 'app']);
+  assert.equal((await tasks()).some(t => t.github?.number === 9), false);
+  assert.equal((await host()).issueRequests.at(-1).assignee, 'octocat');
+  // The issue closes on GitHub: Import Now completes the task.
+  await page.evaluate(() => { window.__host.issues = [{number: 12, title: 'Crash on login', state: 'closed', url: 'https://github.com/acme/app/issues/12'}]; });
+  await page.click('#issuesSync');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.github?.number === 12).done);
+  await page.evaluate(() => closeDialog(true));
+  await page.click('#nav [data-view="done"]');
+  await page.locator('.row', {hasText: 'Crash on login'}).first().locator('.task-body').click();
+  await page.click('#openIssue');
+  await page.waitForFunction(() => window.__host.openedIssue === 'https://github.com/acme/app/issues/12');
+});
+
+await check('C05: Send to Claude right after an edit sends the edit, and a failed save sends nothing', {}, async ({page, host}) => {
+  const row = () => page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await page.evaluate(() => { window.__host.workspace.projectFolders = {'Product ideas': '/Users/me/code/app'}; window.__host.saveDelay = 300; });
+  await page.evaluate(() => { data.projectFolders = {'Product ideas': '/Users/me/code/app'}; });
+  await row().locator('.task-body').click();
+  await page.fill('#fieldTitle', 'Review the roadmap and cut scope');
+  await page.click('[data-agent-send="claude"]');
+  await page.waitForFunction(() => window.__host.started?.length === 1);
+  assert.match((await host()).started[0].prompt, /^Review the roadmap and cut scope/, 'the latest typed title is what Claude receives');
+  // Saving fails: nothing is launched and the sheet says why.
+  await page.evaluate(() => { window.__host.saveDelay = 0; window.__host.failSave = 'The disk is full.'; });
+  await page.fill('#fieldTitle', 'A title that cannot be saved');
+  await page.click('[data-agent-send="claude"]');
+  await page.waitForFunction(() => /disk is full/.test(document.getElementById('toast').textContent + document.getElementById('dialogBody').textContent));
+  await page.waitForTimeout(200);
+  assert.equal((await host()).started.length, 1, 'no agent starts with an unsaved draft');
+  // An invalid draft (no title) launches nothing either.
+  await page.evaluate(() => { window.__host.failSave = ''; });
+  await page.fill('#fieldTitle', '');
+  await page.click('[data-agent-send="claude"]');
+  await page.waitForTimeout(300);
+  assert.equal((await host()).started.length, 1);
+});
+
+await check('send a task to Claude Code and follow it back', {}, async ({page, host, tasks}) => {
+  const id = (await tasks()).find(t => t.title === 'Review the product roadmap').id;
+  const row = () => page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await row().locator('[data-act="more"]').click();
+  await page.locator('.menu button', {hasText: 'Send to Claude Code'}).click();
+  await page.waitForFunction(() => window.__host.started?.length === 1);
+  const started = (await host()).started[0];
+  assert.deepEqual([started.agent, started.folder, started.task, started.terminal], ['claude', '/Users/me/code/app', id, 'Terminal']);
+  assert.match(started.prompt, /^Review the product roadmap/);
+  const ws = (await host()).workspace;
+  assert.equal(ws.projectFolders[Object.keys(ws.lists).find(id => ws.lists[id].name === 'Product ideas')], '/Users/me/code/app', 'the folder is remembered for the list');
+  assert.match(await text(page, '#toast'), /Claude Code started in Terminal/);
+  // The linked session shows on the task row while it works, then its report and time attach to the task.
+  const now = Date.now() / 1000;
+  const working = {key: '7'.repeat(64), source: 'Claude Code', title: 'Claude Code · app', detail: '', state: 'working', time: now, started: now - 600, shishiTask: id, activity: 'Edit roadmap.md', receipt: ''};
+  await page.evaluate(rows => window.setAgents([...window.__host.agents, ...rows]), [working]);
+  await page.waitForFunction(() => /Claude Code working/.test(document.querySelector('#tasks').innerText));
+  const receipt = 'connector/' + '7'.repeat(64);
+  await page.evaluate(([row, receipt]) => {
+    const host = window.__host;
+    host.notices.external.unshift({id: receipt, source: 'Claude Code', title: 'Claude Code · app', time: row.time + 900, read: false, thread: '', link: '', summary: 'Updated roadmap.md. Tests: 3 passed.'});
+    window.setInbox({channel: 'external', items: host.notices.external, error: ''});
+    window.setAgents([...host.agents, {...row, state: 'done', time: row.time + 900, receipt, facts: {files: ['roadmap.md'], fileCount: 1, commands: 1, failedTools: 0, tests: 'passed', testCommand: 'npm test'}}]);
+  }, [working, receipt]);
+  await page.waitForFunction(id => window.__host.workspace.tasks.find(t => t.id === id).agentRuns?.length === 1, id);
+  const linked = (await tasks()).find(t => t.id === id);
+  assert.deepEqual([linked.agentReceipt, linked.agentRuns[0].seconds], [receipt, 1500]);
+  await page.waitForFunction(() => /Completed · Checks passed · 25 min/.test(document.querySelector('#tasks').innerText));
+  // A second delivery of the same state adds nothing.
+  await page.evaluate(() => window.setAgents(window.__host.agents.concat([])));
+  assert.equal((await tasks()).find(t => t.id === id).agentRuns.length, 1);
+  // Details show the time and the report; Wrap Up counts agent minutes.
+  await row().locator('.task-body').click();
+  assert.match(await text(page, '#agentTask'), /Agents worked 25 min over 1 run · in ~\/code\/app/);
+  await page.evaluate(() => closeDialog(true));
+  await page.click('#wrapUp');
+  assert.match(await text(page, '#dialogBody'), /25\s*Agent minutes/);
+  await page.evaluate(() => closeDialog(true));
+  // Checking the task off clears its report.
+  await row().locator('[data-act="toggle"]').click();
+  await page.waitForFunction(receipt => window.__host.notices.external.find(n => n.id === receipt)?.read, receipt);
+});
+
+await check('update check: quiet, once per version, never installs', {}, async ({page, host}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.click('[data-settings-tab="general"]');
+  await page.waitForFunction(() => !document.getElementById('updateChoice').disabled);
+  assert.match(await text(page, '#updateNote'), /latest published version \(1\.7\)/);
+  await page.evaluate(() => { window.__host.latestRelease = '1.8'; });
+  await page.click('#checkUpdate');
+  await page.waitForFunction(() => /1\.8 is available/.test(document.getElementById('updateNote').textContent));
+  assert.match(await text(page, '#toast'), /Shishi 1\.8 is available/);
+  await page.locator('#toast button', {hasText: 'View'}).click();
+  await page.waitForFunction(() => window.__host.openedRelease === 'https://github.com/shen25308/small-tool/releases/tag/v1.8');
+  await page.uncheck('#updateChoice');
+  await page.waitForFunction(() => window.__host.updatesOn === false);
+});
+
+await check('This Evening, Someday and keyboard control of the list', {}, async ({page, tasks}) => {
+  // Keyboard: ↓ starts at the first task, ↓ moves on, ⌘E moves it to This Evening.
+  await page.locator('#pageTitle').click();
+  await page.keyboard.press('ArrowDown');
+  assert.match(await page.evaluate(() => document.activeElement.closest('.row').textContent), /Organize the review notes/);
+  await page.keyboard.press('ArrowDown');
+  assert.match(await page.evaluate(() => document.activeElement.closest('.row').textContent), /Send the release checklist/);
+  await page.keyboard.press('Meta+e');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Send the release checklist').evening);
+  const evening = page.locator('.evening-group');
+  await evening.waitFor();
+  assert.match(await evening.innerText(), /This Evening[\s\S]*Send the release checklist/);
+  await page.waitForFunction(() => /Send the release checklist/.test(document.activeElement.closest('.row')?.textContent || ''));
+  // Space checks it off; ⌘O parks another one in Someday; Delete removes with Undo.
+  await page.keyboard.press(' ');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Send the release checklist').done);
+  await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).locator('.task-body').focus();
+  await page.keyboard.press('Meta+o');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').someday);
+  const parked = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual([parked.planned, parked.someday], ['', true]);
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).count(), 0, 'gone from Today');
+  await page.keyboard.press('Meta+4');
+  assert.equal(await text(page, '#pageTitle'), 'Someday');
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).count(), 1);
+  await page.click('#nav [data-view="all"]');
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).count(), 0, 'All leaves Someday out, as Anytime does');
+  // Planning a date brings it back from Someday.
+  await page.click('#nav [data-view="someday"]');
+  await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).locator('.task-body').focus();
+  await page.keyboard.press('Meta+t');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').someday);
+  await page.click('#nav [data-view="today"]');
+  await page.locator('#tasks .row', {hasText: "Prepare Friday's update"}).locator('.task-body').focus();
+  await page.keyboard.press('Backspace');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === "Prepare Friday's update"));
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === "Prepare Friday's update"));
+  // Typing works too: "this evening" is understood.
+  await page.click('#tasks [data-quick="view"]');
+  await page.locator('.quick-add input').fill('Call mum this evening');
+  assert.match(await text(page, '.quick-hint'), /This Evening/);
+  await page.locator('.quick-add input').press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call mum' && t.evening));
+});
+
+await check('saved filters in the sidebar', {}, async ({page, host}) => {
+  await page.click('#newFilter');
+  await page.locator('#filterForm').waitFor();
+  await page.fill('#filterQuery', 'today &');
+  assert.match(await text(page, '#filterPreview'), /ends too early/);
+  await page.click('.filter-examples [data-name="High priority"]');
+  assert.equal(await page.inputValue('#filterName'), 'High priority');
+  assert.match(await text(page, '#filterPreview'), /^\d+ open tasks match/);
+  await page.click('#filterForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.filters?.length === 1);
+  assert.equal(await text(page, '#pageTitle'), 'High priority');
+  const rows = await page.locator('#tasks .row:not(.done) .title').allInnerTexts();
+  const expected = await page.evaluate(() => data.tasks.filter(t => !t.done && (t.priority === 'P0' || t.priority === 'P1')).map(t => t.title).sort());
+  assert.deepEqual([...rows].sort(), expected);
+  assert.match(await text(page, '#filters'), new RegExp('High priority\\s*' + expected.length));
+  // Edit and delete from the sidebar, with Undo.
+  await page.locator('#filters [data-filter]').click({button: 'right'});
+  await page.locator('.menu-item', {hasText: 'Delete Filter'}).click();
+  await page.waitForFunction(() => !window.__host.workspace.filters.length);
+  assert.equal(await text(page, '#pageTitle'), 'All Tasks');
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => window.__host.workspace.filters.length === 1);
+});
+
+await check('priority matrix in All', {}, async ({page}) => {
+  await page.click('#nav [data-view="today"]');
+  assert.equal(await page.locator('#layoutToggle').isHidden(), true, 'only in All');
+  await page.click('#nav [data-view="all"]');
+  await page.click('#layoutToggle [data-layout="matrix"]');
+  const quadrants = page.locator('.quadrant');
+  assert.equal(await quadrants.count(), 4);
+  const expected = await page.evaluate(() => {
+    const soon = TaskLogic.addDays(day(), 2);
+    const date = t => (t.plannedDates?.length ? t.plannedDates.find(d => d >= day()) || t.plannedDates.at(-1) : t.planned) || t.dueDate || '';
+    const open = data.tasks.filter(t => !t.done && !t.someday);
+    const imp = t => t.priority === 'P0' || t.priority === 'P1', urg = t => !!date(t) && date(t) <= soon;
+    return [open.filter(t => imp(t) && urg(t)).length, open.filter(t => imp(t) && !urg(t)).length,
+            open.filter(t => !imp(t) && urg(t)).length, open.filter(t => !imp(t) && !urg(t)).length];
+  });
+  const counts = await quadrants.evaluateAll(nodes => nodes.map(node => node.querySelectorAll('.row').length));
+  assert.deepEqual(counts, expected);
+  assert.deepEqual(await page.locator('.quadrant h3').allInnerTexts(), ['Do now', 'Plan', 'Fit in', 'Later']);
+  // Tasks in the matrix work like any row.
+  const first = page.locator('.quadrant .row').first();
+  const title = await first.locator('.title').innerText();
+  await first.locator('[data-act="toggle"]').click();
+  await page.waitForFunction(t => window.__host.workspace.tasks.find(x => x.title === t).done, title);
+  await page.click('#layoutToggle [data-layout="list"]');
+  assert.equal(await page.locator('.quadrant').count(), 0);
+});
+
+await check('open a changed file from the report', {width: 340, height: 640, compact: true}, async ({page, host}) => {
+  await page.click('#cardReport [data-report="dismiss"]');
+  await page.waitForFunction(() => /small-tool/.test(document.getElementById('cardReport').innerText));
+  const chip = page.locator('#cardReport [data-open-file="billing.py"]');
+  await chip.waitFor();
+  await chip.click();
+  await page.waitForFunction(() => window.__host.openedFile);
+  assert.deepEqual((await host()).openedFile, {path: 'billing.py', cwd: '/Users/me/code/small-tool', app: 'com.googlecode.iterm2'});
+});
+
+await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
+  assert.equal(await text(page, '#pageTitle'), 'Today');
+  assert.match(await text(page, '#tasks'), /Nothing planned for today/);
+  assert.match(await text(page, '#agentList'), /appear here while they work/);
+  await shot('empty');
+  await page.click('#tasks [data-quick="view"]');
+  await page.locator('.quick-add input').fill('First task');
+  await page.locator('.quick-add input').press('Enter');
+  await page.waitForFunction(() => window.__host.workspace?.tasks?.length === 1);
+  const [first] = await tasks();
+  assert.deepEqual([first.project, first.priority, first.planned], ['My Work', 'P2', day(0)]);
+});
+
+await browser.close();
+console.log(results.join('\n'));
+if (results.some(line => line.startsWith('FAIL'))) process.exit(1);

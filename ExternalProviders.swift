@@ -1,6 +1,42 @@
 import AppKit
 import Foundation
+import Security
 import UniformTypeIdentifiers
+
+/// The Notion integration secret lives in the login keychain. It never enters the web view.
+enum NotionSecret {
+    private static let item: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "local.shishi.notion.integration",
+        kSecAttrAccount as String: "default"
+    ]
+
+    static func read() -> String? {
+        var query = item
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var found: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &found) == errSecSuccess, let data = found as? Data,
+              let secret = String(data: data, encoding: .utf8), !secret.isEmpty else { return nil }
+        return secret
+    }
+
+    static func save(_ secret: String) throws {
+        let data = Data(secret.utf8)
+        var status = SecItemUpdate(item as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var query = item
+            query[kSecValueData as String] = data
+            query[kSecAttrLabel as String] = "Shishi · Notion Integration"
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else {
+            throw AppIssue("Shishi could not save the Notion secret. Unlock your keychain and connect again.")
+        }
+    }
+
+    static func remove() { SecItemDelete(item as CFDictionary) }
+}
 
 /// Native boundary between the local UI, system authorization and the bundled account helpers.
 /// Only public, explicitly selected fields are returned to WebKit.
@@ -52,8 +88,8 @@ final class ExternalProviders {
     }
 
     /// Always read stdout while the helper runs. Stderr may contain an underlying login URL.
-    private func launch(_ script: String, _ args: [String], input: Data?, timeout: Double) throws -> Response {
-        let file = scripts.appendingPathComponent(script)
+    private func launch(_ script: String, _ args: [String], input: Data?, timeout: Double, folder: String = "Mail") throws -> Response {
+        let file = scripts.deletingLastPathComponent().appendingPathComponent(folder, isDirectory: true).appendingPathComponent(script)
         guard FileManager.default.isReadableFile(atPath: file.path) else { throw AppIssue("This build is missing a connector component.") }
         let process = Process()
         let executable = try python()
@@ -246,6 +282,109 @@ final class ExternalProviders {
                 var request=body;request["clientId"]=id
                 self.runLater(provider,action,body:request,completion:done)
             }
+        }
+    }
+
+    /// Adds, checks or removes Shishi's hooks in the user's Claude Code settings.
+    /// Public GitHub issues for the issue import. No credentials.
+    func githubIssues(_ body:Response, completion:@escaping Callback) {
+        io.async {
+            let result = Result { () throws -> Response in
+                var request: Response = [:]
+                for key in ["repo","assignee","label"] { if let value = body[key] as? String { request[key] = String(value.prefix(200)) } }
+                return try self.launch("github_issues.py",[],input:try JSONSerialization.data(withJSONObject:request),timeout:30)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    /// Token use and limits, read by a helper from Claude Code's and Codex's own files on this Mac.
+    func usage(completion:@escaping Callback) {
+        io.async {
+            let result = Result { try self.launch("agent_usage.py",[],input:nil,timeout:40,folder:"Connectors") }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    /// `approvals` adds the optional PermissionRequest hook that lets the card answer permission requests.
+    func claudeCode(_ action:String, approvals:Bool = false, completion:@escaping Callback) {
+        guard ["status","install","remove"].contains(action) else {
+            completion(.failure(AppIssue("Unsupported connector action.")));return
+        }
+        io.async {
+            let result = Result { () throws -> Response in
+                let raw = try self.launch("install.py",[action,"--json"] + (action == "install" && approvals ? ["--approvals"] : []),
+                                          input:nil,timeout:30,folder:"ClaudeCode")
+                var state: Response = [:]
+                for key in ["installed","working","cli","problem","approvals"] {
+                    if let value=raw[key], value is String || value is NSNumber {state[key]=value}
+                }
+                return state
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    /// The secret is typed into a native secure field and passed to the helper on standard input.
+    func notion(_ body:Response, window:NSWindow?, completion:@escaping Callback) {
+        let action = body["action"] as? String ?? ""
+        func send(_ request:Response, secret:String, save:Bool) {
+            io.async {
+                let result = Result { () throws -> Response in
+                    var payload = request
+                    payload["token"] = secret
+                    let data = try JSONSerialization.data(withJSONObject:payload)
+                    var answer = try self.launch("notion.py",[],input:data,timeout:170)
+                    if save { try NotionSecret.save(secret) }
+                    answer.removeValue(forKey:"ok")
+                    answer["connected"] = true
+                    return answer
+                }
+                DispatchQueue.main.async { completion(result) }
+            }
+        }
+        switch action {
+        case "status":
+            completion(.success(["connected":NotionSecret.read() != nil]))
+        case "disconnect":
+            NotionSecret.remove()
+            completion(.success(["connected":false]))
+        case "connect":
+            guard let database=body["database"] as? String, !database.isEmpty, database.count <= 600 else {
+                completion(.failure(AppIssue("Paste the link to your Notion database first.")));return
+            }
+            guard let window, window.attachedSheet == nil else {
+                completion(.failure(AppIssue("Finish the current action in this window first.")));return
+            }
+            let alert=NSAlert()
+            alert.messageText="Connect Notion"
+            alert.informativeText="Paste the internal integration secret from your Notion integration. Shishi keeps it in this Mac’s Keychain."
+            let field=NSSecureTextField(frame:NSRect(x:0,y:0,width:340,height:24))
+            field.placeholderString="Integration secret"
+            alert.accessoryView=field
+            alert.addButton(withTitle:"Connect");alert.addButton(withTitle:"Cancel")
+            alert.window.initialFirstResponder=field
+            alert.beginSheetModal(for:window) { response in
+                guard response == .alertFirstButtonReturn else {completion(.failure(AppIssue("Connection canceled.")));return}
+                let secret=field.stringValue.trimmingCharacters(in:.whitespacesAndNewlines)
+                guard secret.count >= 20, secret.count <= 400 else {
+                    completion(.failure(AppIssue("Paste the secret that Notion shows for your integration.")));return
+                }
+                send(["op":"connect","database":database],secret:secret,save:true)
+            }
+        case "pull","push":
+            guard let secret=NotionSecret.read() else {completion(.failure(AppIssue("Connect Notion first.")));return}
+            var request:Response=["op":action,"database":body["database"] as? String ?? ""]
+            if action == "push" {
+                request["mapping"]=body["mapping"] ?? [String:Any]()
+                request["changes"]=body["changes"] ?? [Any]()
+            }
+            guard JSONSerialization.isValidJSONObject(request) else {
+                completion(.failure(AppIssue("The Notion changes could not be prepared.")));return
+            }
+            send(request,secret:secret,save:false)
+        default:
+            completion(.failure(AppIssue("Unsupported connector action.")))
         }
     }
 

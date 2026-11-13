@@ -10,6 +10,7 @@ struct ConnectorNotice: Equatable {
     let time: Double
     let link: String
     var read: Bool
+    var archived: Bool = false
 }
 
 private struct IncomingEvent: Codable {
@@ -109,6 +110,7 @@ final class ConnectorInbox {
         let files = try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil,
                                                     options: [.skipsHiddenFiles])
         let receipts = Set(files.filter { $0.pathExtension == "read" }.map { $0.deletingPathExtension().lastPathComponent })
+        let archives = Set(files.filter { $0.pathExtension == "archived" }.map { $0.deletingPathExtension().lastPathComponent })
         var next: [String: ConnectorNotice] = [:]
         for file in files where file.pathExtension == "json" {
             let digest = file.deletingPathExtension().lastPathComponent
@@ -116,6 +118,7 @@ final class ConnectorInbox {
             // Local senders publish via exclusive hard link; a cached event is immutable.
             guard var message = known[digest] ?? (try? readEvent(file, digest: digest)) else { continue }
             message.read = receipts.contains(digest)
+            message.archived = archives.contains(digest)
             next[digest] = message
         }
         let changed = !initialized || next != known
@@ -126,13 +129,26 @@ final class ConnectorInbox {
     }
 
     func markRead(_ key: String) throws -> [ConnectorNotice] {
+        try setState(key, read: true, archived: nil)
+    }
+
+    /// Read and archived are empty marker files beside the event. The event file itself never changes.
+    func setState(_ key: String, read: Bool?, archived: Bool?) throws -> [ConnectorNotice] {
         guard key.hasPrefix("connector/") else { throw AppIssue("Unknown inbox event ID.") }
         let digest = String(key.dropFirst("connector/".count))
         _ = try scan()
-        guard let message = known[digest] else { throw AppIssue("This message no longer exists.") }
-        if !message.read {
-            try Data().write(to: directory.appendingPathComponent(digest + ".read"), options: .atomic)
+        guard known[digest] != nil else { throw AppIssue("This message no longer exists.") }
+        func mark(_ suffix: String, _ on: Bool?) throws {
+            guard let on else { return }
+            let marker = directory.appendingPathComponent(digest + "." + suffix)
+            if on {
+                if !manager.fileExists(atPath: marker.path) { try Data().write(to: marker, options: .atomic) }
+            } else if manager.fileExists(atPath: marker.path) {
+                try manager.removeItem(at: marker)
+            }
         }
+        try mark("read", read)
+        try mark("archived", archived)
         return try scan().notices
     }
 
@@ -164,6 +180,6 @@ final class ConnectorInbox {
 
     static func wire(_ notices: [ConnectorNotice]) -> [[String: Any]] {
         notices.map { ["id": $0.id, "source": $0.source, "title": $0.title, "summary": $0.summary,
-                        "time": $0.time, "read": $0.read, "thread": "", "link": $0.link] }
+                        "time": $0.time, "read": $0.read, "archived": $0.archived, "thread": "", "link": $0.link] }
     }
 }
