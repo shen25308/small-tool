@@ -27,9 +27,11 @@ struct AgentFacts: Equatable {
 }
 
 struct AgentState: Equatable {
-    let key, source, title, detail, state, receipt, task, app, activity, approval, cwd: String
+    let key, source, title, detail, state, receipt, task, app, activity, shishiTask, cwd: String
     /// Where the session runs (iTerm2 session, tty, tmux pane), validated again before use.
     let terminal: [String: String]
+    /// The permission request this session is waiting on, when Shishi's card can answer it.
+    let approval: String
     let time, started: Double
     let tools: Int
     let facts: AgentFacts?
@@ -103,6 +105,7 @@ final class AgentBoard {
                                    receipt: receipt.hasPrefix("connector/") ? receipt : "",
                                    task: Self.line(object["task"], limit: 400), app: Self.validBundle(app) ? app : "",
                                    activity: ended ? "" : Self.line(object["activity"], limit: 120),
+                                   shishiTask: (object["shishiTask"] as? String).flatMap { $0.range(of: #"^[0-9A-Za-z-]{8,64}$"#, options: .regularExpression) != nil ? $0 : nil } ?? "",
                                    cwd: Self.line(object["cwd"], limit: 1024).hasPrefix("/") ? Self.line(object["cwd"], limit: 1024) : "",
                                    terminal: ((object["terminal"] as? [String: Any]) ?? [:]).reduce(into: [:]) { result, item in
                                        if ["iterm", "tty", "tmuxPane", "tmuxSocket"].contains(item.key), let value = item.value as? String, value.count < 300 { result[item.key] = value }
@@ -127,7 +130,7 @@ final class AgentBoard {
         rows.map { row in
             var wire: [String: Any] = ["key": row.key, "source": row.source, "title": row.title, "detail": row.detail,
                                        "state": row.state, "receipt": row.receipt, "time": row.time, "task": row.task,
-                                       "app": row.app, "started": row.started, "activity": row.activity, "tools": row.tools, "approval": row.approval, "cwd": row.cwd, "terminal": row.terminal,
+                                       "app": row.app, "started": row.started, "activity": row.activity, "tools": row.tools, "approval": row.approval, "cwd": row.cwd, "shishiTask": row.shishiTask, "terminal": row.terminal,
                                        "ended": row.ended]
             if let facts = row.facts { wire["facts"] = facts.wire }
             return wire
