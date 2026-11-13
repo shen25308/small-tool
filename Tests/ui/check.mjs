@@ -889,7 +889,8 @@ await check('agent capsule leaves the toolbar buttons free in a narrow window', 
 });
 
 await check('motion: agent island, completion and progress', {motion: true, scale: 2}, async ({page, host, shot}) => {
-  assert.equal(await page.locator('#dayRing').isVisible(), true);
+  // The title no longer carries a progress ring: next to a number it read as a loading spinner. The card keeps its ring.
+  assert.equal(await page.locator('#dayRing').isVisible(), false);
   assert.match(await page.getAttribute('#island', 'class'), /mode-attention/);
   // Results that were already there at launch do not flash. A fresh one does.
   await page.waitForTimeout(2700);

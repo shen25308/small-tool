@@ -380,9 +380,6 @@ function completedMarkup(tasks) {
 }
 
 // Morning, afternoon, evening or night, for the color of the light behind the title.
-function daypart(hour = new Date().getHours()) {
-  return hour < 5 ? 'night' : hour < 11 ? 'morning' : hour < 17 ? 'day' : hour < 21 ? 'evening' : 'night';
-}
 const motionKey = () => compact ? 'card' : view + '|' + tag;
 
 function render() {
@@ -404,7 +401,6 @@ function renderBoard() {
     smartTile('done', 'Completed', tasks.length - open.length, symbol('i-check'));
   $('projects').innerHTML = data.projects.map(p => navButton('p:' + p, p, open.filter(t => t.project === p).length)).join('');
   $('board').className = 'board-content ' + (project ? 'view-project ' + projectTone(project) : 'view-' + view);
-  $('aurora').className = 'aurora ' + (project ? 'aura-project ' + projectTone(project) : view === 'today' ? 'aura-' + daypart() : 'aura-' + view);
   const planned = tasks.filter(isToday), finished = planned.filter(t => t.done).length;
   const ring = $('dayRing');
   ring.hidden = view !== 'today' || !planned.length;
