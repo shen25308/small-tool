@@ -1161,6 +1161,92 @@ await check('open the exact terminal tab, and say when only the app opened', {wi
   await page.waitForFunction(() => /Privacy → Automation/.test(document.getElementById('toast').textContent));
 });
 
+await check('shishi:// links add a task or show a view, nothing else', {}, async ({page, tasks}) => {
+  await page.evaluate(() => window.openURLAction({action: 'add', text: 'Pay rent tomorrow 9am !p1', list: 'personal', notes: 'From Shortcuts'}));
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Pay rent'));
+  const added = (await tasks()).find(t => t.title === 'Pay rent');
+  assert.deepEqual([added.project, added.dueDate, added.dueTime, added.priority, added.notes], ['Personal', day(1), '09:00', 'P1', 'From Shortcuts']);
+  assert.match(await text(page, '#toast'), /Added “Pay rent” from a link/);
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === 'Pay rent'));
+  await page.evaluate(() => window.openURLAction({action: 'open', view: 'upcoming'}));
+  assert.equal(await text(page, '#pageTitle'), 'Upcoming');
+  await page.evaluate(() => window.openURLAction({action: 'add', text: '   '}));
+  assert.match(await text(page, '#toast'), /no task title/);
+  await page.evaluate(() => window.openURLAction({action: 'delete', id: 'x'}));
+  assert.equal((await tasks()).length, 18);
+  await page.evaluate(() => window.openURLAction({action: 'search', q: 'roadmap'}));
+  await page.locator('#palette[open]').waitFor();
+  assert.equal(await page.inputValue('#paletteInput'), 'roadmap');
+});
+
+await check('Apple Reminders: sync a list both ways', {}, async ({page, host, tasks}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.click('#remindersRow');
+  await page.locator('#remindersForm').waitFor();
+  await page.selectOption('#remindersList', 'L2');
+  await page.selectOption('#remindersProject', 'Personal');
+  await page.click('#remindersForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Buy milk'));
+  const milk = (await tasks()).find(t => t.title === 'Buy milk');
+  assert.deepEqual([milk.project, milk.reminder.id], ['Personal', 'R1']);
+  assert.equal((await tasks()).some(t => t.title === 'Old reminder'), false, 'completed reminders are not imported');
+  // Personal's own open tasks went to Reminders and are now linked.
+  await page.waitForFunction(() => window.__host.reminderPushes?.length);
+  const personal = (await tasks()).filter(t => t.project === 'Personal');
+  assert.ok(personal.every(t => t.reminder?.id), 'every task in the list is linked');
+  assert.match(await text(page, '#remindersStatus'), /Personal” · \d+ tasks linked/);
+  assert.equal((await host()).workspace.reminders.title, 'Errands');
+  await page.click('#remindersDisconnect');
+  await page.waitForFunction(() => !window.__host.workspace.reminders);
+  assert.equal((await tasks()).some(t => t.reminder), false);
+});
+
+await check('calendar events in Today, Upcoming and the card', {}, async ({page, host}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.check('#calendarChoice');
+  await page.waitForFunction(() => window.__host.workspace.calendar?.enabled);
+  await page.evaluate(() => closeDialog(true));
+  await page.locator('#tasks .calendar-event').first().waitFor();
+  assert.match(await text(page, '#tasks .calendar-events'), /11:30 PM\s*Standup/);
+  assert.equal((await host()).calendarAsked.days, 8);
+  await page.click('#nav [data-view="upcoming"]');
+  const groups = await page.locator('.day-group').allInnerTexts();
+  assert.match(groups.find(g => g.startsWith('Tomorrow')), /All day\s*Holiday/);
+  assert.ok(groups.some(g => /3:00 PM\s*Design review/.test(g)));
+  await page.evaluate(() => window.setCompact(true));
+  await page.waitForFunction(() => !document.getElementById('cardNextEvent').hidden);
+  assert.equal(await text(page, '#cardNextEvent'), 'Next: 11:30 PM Standup');
+});
+
+await check('GitHub issues become tasks', {}, async ({page, host, tasks}) => {
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.click('#issuesRow');
+  await page.fill('#issuesRepo', 'acme/missing');
+  await page.click('#issuesForm .primary');
+  await page.waitForFunction(() => /exists and is public/.test(document.getElementById('issuesFeedback').textContent));
+  await page.fill('#issuesRepo', 'acme/app');
+  await page.fill('#issuesAssignee', 'octocat');
+  await page.click('#issuesForm .primary');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.github?.number === 12));
+  const task = (await tasks()).find(t => t.github?.number === 12);
+  assert.deepEqual([task.title, task.project], ['Crash on login', 'app']);
+  assert.equal((await tasks()).some(t => t.github?.number === 9), false);
+  assert.equal((await host()).issueRequests.at(-1).assignee, 'octocat');
+  // The issue closes on GitHub: Import Now completes the task.
+  await page.evaluate(() => { window.__host.issues = [{number: 12, title: 'Crash on login', state: 'closed', url: 'https://github.com/acme/app/issues/12'}]; });
+  await page.click('#issuesSync');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.github?.number === 12).done);
+  await page.evaluate(() => closeDialog(true));
+  await page.click('#nav [data-view="done"]');
+  await page.locator('.row', {hasText: 'Crash on login'}).first().locator('.task-body').click();
+  await page.click('#openIssue');
+  await page.waitForFunction(() => window.__host.openedIssue === 'https://github.com/acme/app/issues/12');
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);

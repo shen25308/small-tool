@@ -286,6 +286,18 @@ final class ExternalProviders {
     }
 
     /// Adds, checks or removes Shishi's hooks in the user's Claude Code settings.
+    /// Public GitHub issues for the issue import. No credentials.
+    func githubIssues(_ body:Response, completion:@escaping Callback) {
+        io.async {
+            let result = Result { () throws -> Response in
+                var request: Response = [:]
+                for key in ["repo","assignee","label"] { if let value = body[key] as? String { request[key] = String(value.prefix(200)) } }
+                return try self.launch("github_issues.py",[],input:try JSONSerialization.data(withJSONObject:request),timeout:30)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     /// Token use and limits, read by a helper from Claude Code's and Codex's own files on this Mac.
     func usage(completion:@escaping Callback) {
         io.async {

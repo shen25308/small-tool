@@ -454,6 +454,28 @@ class UsageReport(Sandbox):
         self.assertIsNone(report["claude"])
 
 
+class GitHubIssues(unittest.TestCase):
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "Mail"))
+        import importlib
+        self.module = importlib.import_module("github_issues")
+
+    def test_validation_and_filtering(self):
+        validate = self.module.validate
+        self.assertEqual(validate({"repo": " acme/app ", "assignee": "@octo-cat", "label": "bug"}), ("acme/app", "octo-cat", "bug"))
+        for bad in ({"repo": "acme"}, {"repo": "acme/.."}, {"repo": "a/b", "assignee": "bad name"}, {"repo": "https://github.com/a/b"}):
+            with self.assertRaises(ValueError):
+                validate(bad)
+        rows = [{"number": 1, "title": "Crash\n on login", "state": "open", "updated_at": "2026-11-12T10:00:00Z", "labels": [{"name": "bug"}]},
+                {"number": 2, "title": "A pull request", "state": "open", "pull_request": {}},
+                {"number": "3", "title": "Bad number", "state": "open"},
+                {"number": 4, "title": "", "state": "closed"}]
+        found = self.module.issues(rows, "acme/app")
+        self.assertEqual([(i["number"], i["title"], i["state"]) for i in found], [(1, "Crash on login", "open"), (4, "Issue #4", "closed")])
+        self.assertEqual(found[0]["url"], "https://github.com/acme/app/issues/1")
+        self.assertEqual(found[0]["labels"], ["bug"])
+
+
 class AgentStatusCommand(Sandbox):
     def test_set_and_clear(self):
         ok = self.run_script(AGENTS, "set", "--source", "Codex", "--session", "run 1", "--state", "working", "--title", "Nightly\nbuild")

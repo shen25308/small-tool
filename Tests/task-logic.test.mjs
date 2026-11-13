@@ -179,3 +179,59 @@ test('Chinese dates and times', () => {
   // A plain 9:30 stays with the English rules, which also remove "at".
   assert.equal(q('Standup at 9:30').title, 'Standup');
 });
+
+test('the same sync keeps a list in step with Apple Reminders', () => {
+  const {plan, settle} = NotionSync;
+  const mapping = {due: true, priority: true};
+  const tasks = [
+    {id: 'local', title: 'Buy stamps', project: 'Home', priority: 'P2', done: false},
+    {id: 'linked', title: 'Call mum', project: 'Home', priority: 'P2', done: false, reminder: {id: 'R1', sig: JSON.stringify({title: 'Call mum', done: false, due: '', priority: 'P2'})}},
+    {id: 'notion', title: 'Other', project: 'Home', priority: 'P2', done: false, notion: {id: 'N1'}}
+  ];
+  const reminders = [
+    {id: 'R1', title: 'Call mum', done: true, due: '', priority: '', edited: 'e2'},
+    {id: 'R2', title: 'Water plants', done: false, due: '2026-11-20T09:00:00+08:00', priority: 'P0', edited: 'e1'}
+  ];
+  let next = 0;
+  const {changes, stats} = plan(tasks, reminders, {mapping, project: 'Home', newId: () => 'new' + ++next, stamp: 'now', linkKey: 'reminder'});
+  assert.equal(tasks.find(t => t.id === 'linked').done, true, 'completed in Reminders');
+  const imported = tasks.find(t => t.reminder?.id === 'R2');
+  assert.equal(imported.title, 'Water plants');
+  assert.equal(imported.priority, 'P0');
+  assert.equal(stats.imported, 1);
+  // Local tasks without a link are sent, including one linked only to Notion: each sync owns its own field.
+  assert.deepEqual(changes.map(c => c.task).sort(), ['local', 'notion']);
+  assert.equal(tasks.find(t => t.id === 'notion').notion.id, 'N1');
+  settle(tasks, [{task: 'local', ok: true, page: {id: 'R3', edited: 'e3'}}], mapping, 'reminder');
+  assert.equal(tasks.find(t => t.id === 'local').reminder.id, 'R3');
+  assert.equal(tasks.find(t => t.id === 'local').notion, undefined);
+});
+
+test('GitHub issues become tasks and close with their issue', async () => {
+  await import('../UI/issue-sync.js');
+  const {plan: planIssues} = globalThis.IssueSync;
+  const url = n => 'https://github.com/acme/app/issues/' + n;
+  const tasks = [];
+  let n = 0;
+  const options = {project: 'Work', newId: () => 'i' + ++n, stamp: 'now'};
+  const first = planIssues(tasks, [
+    {number: 1, title: 'Crash on login', state: 'open', url: url(1)},
+    {number: 2, title: 'Old bug', state: 'closed', url: url(2)}
+  ], options);
+  assert.equal(first.imported, 1, 'closed issues are not imported');
+  assert.deepEqual([tasks[0].title, tasks[0].project, tasks[0].github.number], ['Crash on login', 'Work', 1]);
+  // Renamed on GitHub follows; renamed in Shishi stays.
+  planIssues(tasks, [{number: 1, title: 'Crash on login with SSO', state: 'open', url: url(1)}], options);
+  assert.equal(tasks[0].title, 'Crash on login with SSO');
+  tasks[0].title = 'Fix SSO crash (my words)';
+  planIssues(tasks, [{number: 1, title: 'Crash on login (SSO)', state: 'open', url: url(1)}], options);
+  assert.equal(tasks[0].title, 'Fix SSO crash (my words)');
+  // Closing the issue completes the task; reopening it opens the task again; nothing is imported twice.
+  const closed = planIssues(tasks, [{number: 1, title: 'Crash on login (SSO)', state: 'closed', url: url(1)}], options);
+  assert.equal(closed.closed, 1);
+  assert.equal(tasks[0].done, true);
+  const reopened = planIssues(tasks, [{number: 1, title: 'Crash on login (SSO)', state: 'open', url: url(1)}], options);
+  assert.equal(reopened.reopened, 1);
+  assert.equal(tasks[0].done, false);
+  assert.equal(tasks.length, 1);
+});

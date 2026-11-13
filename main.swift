@@ -67,6 +67,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private lazy var hotkeys = GlobalHotkeys { [weak self] action in self?.hotkey(action) }
     private let keepAwake = KeepAwake()
     private let alerts = Alerts()
+    private lazy var eventKit = EventKitBridge()
     private var hotkeysOn: Bool { UserDefaults.standard.object(forKey:"ShiShiHotkeys") as? Bool ?? true }
     private var keepAwakeOn: Bool { UserDefaults.standard.bool(forKey:"ShiShiKeepAwake") }
     private var takenShortcuts: [String] = []
@@ -105,6 +106,27 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     }
     private var ready = false
     private var pendingSource: String?
+    private var pendingURLs: [[String:String]] = []
+    /// shishi://add?text=Call%20the%20bank%20tomorrow%203pm (&notes=…&list=…), shishi://show-card,
+    /// shishi://open?view=today|upcoming|all|done|inbox, shishi://search?q=…
+    /// A link can add a task or show something, never change or delete existing data.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls.prefix(10) where url.scheme == "shishi" {
+            let action=url.host ?? ""
+            var fields:[String:String]=["action":action]
+            for item in URLComponents(url:url,resolvingAgainstBaseURL:false)?.queryItems ?? [] where ["text","title","notes","list","view","q"].contains(item.name) {
+                fields[item.name]=String((item.value ?? "").prefix(item.name=="notes" ? 4000 : 400))
+            }
+            switch action {
+            case "show-card": if !compact {setCompact(true)} else {card.show(pinned:pinned)}
+            case "add","open","search","inbox":
+                if action != "add" {openWorkspace(inbox:false)}
+                guard ready else {pendingURLs.append(fields);continue}
+                tell("openURLAction",fields)
+            default: break
+            }
+        }
+    }
     private var processing = false
     private let inboxQueue = DispatchQueue(label:"local.shishi.codex-inbox",qos:.utility)
     private var inboxTimer: DispatchSourceTimer?
@@ -614,6 +636,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 }
                 reply(id,true,true)
                 if let text=pendingSource{pendingSource=nil;receive(text)}
+                for fields in pendingURLs {tell("openURLAction",fields)}
+                pendingURLs=[]
             case "syncInboxes":
                 inboxQueue.async {
                     self.scanInboxes(force:true)
@@ -780,6 +804,28 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     keepAwake.update(working:on && agentsWorking)
                 }
                 reply(id,true,settingsState())
+            case "reminders","calendarEvents":
+                let handle:EventKitBridge.Reply = { [weak self] result in
+                    switch result {
+                    case .success(let value):self?.reply(id,true,value)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
+                if op=="reminders" {eventKit.reminders(body,reply:handle)} else {eventKit.events(body,reply:handle)}
+            case "openIssue":
+                // Only an issue page on github.com, nothing else.
+                guard let link=body["url"] as? String, link.count<300,
+                      link.range(of:#"^https://github\.com/[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}/issues/[0-9]{1,9}$"#,options:.regularExpression) != nil,
+                      let url=URL(string:link) else {throw AppIssue("That is not a GitHub issue link.")}
+                NSWorkspace.shared.open(url)
+                reply(id,true,true)
+            case "githubIssues":
+                providers.githubIssues(body) { [weak self] result in
+                    switch result {
+                    case .success(let value):self?.reply(id,true,value)
+                    case .failure(let error):self?.reply(id,false,error.localizedDescription)
+                    }
+                }
             case "usage":
                 providers.usage { [weak self] result in
                     switch result {

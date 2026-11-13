@@ -152,6 +152,36 @@ function fakeHost(seed) {
       state.openedApp = message.app; state.openedPlace = {terminal: message.terminal, cwd: message.cwd};
       return {app: {'com.apple.Terminal': 'Terminal', 'com.googlecode.iterm2': 'iTerm'}[message.app] || 'Terminal', found: state.focusResult || (message.terminal?.tty ? 'tab' : 'app')};
     },
+    reminders: message => {
+      state.reminderLists ??= [{id: 'L1', title: 'Family'}, {id: 'L2', title: 'Errands'}];
+      state.reminderItems ??= [{id: 'R1', title: 'Buy milk', done: false, due: '', priority: '', edited: 'e1'},
+                               {id: 'R2', title: 'Old reminder', done: true, due: '', priority: '', edited: 'e1'}];
+      if (message.action === 'lists') return {lists: state.reminderLists};
+      if (message.action === 'pull') return {title: state.reminderLists.find(l => l.id === message.list)?.title, pages: state.reminderItems};
+      if (message.action === 'push') {
+        state.reminderPushes = [...(state.reminderPushes || []), ...message.changes];
+        return {results: message.changes.map((change, i) => ({task: change.task, ok: true, page: {id: change.page || 'RN' + i, edited: 'e2'}}))};
+      }
+      return {access: true};
+    },
+    calendarEvents: message => {
+      state.calendarAsked = message;
+      const at = (offset, hour, minute = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(hour, minute, 0, 0); return d.toISOString(); };
+      return {events: [
+        {title: 'Standup', start: at(0, 23, 30), end: at(0, 23, 45), allDay: false, calendar: 'Work', color: '#0a84ff'},
+        {title: 'Holiday', start: at(1, 0), end: at(2, 0), allDay: true, calendar: 'Home', color: '#ff9f0a'},
+        {title: 'Design review', start: at(2, 15), end: at(2, 16), allDay: false, calendar: 'Work', color: '#34c759'}
+      ]};
+    },
+    githubIssues: message => {
+      if (message.repo === 'acme/missing') throw Error('Check that the repository exists and is public.');
+      state.issueRequests = [...(state.issueRequests || []), message];
+      return {ok: true, repo: message.repo, issues: state.issues ?? [
+        {number: 12, title: 'Crash on login', state: 'open', url: 'https://github.com/' + message.repo + '/issues/12', labels: ['bug']},
+        {number: 9, title: 'Fixed long ago', state: 'closed', url: 'https://github.com/' + message.repo + '/issues/9', labels: []}
+      ]};
+    },
+    openIssue: message => { state.openedIssue = message.url; return true; },
     usage: () => state.usage ?? {ok: true, time: now, claude: {fiveHours: {tokens: 1240000, cacheRead: 5e6, replies: 40}, today: {tokens: 2e6, replies: 60}, week: {tokens: 8400000, cacheRead: 9e7, replies: 300}, sessions: 12},
       codex: {observedAt: now - 120, primary: {usedPercent: 42.4, windowMinutes: 300, resetsAt: now + 3600}, secondary: {usedPercent: 83, windowMinutes: 10080, resetsAt: now + 3 * 86400}}}, openConnectorLink: () => true, copyConnectorSetup: () => true,
     extract: () => [{title: 'Send the homepage prototype to the design team', quote: 'Maya: Please send the new homepage prototype…', tag: 'Design'}]

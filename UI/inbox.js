@@ -187,7 +187,12 @@ function showConnectors() {
     connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
     '</div><p>Claude Code and Codex show up under Agents while they work. Each finished turn leaves its reply in the inbox, without a notification.</p>'+
     '<details class="more-sources" id="hookLogBox"><summary>Diagnostics: recent hook deliveries</summary><p>The last deliveries from the Claude Code hook: event, time and outcome. Prompts, replies and commands are never kept.</p><div class="group-box hook-log" id="hookLog"><div class="group-row"><span class="row-text"><small>Open to load…</small></span></div></div></details>'+
-    '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button></div>'+
+    '<h3>Workspace</h3><div class="group-box"><button type="button" class="group-row" id="notionRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-note')+'</span><span class="row-text"><b>Notion</b><small data-state>Checking…</small></span>'+symbol('i-chevron-right chev')+'</button>'+
+    '<button type="button" class="group-row" id="remindersRow"><span class="app-badge" style="--badge:var(--orange)">'+symbol('i-check-circle')+'</span><span class="row-text"><b>Apple Reminders</b><small>'+
+      (data.reminders?esc('Syncing “'+data.reminders.title+'” with the list “'+projectLabel(data.reminders.project)+'”'):'Sync a list with Reminders, for iPhone and Siri')+'</small></span>'+symbol('i-chevron-right chev')+'</button>'+
+    '<button type="button" class="group-row" id="issuesRow"><span class="app-badge" style="--badge:var(--ink)">'+symbol('i-link')+'</span><span class="row-text"><b>GitHub issues</b><small>'+
+      (data.github?esc(data.github.repo+' → “'+projectLabel(data.github.project)+'”'):'Turn a repository’s open issues into tasks')+'</small></span>'+symbol('i-chevron-right chev')+'</button>'+
+    '<label class="group-row toggle-label"><span class="app-badge" style="--badge:var(--red)">'+symbol('i-calendar')+'</span><span class="row-text"><b>Calendar events</b><small id="calendarNote">Show the day\'s events above Today and in Upcoming. Read only.</small></span><input type="checkbox" id="calendarChoice"'+(data.calendar?.enabled?' checked':'')+'></label></div>'+
     '<details class="more-sources"><summary>More sources: Gmail, Outlook and GitHub Actions</summary>'+
     '<p>Mail needs a Google or Microsoft app registration of your own. GitHub Actions works with any public repository.</p>'+
     '<div class="group-box" id="providerRows"><div class="group-row"><span class="row-text"><small>Checking connections…</small></span></div></div></details>'+
@@ -308,6 +313,16 @@ function showConnectors() {
   }));
 
   $('notionRow').onclick=()=>showNotion();
+  $('remindersRow').onclick=()=>action(showReminders());
+  $('issuesRow').onclick=()=>showIssues();
+  $('calendarChoice').onchange=()=>{
+    const on=$('calendarChoice').checked;
+    action(change(state=>{state.calendar={enabled:on}}).then(()=>window.CalendarEvents.refresh()).then(()=>{
+      const problem=CalendarEvents.problem();
+      if(on&&problem){toast(problem);$('calendarNote').textContent=problem}
+      else if(on)toast('Calendar events now show in Today and Upcoming.');
+    }));
+  };
   action(native('notion',{action:'status'}).then(state=>{
     const label=$('notionRow')?.querySelector('[data-state]');
     if(label)label.textContent=state.connected&&data.notion?'Syncing “'+data.notion.title+'” with the list “'+projectLabel(data.notion.project)+'”':'Sync a list with a Notion database';

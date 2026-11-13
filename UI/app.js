@@ -140,6 +140,8 @@ function rowMeta(t, options) {
   if (t.subtasks?.length) parts.push('<span>' + symbol('i-checklist') + t.subtasks.filter(s => s.done).length + '/' + t.subtasks.length + '</span>');
   if (t.repeat && TaskLogic.repeatLabels[t.repeat]) parts.push('<span>' + symbol('i-repeat') + esc(TaskLogic.repeatLabels[t.repeat]) + '</span>');
   if (t.notion?.id && !t.notion.gone) parts.push('<span title="Synced with Notion">' + symbol('i-link') + 'Notion</span>');
+  if (t.reminder?.id && !t.reminder.gone) parts.push('<span title="Synced with Apple Reminders">' + symbol('i-link') + 'Reminders</span>');
+  if (t.github?.number) parts.push('<span title="GitHub issue">#' + esc(String(t.github.number)) + '</span>');
   if (t.notes) parts.push('<span class="meta-note">' + esc(t.notes.split('\n')[0].slice(0, 120)) + '</span>');
   return parts.length ? '<span class="row-meta">' + parts.join('') + '</span>' : '';
 }
@@ -193,7 +195,8 @@ function projectGroup(project, tasks, index) {
 function dayGroup(title, tasks, options = {}) {
   const head = '<div class="day-head' + (options.overdue ? ' is-overdue' : '') + '"><h3>' + esc(title) + '</h3>' + (tasks.length ? '<span>' + tasks.length + '</span>' : '') + '</div>';
   const rows = tasks.map(t => row(t, {project: true, hideDate: !!options.date})).join('');
-  return '<section class="day-group"' + (options.date ? ' data-target="d:' + options.date + '"' : '') + '>' + head + rows +
+  return '<section class="day-group"' + (options.date ? ' data-target="d:' + options.date + '"' : '') + '>' + head +
+    (options.date ? window.CalendarEvents?.markup(options.date) || '' : '') + rows +
     (options.date ? quickAdd('d:' + options.date) : '') + '</section>';
 }
 
@@ -438,7 +441,7 @@ function renderBoard() {
     const empty = tag ? emptyState('i-tag', 'No open tasks with this tag.') : view === 'today' ? emptyState('i-sun', 'Nothing planned for today. Add a task or drag one here.')
       : emptyState('i-check-circle', 'No tasks here yet.');
     const listAttrs = view === 'today' ? 'class="task-list drop" data-target="today"' : 'class="task-list"';
-    $('tasks').innerHTML = filters + '<div ' + listAttrs + '>' +
+    $('tasks').innerHTML = filters + (view === 'today' && !tag ? window.CalendarEvents?.markup(day()) || '' : '') + '<div ' + listAttrs + '>' +
       (list.map(t => row(t, {project: !project})).join('') || empty) + quickAdd('view') + '</div>';
   }
 
@@ -521,6 +524,8 @@ function taskForm(t, context = {}) {
     '<label>Subtasks</label><div class="subtask-list" id="subtaskList"></div>' +
     (t.source ? '<details><summary class="mini-link">Show source message</summary><blockquote>' + esc(t.source) + '</blockquote></details>' : '') +
     (t.notion?.id && !t.notion.gone ? '<div class="notion-line">' + symbol('i-link') + 'Synced with Notion<button type="button" class="mini-link" id="openNotionPage">Open page</button></div>' : '') +
+    (t.github?.url ? '<div class="notion-line">' + symbol('i-link') + 'GitHub issue #' + esc(String(t.github.number)) + (t.github.state === 'closed' ? ' (closed)' : '') +
+      '<button type="button" class="mini-link" id="openIssue">Open on GitHub</button></div>' : '') +
     '<div class="close-prompt" id="closePrompt" role="alertdialog" aria-labelledby="closePromptText" hidden></div>' +
     '<div class="actions"><button type="button" class="mini-link danger-link" id="removeTask">' + (created ? 'Delete Task' : 'Discard') + '</button>' +
     '<span class="save-state" id="saveState" role="status" aria-live="polite"></span><span class="spacer"></span>' +
@@ -651,6 +656,7 @@ function taskForm(t, context = {}) {
   });
   $('fieldTitle').focus();
   if ($('openNotionPage')) $('openNotionPage').onclick = () => action(native('openNotion', {page: t.notion.id}));
+  if ($('openIssue')) $('openIssue').onclick = () => action(native('openIssue', {url: t.github.url}));
   $('revertTask').onclick = revert;
   $('removeTask').onclick = () => {
     clearTimeout(timer);

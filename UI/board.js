@@ -483,3 +483,31 @@ window.showForCapture = name => {
     $('plannedToggle')?.click();
   }
 };
+
+// shishi:// links from Shortcuts, Raycast, scripts or a browser. A link can add a task or show something,
+// never change or delete what is already there.
+window.openURLAction = fields => {
+  const action = fields?.action;
+  if (action === 'add') {
+    const found = parseQuick(String(fields.text || fields.title || '').slice(0, 400));
+    if (!found.title) { toast('The link had no task title.'); return; }
+    const list = data.projects.find(name => name.toLocaleLowerCase() === String(fields.list || '').toLocaleLowerCase());
+    const task = newTask({project: list || found.project || data.projects[0], title: found.title});
+    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'repeat']) if (found[key]) task[key] = found[key];
+    if (fields.notes) task.notes = String(fields.notes).slice(0, 4000);
+    addFromLink(task);
+    return;
+  }
+  if (action === 'open') {
+    if (fields.view === 'inbox') { $('inboxButton').click(); return; }
+    if (['today', 'upcoming', 'all', 'done'].includes(fields.view)) go(fields.view);
+    return;
+  }
+  if (action === 'inbox') { $('inboxButton').click(); return; }
+  if (action === 'search') openPalette(String(fields.q || '').slice(0, 200));
+};
+function addFromLink(task) {
+  action(change(state => { state.tasks.push(task); }).then(() => toast('Added “' + task.title + '” from a link', () => action(change(state => {
+    state.tasks = state.tasks.filter(item => item.id !== task.id);
+  })))));
+}

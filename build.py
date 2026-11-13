@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
         plistlib.dump(info,target)
     native_sources = [
         'main.swift', 'Engine.swift', 'CodexInbox.swift', 'ConnectorInbox.swift',
-        'ExternalProviders.swift', 'AgentStatus.swift', 'CornerCard.swift', 'ModelDownload.swift', 'Hotkeys.swift', 'Approvals.swift', 'Alerts.swift', 'SessionFocus.swift', 'Mail/MailVault.swift'
+        'ExternalProviders.swift', 'AgentStatus.swift', 'CornerCard.swift', 'ModelDownload.swift', 'Hotkeys.swift', 'Approvals.swift', 'Alerts.swift', 'SessionFocus.swift', 'EventKitBridge.swift', 'Mail/MailVault.swift'
     ]
     subprocess.run(['xcrun', 'swiftc', '-O', '-target', 'arm64-apple-macos26.0',
                     '-module-cache-path', str(Path(tmp)/'cache'),

@@ -12,6 +12,25 @@
 	<string>ShiShi</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Shishi actions</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>shishi</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSRemindersUsageDescription</key>
+	<string>Shishi keeps one of your lists in step with a list in Reminders, if you turn that on.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Shishi keeps one of your lists in step with a list in Reminders, if you turn that on.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Shishi shows today's calendar events next to your tasks, if you turn that on.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Shishi shows today's calendar events next to your tasks, if you turn that on.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Shishi brings forward the exact Terminal or iTerm2 tab where an agent session runs.</string>
 	<key>CFBundleVersion</key>

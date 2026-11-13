@@ -67,13 +67,14 @@
    * When a task and its page both changed since the last sync, the Notion page wins.
    */
   function plan(tasks, pages, options) {
-    const {mapping, project, truncated, newId, stamp} = options;
+    // linkKey names the field that ties a task to its remote item: "notion" or "reminder" (Apple Reminders).
+    const {mapping, project, truncated, newId, stamp, linkKey = 'notion'} = options;
     const byPage = new Map(pages.map(page => [page.id, page]));
     const linked = new Set();
     const changes = [];
     const stats = {imported: 0, updated: 0, sent: 0, missing: 0};
     for (const task of tasks) {
-      const link = task.notion;
+      const link = task[linkKey];
       if (!link?.id) continue;
       linked.add(link.id);
       const page = byPage.get(link.id);
@@ -101,14 +102,14 @@
     for (const page of pages) {
       if (linked.has(page.id) || page.done || !page.title) continue;
       const task = {id: newId(), title: page.title, project, tag: '', priority: 'P2', planned: '', source: '', quote: '', done: false,
-                    notion: {id: page.id, edited: page.edited}};
+                    [linkKey]: {id: page.id, edited: page.edited}};
       adopt(task, page, mapping);
-      task.notion.sig = signature(taskFields(task, mapping));
+      task[linkKey].sig = signature(taskFields(task, mapping));
       tasks.push(task);
       stats.imported++;
     }
     for (const task of tasks) {
-      if (task.project !== project || task.notion?.id) continue;
+      if (task.project !== project || task[linkKey]?.id) continue;
       const keys = Object.keys(taskFields(task, mapping)).filter(key =>
         key === 'title' || key === 'done' || (key === 'due' && task.dueDate) || (key === 'priority' && task.priority && task.priority !== 'P2') || (key === 'tag' && task.tag));
       changes.push({task: task.id, page: '', fields: outgoing(task, mapping, keys)});
@@ -117,13 +118,13 @@
   }
 
   // Record what Notion accepted so the next sync sees those tasks as unchanged.
-  function settle(tasks, results, mapping) {
+  function settle(tasks, results, mapping, linkKey = 'notion') {
     let sent = 0, failed = '';
     for (const result of results || []) {
       const task = tasks.find(item => item.id === result.task);
-      if (!result.ok) { failed = failed || result.error || 'Notion did not accept a change.'; continue; }
+      if (!result.ok) { failed = failed || result.error || 'A change was not accepted.'; continue; }
       if (!task || !result.page?.id) continue;
-      task.notion = {id: result.page.id, edited: result.page.edited, sig: signature(taskFields(task, mapping))};
+      task[linkKey] = {id: result.page.id, edited: result.page.edited, sig: signature(taskFields(task, mapping))};
       sent++;
     }
     return {sent, failed};

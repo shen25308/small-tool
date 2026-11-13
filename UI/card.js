@@ -167,6 +167,9 @@ window.Card = (() => {
     $('cardWeekday').textContent = weekday.format(now).toUpperCase();
     $('cardDay').textContent = String(now.getDate());
     $('cardSummary').textContent = open.length ? open.length + (open.length === 1 ? ' task left' : ' tasks left') : today.length ? 'All done' : 'Nothing planned';
+    const upcoming = window.CalendarEvents?.next();
+    $('cardNextEvent').hidden = !upcoming;
+    $('cardNextEvent').textContent = upcoming ? 'Next: ' + CalendarEvents.label(upcoming) : '';
     const ratio = today.length ? done / today.length : 0;
     const ring = $('cardRing');
     ring.style.setProperty('--progress', ratio.toFixed(3));
