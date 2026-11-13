@@ -584,12 +584,14 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 tell("setCapabilities",capabilities)
                 reply(id,true,true)
             case "snapshotWorkspace":
-                // Keep a dated copy of the current workspace before a backup replaces it.
+                // Keep a dated copy of the current workspace before a backup or an upgrade replaces it.
+                // An empty reply means there is no file yet, so there is nothing to keep.
                 guard FileManager.default.fileExists(atPath:file.path) else {reply(id,true,"");break}
                 let folder=file.deletingLastPathComponent().appendingPathComponent("Backups",isDirectory:true)
                 try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)
                 let stamp=ISO8601DateFormatter.string(from:Date(),timeZone:.current,formatOptions:[.withFullDate,.withTime,.withDashSeparatorInDate]).replacingOccurrences(of:":",with:".")
-                let copy=folder.appendingPathComponent("Workspace before import "+stamp+".json")
+                let reason=(body["reason"] as? String)=="upgrade" ? "upgrade" : "import"
+                let copy=folder.appendingPathComponent("Workspace before "+reason+" "+stamp+".json")
                 try? FileManager.default.removeItem(at:copy)
                 try FileManager.default.copyItem(at:file,to:copy)
                 reply(id,true,copy.path)

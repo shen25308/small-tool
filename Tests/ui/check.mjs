@@ -19,7 +19,7 @@ async function check(name, options, body) {
     assert.deepEqual(session.problems, [], 'the page logged errors');
     results.push('ok   ' + name);
   } catch (error) {
-    results.push('FAIL ' + name + '\n     ' + String(error.message).split('\n').slice(0, 6).join('\n     '));
+    results.push('FAIL ' + name + '\n     ' + String(error.message).split('\n').slice(0, process.env.STACK ? 30 : 6).join('\n     '));
     if (shots) await page.screenshot({path: shots + '/FAILED-' + name.replace(/\W+/g, '-') + '.png'}).catch(() => {});
   } finally { await session.context.close(); }
 }
@@ -146,6 +146,63 @@ await check('repeating tasks: complete, undo, reopen, edited successor', {}, asy
   assert.equal((await series()).find(t => !t.done && t.notes)?.notes, 'Include the metrics');
 });
 
+await check('UX-N06: a successor moved to other days, the evening or Someday is not deleted silently', {}, async ({page, tasks}) => {
+  const series = async () => (await tasks()).filter(t => t.title === "Prepare Friday's update");
+  const complete = () => page.locator('#tasks .row:not(.done)', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  const reopen = () => page.locator('#tasks .row.done', {hasText: "Prepare Friday's update"}).locator('.check').click();
+  for (const edit of [
+    next => { next.plannedDates = [next.planned, next.planned.slice(0, 8) + '28'].sort(); },
+    next => { next.evening = true; },
+    next => { next.someday = true; }
+  ]) {
+    await complete();
+    await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 2);
+    await page.evaluate(source => {
+      const next = window.__host.workspace.tasks.find(t => t.title === "Prepare Friday's update" && !t.done);
+      (0, eval)('(' + source + ')')(next);
+      data = structuredClone(window.__host.workspace); render();
+    }, edit.toString());
+    await page.click('#nav [data-view="done"]');
+    await reopen();
+    await page.waitForFunction(() => /already changed, so it was kept/.test(document.getElementById('toast').textContent));
+    assert.equal((await series()).length, 2, 'the changed successor stays until the person chooses');
+    // Clean up: remove it explicitly, then go back to Today.
+    await page.click('#toast .undo');
+    await page.waitForFunction(() => window.__host.workspace.tasks.filter(t => t.title === "Prepare Friday's update").length === 1);
+    await page.click('#nav [data-view="today"]');
+  }
+});
+
+await check('UX-N05/N08: Someday keeps the deadline; quick add in Someday stays in Someday', {}, async ({page, tasks}) => {
+  const id = (await tasks()).find(t => t.dueDate && !t.done).id;
+  const before = (await tasks()).find(t => t.id === id);
+  await page.evaluate(id => action(setWhen(id, 'someday')), id);
+  await page.waitForFunction(id => window.__host.workspace.tasks.find(t => t.id === id).someday, id);
+  let task = (await tasks()).find(t => t.id === id);
+  assert.deepEqual([task.dueDate, task.dueTime], [before.dueDate, before.dueTime], 'moving to Someday keeps the deadline');
+  await page.evaluate(id => action(setWhen(id, 'today')), id);
+  await page.waitForFunction(id => !window.__host.workspace.tasks.find(t => t.id === id).someday, id);
+  task = (await tasks()).find(t => t.id === id);
+  assert.equal(task.dueDate, before.dueDate, 'and coming back keeps it too');
+  // Quick add while looking at Someday.
+  await page.click('#nav [data-view="someday"]');
+  await page.evaluate(() => openQuick('view'));
+  await page.fill('.quick-add input', 'Learn watercolour');
+  await page.press('.quick-add input', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Learn watercolour'));
+  assert.equal((await tasks()).find(t => t.title === 'Learn watercolour').someday, true);
+  assert.match(await text(page, '#tasks'), /Learn watercolour/, 'the new task is visible where it was typed');
+  // An explicit date wins, and the person is told where the task went.
+  await page.evaluate(() => openQuick('view'));
+  await page.fill('.quick-add input', 'Book flights tomorrow');
+  await page.press('.quick-add input', 'Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Book flights'));
+  const dated = (await tasks()).find(t => t.title === 'Book flights');
+  assert.equal(dated.someday, undefined);
+  assert.equal(dated.planned, day(1));
+  assert.match(await text(page, '#toast'), /Book flights[\s\S]*Tomorrow[\s\S]*not in Someday/);
+});
+
 // F02: what you type in Details is never lost by closing, Escape or relaunching.
 await check('details autosave survives close, escape and relaunch', {}, async ({page, host, tasks, shot}) => {
   const open = title => page.locator('#tasks .row', {hasText: title}).locator('.task-body').click();
@@ -191,6 +248,51 @@ await check('details survive a relaunch', {}, async ({page, host}) => {
     await again.page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
     assert.equal(await again.page.inputValue('#fieldNotes'), 'Check the iPad layout');
   } finally { await again.context.close(); }
+});
+
+await check('UX-N03/N04: an untitled new task keeps its notes through Close, Escape, ⌘, and native Settings', {}, async ({page, tasks}) => {
+  const start = async () => {
+    await page.evaluate(() => taskForm(newTask()));
+    await page.fill('#fieldNotes', 'Call the venue about the deposit');
+    await page.fill('#subtaskNew', 'Ask about parking');
+  };
+  for (const [leave, settings] of [
+    [() => page.click('#dialog [data-close]'), false],
+    [() => page.keyboard.press('Escape'), false],
+    [() => page.keyboard.press('Meta+Comma'), true],
+    [() => page.evaluate(() => window.openSettings('agents')), true]
+  ]) {
+    await start();
+    await leave();
+    await page.waitForSelector('#closePrompt:not([hidden])');
+    assert.match(await text(page, '#closePrompt'), /no title yet/);
+    assert.equal(await page.locator('#fieldTitle').count(), 1, 'the draft is still on screen');
+    assert.equal(await page.inputValue('#fieldNotes'), 'Call the venue about the deposit');
+    // Keep editing, give it a title, then leave the same way: it is saved with notes and the typed subtask.
+    await page.click('#closePrompt [data-choice="0"]');
+    await page.fill('#fieldTitle', 'Book the venue');
+    await leave();
+    await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Book the venue'));
+    const saved = (await tasks()).find(t => t.title === 'Book the venue');
+    assert.equal(saved.notes, 'Call the venue about the deposit');
+    assert.deepEqual(saved.subtasks.map(item => item.title), ['Ask about parking'], 'a typed but unconfirmed subtask is kept');
+    // Then it goes where it was asked to: closed, or on to Settings.
+    if (settings) await page.waitForFunction(() => /Settings/.test(document.getElementById('dialogTitle')?.textContent || '') && document.querySelector('#dialog').open);
+    else await page.waitForFunction(() => !document.querySelector('#dialog').open);
+    await page.evaluate(() => { closeDialog(true); window.__host.workspace.tasks = window.__host.workspace.tasks.filter(t => t.title !== 'Book the venue'); data.tasks = data.tasks.filter(t => t.title !== 'Book the venue'); });
+  }
+  // Discarding is an explicit choice.
+  await start();
+  await page.keyboard.press('Escape');
+  await page.click('#closePrompt [data-choice="1"]');
+  await page.waitForFunction(() => !document.querySelector('#dialog').open);
+  assert.equal((await tasks()).some(t => t.notes === 'Call the venue about the deposit'), false);
+  // An existing task with a pending subtask: ⌘, saves it before Settings opens.
+  await page.locator('#tasks .row', {hasText: 'Review QA feedback'}).locator('.task-body').click();
+  await page.fill('#subtaskNew', 'Check dark mode');
+  await page.keyboard.press('Meta+Comma');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review QA feedback').subtasks?.some(s => s.title === 'Check dark mode'));
+  await page.waitForFunction(() => /Settings/.test(document.getElementById('dialogTitle')?.textContent || ''));
 });
 
 // F07: a time with no date is never dropped silently.
@@ -1043,6 +1145,50 @@ await check('backup: invalid files change nothing', {}, async ({page, tasks}) =>
   assert.equal((await tasks()).length, 18);
 });
 
+await check('UX-N01/N02: malformed backups are explained; empty backups confirm; a failed safety copy stops the import', {}, async ({page, host, tasks}) => {
+  const wrap = workspace => JSON.stringify({format: 'shishi-backup', version: 1, workspace: {version: 1, projects: ['A'], ...workspace}});
+  const openImport = async body => {
+    await page.evaluate(text => { window.__host.importFile = {name: 'backup.json', text}; }, body);
+    await page.click('#boardMore');
+    await page.click('#backupImport');
+    await page.locator('#dialog[open] #dialogBody .actions').waitFor();
+    return text(page, '#dialogBody');
+  };
+  const closeIt = async () => { await page.evaluate(() => closeDialog(true)); await page.waitForFunction(() => !document.querySelector('#dialog').open); };
+  const tries = [
+    [wrap({}), /no task list/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', dueDate: '2026-99-99'}]}), /invalid deadline/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', dueDate: '2026-02-30'}]}), /invalid deadline/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', dueDate: '2026-11-13', dueTime: '99:99'}]}), /time without a valid date/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', notes: {text: 'hi'}}]}), /notes are not text/],
+    [wrap({tasks: [{id: 'x', title: 'T', project: 'A', plannedDates: ['2026-13-01']}]}), /invalid planned days/]
+  ];
+  for (const [body, pattern] of tries) {
+    const shown = await openImport(body);
+    assert.match(shown, pattern);
+    assert.match(shown, /Nothing was changed/);
+    assert.equal(await page.locator('#confirmImport').count(), 0);
+    await closeIt();
+  }
+  assert.equal((await tasks()).length, 18, 'malformed backups keep every task');
+  // A valid backup with no tasks can be imported, but only after a plain warning.
+  const shown = await openImport(wrap({tasks: []}));
+  assert.match(shown, /has no tasks[\s\S]*removes all 18 of your current tasks/);
+  assert.match(await page.locator('#confirmImport').innerText(), /Replace with Empty Backup/);
+  // The safety copy fails: the import stops, the old tasks stay, and no success is claimed.
+  await page.evaluate(() => { window.__host.failSnapshot = 'The backup folder is not writable.'; });
+  await page.click('#confirmImport');
+  await page.waitForFunction(() => /not writable/.test(document.getElementById('dialogBody').textContent + document.getElementById('toast').textContent));
+  assert.equal((await tasks()).length, 18);
+  assert.doesNotMatch(await text(page, '#toast'), /Imported/);
+  await closeIt();
+  // With the copy working again, the empty backup imports.
+  await page.evaluate(() => { window.__host.failSnapshot = ''; });
+  await openImport(wrap({tasks: []}));
+  await page.click('#confirmImport');
+  await page.waitForFunction(() => window.__host.workspace.tasks.length === 0);
+});
+
 await check('native capture flags open the right sheets', {}, async ({page}) => {
   await page.evaluate(() => window.showForCapture('schedule'));
   await page.locator('#plannedPicker:not([hidden]) .day-picker').waitFor();
@@ -1256,6 +1402,30 @@ await check('GitHub issues become tasks', {}, async ({page, host, tasks}) => {
   await page.locator('.row', {hasText: 'Crash on login'}).first().locator('.task-body').click();
   await page.click('#openIssue');
   await page.waitForFunction(() => window.__host.openedIssue === 'https://github.com/acme/app/issues/12');
+});
+
+await check('C05: Send to Claude right after an edit sends the edit, and a failed save sends nothing', {}, async ({page, host}) => {
+  const row = () => page.locator('#tasks .row', {hasText: 'Review the product roadmap'});
+  await page.evaluate(() => { window.__host.workspace.projectFolders = {'Product ideas': '/Users/me/code/app'}; window.__host.saveDelay = 300; });
+  await page.evaluate(() => { data.projectFolders = {'Product ideas': '/Users/me/code/app'}; });
+  await row().locator('.task-body').click();
+  await page.fill('#fieldTitle', 'Review the roadmap and cut scope');
+  await page.click('[data-agent-send="claude"]');
+  await page.waitForFunction(() => window.__host.started?.length === 1);
+  assert.match((await host()).started[0].prompt, /^Review the roadmap and cut scope/, 'the latest typed title is what Claude receives');
+  // Saving fails: nothing is launched and the sheet says why.
+  await page.evaluate(() => { window.__host.saveDelay = 0; window.__host.failSave = 'The disk is full.'; });
+  await page.fill('#fieldTitle', 'A title that cannot be saved');
+  await page.click('[data-agent-send="claude"]');
+  await page.waitForFunction(() => /disk is full/.test(document.getElementById('toast').textContent + document.getElementById('dialogBody').textContent));
+  await page.waitForTimeout(200);
+  assert.equal((await host()).started.length, 1, 'no agent starts with an unsaved draft');
+  // An invalid draft (no title) launches nothing either.
+  await page.evaluate(() => { window.__host.failSave = ''; });
+  await page.fill('#fieldTitle', '');
+  await page.click('[data-agent-send="claude"]');
+  await page.waitForTimeout(300);
+  assert.equal((await host()).started.length, 1);
 });
 
 await check('send a task to Claude Code and follow it back', {}, async ({page, host, tasks}) => {

@@ -236,6 +236,42 @@ test('GitHub issues become tasks and close with their issue', async () => {
   assert.equal(tasks.length, 1);
 });
 
+test('C04: reopening an issue never undoes a completion the person made', async () => {
+  await import('../UI/issue-sync.js');
+  const {plan: planIssues} = globalThis.IssueSync;
+  const url = 'https://github.com/acme/app/issues/7';
+  const issue = state => [{number: 7, title: 'Flaky upload', state, url}];
+  let stamp = 't1';
+  const options = () => ({project: 'Work', newId: () => 'g7', stamp});
+  const tasks = [];
+  planIssues(tasks, issue('open'), options());
+  // Completed by hand in Shishi, then the issue closes and reopens on GitHub: the task stays done.
+  Object.assign(tasks[0], {done: true, completedAt: 'mine'});
+  planIssues(tasks, issue('closed'), options());
+  const manual = planIssues(tasks, issue('open'), options());
+  assert.equal(manual.reopened, 0);
+  assert.equal(tasks[0].done, true, 'manual completion must survive the reopen');
+  // Completed because the issue closed: the reopen opens it again.
+  Object.assign(tasks[0], {done: false}); delete tasks[0].completedAt;
+  stamp = 't2';
+  planIssues(tasks, issue('closed'), options());
+  assert.equal(tasks[0].done, true);
+  // ...but if the person re-completes it themselves afterwards, that is theirs.
+  Object.assign(tasks[0], {done: false}); Object.assign(tasks[0], {done: true, completedAt: 'mine again'});
+  planIssues(tasks, issue('open'), options());
+  assert.equal(tasks[0].done, true);
+  planIssues(tasks, issue('closed'), options());
+  stamp = 't3';
+  Object.assign(tasks[0], {done: false}); delete tasks[0].completedAt;
+  planIssues(tasks, issue('closed'), options());
+  planIssues(tasks, issue('open'), options());
+  planIssues(tasks, issue('closed'), options());
+  assert.equal(tasks[0].done, true, 'closed again after a reopen completes it again');
+  const back = planIssues(tasks, issue('open'), options());
+  assert.equal(back.reopened, 1);
+  assert.equal(tasks[0].done, false);
+});
+
 test('saved filters: a small query language like Todoist', () => {
   const {filter} = globalThis.TaskLogic;
   const ctx = {today: '2026-11-13'};

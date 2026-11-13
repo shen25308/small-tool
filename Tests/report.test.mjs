@@ -76,3 +76,13 @@ test('report details', () => {
   assert.deepEqual([many.files.slice(0, 3), many.moreFiles], [['one.ts', 'two.ts', 'three.ts'], 6]);
   assert.deepEqual([minutes(0), minutes(20), minutes(150), minutes(3700), minutes(7200)], ['', '20 s', '3 min', '1 h 2 min', '2 h']);
 });
+
+test('C01: a check that ran without showing a pass is not green', () => {
+  const unclear = brief({summary: 'Done. All tests pass.', title: 'Claude Code · shop'},
+    {state: 'done', facts: {files: ['app.py'], fileCount: 1, commands: 1, failedTools: 0, tests: 'unclear', testCommand: 'pytest -q || true'}});
+  assert.equal(unclear.label, 'Completed · Checks not verified');
+  assert.equal(unclear.tone, 'neutral');
+  assert.match(unclear.verification.evidence, /did not show a passing result/);
+  const genuine = brief({summary: 'Done.', title: 'x'}, {state: 'done', facts: {files: [], fileCount: 0, commands: 1, failedTools: 0, tests: 'passed', testCommand: 'pytest -q'}});
+  assert.equal(genuine.label, 'Completed · Checks passed');
+});

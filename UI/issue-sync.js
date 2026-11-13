@@ -22,11 +22,15 @@
       }
       if (issue.state === 'closed' && link.state !== 'closed') {
         link.state = 'closed';
-        if (!task.done) { task.done = true; task.completedAt = stamp; stats.closed++; }
+        // Remember which completion was ours, so a reopen can tell it from one the person made (C04).
+        if (!task.done) { task.done = true; task.completedAt = stamp; link.closedTask = stamp; stats.closed++; } else delete link.closedTask;
       } else if (issue.state === 'open' && link.state === 'closed') {
         link.state = 'open';
-        // Reopen only a task that Shishi completed because the issue closed.
-        if (task.done && task.completedAt && !link.keepDone) { task.done = false; delete task.completedAt; stats.reopened++; }
+        // Reopen only a task that Shishi completed because the issue closed, and that nobody has completed again since.
+        if (task.done && link.closedTask && task.completedAt === link.closedTask && !link.keepDone) {
+          task.done = false; delete task.completedAt; stats.reopened++;
+        }
+        delete link.closedTask;
       }
     }
     return stats;

@@ -7,13 +7,21 @@ window.Approvals = (() => {
   const left = row => Math.max(0, Math.ceil(row.expires - Date.now() / 1000));
   const answering = new Set();
 
+  // The card only offers Allow when it holds the whole request. Lengths count code points, as Python does.
+  const complete = row => typeof row.length !== 'number' || row.length < 0 || [...(row.detail || '')].length === row.length;
   function markup(row) {
     const tool = row.tool || 'a tool';
+    if (!complete(row)) {
+      return '<article class="approval" data-approval="' + esc(row.id) + '"><div class="approval-head"><span class="verdict-badge">Permission</span><b>' + esc(row.project || 'Claude Code') + '</b></div>' +
+        '<p class="approval-ask">Claude Code wants to use <b>' + esc(tool) + '</b>, but the request is too long to show here in full. Answer it in the terminal.</p></article>';
+    }
+    const size = [...(row.detail || '')].length;
     return '<article class="approval" data-approval="' + esc(row.id) + '">' +
       '<div class="approval-head"><span class="verdict-badge">' + symbol('i-bolt') + 'Permission</span><b>' + esc(row.project || 'Claude Code') + '</b>' +
       '<span class="approval-left" data-left>' + left(row) + ' s</span></div>' +
       '<p class="approval-ask">Claude Code wants to use <b>' + esc(tool) + '</b>' + (row.reason ? ': ' + esc(row.reason) : '') + '</p>' +
-      (row.detail ? '<pre class="approval-detail">' + esc(row.detail) + '</pre>' : '') +
+      (row.detail ? '<pre class="approval-detail" tabindex="0" aria-label="Full request">' + esc(row.detail) + '</pre>' +
+        (size > 400 ? '<p class="approval-size">' + size.toLocaleString('en-US') + ' characters · scroll to read all of it before allowing</p>' : '') : '') +
       '<div class="approval-actions"><span class="approval-note">Then it asks in the terminal.</span>' +
       '<button type="button" class="secondary" data-answer="deny">Deny</button>' +
       '<button type="button" class="primary" data-answer="allow">Allow</button></div></article>';

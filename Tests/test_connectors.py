@@ -251,6 +251,30 @@ class ClaudeCodeHook(Sandbox):
         self.hook(hook_event_name="Stop", session_id="s-c", cwd=cwd, transcript_path=str(self.base / "missing.jsonl"), last_assistant_message="Ok.")
         self.assertNotIn("facts", next(state for state in self.states() if state["session"] == "s-c"))
 
+    def test_checks_count_only_when_they_really_ran_and_passed(self):
+        """C01: echoes, --version/--help, masked failures and background launches never turn into observed passes."""
+        cwd = "/Users/me/code/shop"
+        def facts_for(session, command, output, error=False):
+            rows = [{"type": "user", "message": {"content": "Check it"}}, self.tool("a", "Bash", command=command), self.result("a", output, error)]
+            self.hook(hook_event_name="Stop", session_id=session, cwd=cwd, transcript_path=self.write_transcript(rows), last_assistant_message="Done.")
+            return next(state for state in self.states() if state["session"] == session)["facts"]["tests"]
+        cases = [
+            ("echo", "printf 'pytest is not installed\\n'", "pytest is not installed", "none"),
+            ("echo2", 'echo "running pytest now"', "running pytest now", "none"),
+            ("version", "pytest --version", "pytest 8.3.2", "none"),
+            ("help", "npx jest --help", "Usage: jest [--config]", "none"),
+            ("masked", "pytest -q || true", "1 failed, 11 passed in 0.4s", "failed"),
+            ("masked-quiet", "pytest -q || true", "", "unclear"),
+            ("background", "npm test &", "", "unclear"),
+            ("silent", "pytest -q", "", "unclear"),
+            ("missing", "pytest -q", "bash: pytest: command not found", "failed"),
+            ("genuine", "pytest -q", "12 passed in 0.31s", "passed"),
+            ("genuine-go", "go test ./...", "ok  example.com/shop 0.2s", "passed"),
+            ("lint", "npx eslint src", "", "passed"),
+        ]
+        for session, command, output, expected in cases:
+            self.assertEqual(facts_for(session, command, output), expected, session + ": " + command)
+
     def test_long_reply_is_trimmed_and_bad_input_never_blocks(self):
         result = self.hook(hook_event_name="Stop", last_assistant_message="é" * 80000)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -400,6 +424,25 @@ class ApprovalHook(Sandbox):
         self.assertEqual(out, "")
         self.assertEqual(self.states()[0]["state"], "working")
 
+    def test_long_requests_are_shown_whole_or_not_at_all(self):
+        """C02: a 4139-character command is not cut to 4000; one past the card limit goes straight to the terminal."""
+        self.alive()
+        tail = " && rm -rf build/final-step"
+        command = "echo " + "x" * (4139 - len(tail) - 5) + tail
+        self.EVENT = {**self.EVENT, "tool_input": {"command": command}}
+        process = self.start()
+        request = self.request(process)
+        self.assertEqual((request["detail"], request["length"]), (command, 4139))
+        self.assertTrue(request["detail"].endswith("rm -rf build/final-step"))
+        (self.approvals / (request["id"] + ".decision")).write_text(json.dumps({"behavior": "deny"}))
+        self.finish(process)
+        huge = {**self.EVENT, "tool_input": {"command": "echo " + "y" * 20000}}
+        started = time.time()
+        result = self.run_script(PERMISSION, stdin=json.dumps(huge))
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        self.assertLess(time.time() - started, 3, "no waiting: the terminal asks at once")
+        self.assertEqual([p for p in self.approvals.glob("*.json")], [])
+
     def test_installer_adds_the_approval_hook_only_when_asked(self):
         home = self.base / "claude"
         run = lambda *args: json.loads(self.run_script(INSTALL, *args, "--json", "--claude-home", str(home)).stdout)
@@ -484,6 +527,34 @@ class GitHubIssues(unittest.TestCase):
         self.assertEqual([(i["number"], i["title"], i["state"]) for i in found], [(1, "Crash on login", "open"), (4, "Issue #4", "closed")])
         self.assertEqual(found[0]["url"], "https://github.com/acme/app/issues/1")
         self.assertEqual(found[0]["labels"], ["bug"])
+
+
+class GitHubIssuePages(unittest.TestCase):
+    """C03: an open issue past the first 100 entries is still imported, and a cut-off read says so."""
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "Mail"))
+        import importlib
+        self.module = importlib.import_module("github_issues")
+        self.original = self.module.get_page
+
+    def tearDown(self):
+        self.module.get_page = self.original
+
+    def test_follows_next_pages_and_reports_a_cut_off(self):
+        closed = [{"number": n, "title": "Closed %d" % n, "state": "closed"} for n in range(1, 101)]
+        pages = {"first": (closed, "page2"), "page2": ([{"number": 500, "title": "Old open issue", "state": "open"}], "")}
+        calls = []
+        def fake(url):
+            calls.append(url)
+            return pages["page2"] if url == "page2" else pages["first"]
+        self.module.get_page = fake
+        rows, complete = self.module.fetch("acme/app", "", "", "open")
+        self.assertTrue(complete)
+        self.assertEqual(len(calls), 2)
+        self.assertIn(500, [issue["number"] for issue in self.module.issues(rows, "acme/app") if issue["state"] == "open"])
+        self.module.get_page = lambda url: (closed, "more")
+        rows, complete = self.module.fetch("acme/app", "", "", "open", pages=3)
+        self.assertFalse(complete, "stopping early must be reported")
 
 
 class AgentStatusCommand(Sandbox):

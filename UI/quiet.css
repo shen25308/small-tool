@@ -148,3 +148,5 @@ dialog, .menu, #boardMenu, .task-picker, .focus-pop, #palette { box-shadow: var(
 .quadrant .no-tag, .quadrant .no-deadline, .quadrant .rowAction { display: none }
 .quadrant .row-actions { display: none }
 .quadrant .row-meta .meta-note { display: none }
+.approval-detail { max-height: 160px; overflow: auto }
+.approval-size { margin: 0; color: var(--secondary); font-size: 12px }

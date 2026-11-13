@@ -10,7 +10,7 @@ struct AgentFacts: Equatable {
 
     init?(_ value: Any?) {
         guard let object = value as? [String: Any], let tests = object["tests"] as? String,
-              ["passed", "failed", "none"].contains(tests) else { return nil }
+              ["passed", "failed", "none", "unclear"].contains(tests) else { return nil }
         let count = { (key: String) in max(0, min(object[key] as? Int ?? 0, 100_000)) }
         files = (object["files"] as? [Any] ?? []).compactMap { $0 as? String }
             .map { String($0.components(separatedBy: .controlCharacters).joined().prefix(300)) }.filter { !$0.isEmpty }.prefix(12).map { $0 }

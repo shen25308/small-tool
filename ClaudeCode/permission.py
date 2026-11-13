@@ -20,6 +20,8 @@ import shishi_agents as agents  # noqa: E402
 
 SOURCE = "Claude Code"
 DEFAULT_WAIT = 25
+# The card shows a request in full or not at all: anything longer goes straight to the terminal prompt.
+CARD_LIMIT = 16000
 ALIVE_SECONDS = 30
 
 
@@ -57,7 +59,7 @@ def describe(event):
         detail = text(data.get("file_path")) or text(data.get("notebook_path")) or text(data.get("url")) or text(data.get("path"))
         if not detail and data:
             detail = json.dumps(data, ensure_ascii=False, sort_keys=True)
-    return tool, detail[:4000], text(data.get("description"))[:300]
+    return tool, detail, text(data.get("description"))[:300]
 
 
 def write_json(path, value):
@@ -84,6 +86,8 @@ def ask(event, clock=time.monotonic, sleep=time.sleep):
     if not session or not shishi_is_open(base):
         return None
     tool, detail, reason = describe(event)
+    if len(detail) > CARD_LIMIT:
+        return None  # Too long to review on the card; Claude Code asks in the terminal right away.
     project = Path(text(event.get("cwd"))).name or "session"
     wait = wait_seconds(base)
     request_id = uuid.uuid4().hex
@@ -91,7 +95,7 @@ def ask(event, clock=time.monotonic, sleep=time.sleep):
     answer = base / (request_id + ".decision")
     base.mkdir(parents=True, mode=0o700, exist_ok=True)
     write_json(request, {"id": request_id, "session": session, "source": SOURCE, "project": project, "tool": tool,
-                         "detail": detail, "reason": reason, "time": time.time(), "expires": time.time() + wait})
+                         "detail": detail, "length": len(detail), "reason": reason, "time": time.time(), "expires": time.time() + wait})
     previous = agents.read(SOURCE, session) or {}
     keep = {key: previous[key] for key in ("label", "app", "started", "pid", "task") if key in previous}
     title = text(previous.get("title")) or SOURCE + " · " + project

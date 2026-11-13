@@ -145,10 +145,14 @@ async function syncIssues({quiet = false} = {}) {
       if (!state.projects.includes(state.github.project)) state.projects.push(state.github.project);
       stats = IssueSync.plan(state.tasks, fetched.issues || [], {project: state.github.project, newId: uuid, stamp: stampNow()});
       state.github.lastSync = stampNow();
+      // GitHub had more pages than Shishi reads in one sync: say the list may be incomplete (C03).
+      state.github.incomplete = fetched.complete === false;
     });
     issuesProblem = '';
     const parts = [stats.imported && stats.imported + ' new', stats.closed && stats.closed + ' closed', stats.reopened && stats.reopened + ' reopened'].filter(Boolean);
-    if (!quiet || parts.length) toast(parts.length ? 'GitHub issues: ' + parts.join(', ') : 'GitHub issues are up to date');
+    const partial = fetched.complete === false;
+    if (!quiet || parts.length || partial) toast((parts.length ? 'GitHub issues: ' + parts.join(', ') : partial ? 'GitHub issues' : 'GitHub issues are up to date') +
+      (partial ? '. Only the 1,000 most recently updated open issues were read, so some may be missing.' : ''));
   } catch (error) {
     issuesProblem = error.message;
     if (!quiet) throw error;
@@ -194,7 +198,7 @@ function showIssues() {
       (filters ? 'Open issues ' + filters : 'All open issues') + ' → “' + projectLabel(config.project) + '” · ' + linked + (linked === 1 ? ' task' : ' tasks') +
       (config.lastSync ? ' · Checked ' + dayLabel(config.lastSync.slice(0, 10)) + ' ' + config.lastSync.slice(11) : ''))) + '</small></span>' +
     '<button type="button" class="secondary" id="issuesSync"' + (issuesBusy ? ' disabled' : '') + '>Import Now</button></div></div>' +
-    '<p class="feedback">' + esc(issuesProblem) + '</p>' +
+    '<p class="feedback">' + esc(issuesProblem || (config.incomplete ? 'The last check read only the 1,000 most recently updated open issues. Older open issues may be missing; a label or assignee filter narrows the list.' : '')) + '</p>' +
     '<p class="hint">Shishi checks every 15 minutes. Checking off a task here does not close the issue on GitHub. Deleting a task does not delete the issue.</p>' +
     '<div class="actions"><button type="button" class="mini-link danger-link" id="issuesStop">Stop Importing</button><span class="spacer"></span><button type="button" class="primary" data-close>Done</button></div>', navigation);
   $('issuesSync').onclick = () => { action(syncIssues()); showIssues(); };

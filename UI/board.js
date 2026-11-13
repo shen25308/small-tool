@@ -353,7 +353,7 @@ $('searchTasks').onclick = () => openPalette();
 $('sideSearch').onclick = () => openPalette();
 document.addEventListener('keydown', event => {
   if (event.metaKey && ['k', 'f'].includes(event.key.toLowerCase()) && !$('dialog').open) { event.preventDefault(); openPalette(); }
-  if (event.metaKey && event.key === ',' && !$('palette').open) { event.preventDefault(); showConnectors(); }
+  if (event.metaKey && event.key === ',' && !$('palette').open) { event.preventDefault(); leaveSheet(() => showConnectors()); }
 });
 
 // Daily review
@@ -499,6 +499,7 @@ window.showForCapture = name => {
 // never change or delete what is already there.
 window.openURLAction = fields => {
   const action = fields?.action;
+  if (action !== 'add' && dialogGuard?.leave) { leaveSheet(() => openURLAction(fields)); return; }
   if (action === 'add') {
     const found = parseQuick(String(fields.text || fields.title || '').slice(0, 400));
     if (!found.title) { toast('The link had no task title.'); return; }
@@ -524,4 +525,4 @@ function addFromLink(task) {
 }
 
 // The app menu's Settings… item (⌘,) opens the same sheet.
-window.openSettings = tab => { if (compact) Card.inWorkspace(() => showConnectors(tab)); else showConnectors(tab); };
+window.openSettings = tab => leaveSheet(() => { if (compact) Card.inWorkspace(() => showConnectors(tab)); else showConnectors(tab); });

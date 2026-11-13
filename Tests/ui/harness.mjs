@@ -48,7 +48,11 @@ function fakeHost(seed) {
   const push = channel => window.setInbox({channel, items: state.notices[channel], error: ''});
   const handlers = {
     load: () => state.workspace,
-    save: message => { state.workspace = JSON.parse(JSON.stringify(message.state)); state.saves++; return true; },
+    save: async message => {
+      if (state.saveDelay) await new Promise(done => setTimeout(done, state.saveDelay));
+      if (state.failSave) throw Error(state.failSave);
+      state.workspace = JSON.parse(JSON.stringify(message.state)); state.saves++; return true;
+    },
     ready: () => {
       window.setChrome({titlebar: seed.titlebar, vibrant: false});
       if (seed.compact) window.setCompact(true);
@@ -143,7 +147,7 @@ function fakeHost(seed) {
       setTimeout(() => { window.setCapabilities({capture: true, canDownloadModel: false, downloading: false}); window.modelProgress({state: 'installed'}); }, 600);
       return true;
     },
-    snapshotWorkspace: () => { state.snapshots = (state.snapshots || 0) + 1; return '/Users/test/Library/Application Support/ShiShiDesk/Backups/Workspace before import.json'; },
+    snapshotWorkspace: () => { if (state.failSnapshot) throw Error(state.failSnapshot); state.snapshots = (state.snapshots || 0) + 1; return '/Users/test/Library/Application Support/ShiShiDesk/Backups/Workspace before import.json'; },
     paste: () => state.clipboard,
     dismissAgent: message => { state.agents = state.agents.filter(agent => agent.key !== message.key); window.setAgents(state.agents); return true; },
     compact: message => { window.setCompact(!!message.value); return true; },
@@ -198,12 +202,13 @@ function fakeHost(seed) {
     extract: () => [{title: 'Send the homepage prototype to the design team', quote: 'Maya: Please send the new homepage prototype…', tag: 'Design'}]
   };
   window.webkit = {messageHandlers: {host: {postMessage(message) {
+    // Handlers may return a promise, so a check can make the host slow or make it fail.
     setTimeout(() => {
-      try {
+      Promise.resolve().then(() => {
         const handler = handlers[message.op];
         if (!handler) throw Error('Unsupported action: ' + message.op);
-        window.hostReply(message.id, true, handler(message));
-      } catch (error) { window.hostReply(message.id, false, error.message); }
+        return handler(message);
+      }).then(value => window.hostReply(message.id, true, value), error => window.hostReply(message.id, false, error.message));
     }, 0);
   }}}};
 }
@@ -229,7 +234,7 @@ export async function open(browser, {width = 1040, height = 760, dark = false, c
   const context = await browser.newContext({viewport: {width, height}, deviceScaleFactor: scale, colorScheme: dark ? 'dark' : 'light', reducedMotion: motion ? 'no-preference' : 'reduce', ...(video ? {recordVideo: {dir: video, size: {width, height}}} : {})});
   const page = await context.newPage();
   const problems = [];
-  page.on('pageerror', error => problems.push('pageerror: ' + error.message));
+  page.on('pageerror', error => problems.push('pageerror: ' + error.message + (process.env.STACK ? error.stack : '')));
   page.on('console', message => { if (message.type() === 'error') problems.push('console: ' + message.text()); });
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   await page.addInitScript(fakeHost, {workspace: workspace === undefined ? sampleWorkspace() : workspace, compact, empty, titlebar, lite, tomorrow: iso(tomorrow)});

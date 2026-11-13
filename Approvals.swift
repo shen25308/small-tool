@@ -46,7 +46,7 @@ final class ApprovalBoard {
                   let expires = object["expires"] as? Double, expires > now - 5 else { continue }
             rows.append(["id": id, "session": Self.line(object["session"], 200), "source": Self.line(object["source"], 60),
                          "project": Self.line(object["project"], 120), "tool": Self.line(object["tool"], 80),
-                         "detail": Self.line(object["detail"], 4000), "reason": Self.line(object["reason"], 300),
+                         "detail": Self.line(object["detail"], 16000), "length": object["length"] as? Int ?? -1, "reason": Self.line(object["reason"], 300),
                          "time": object["time"] as? Double ?? now, "expires": expires])
         }
         return rows.sorted { ($0["time"] as? Double ?? 0) < ($1["time"] as? Double ?? 0) }

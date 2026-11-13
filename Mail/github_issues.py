@@ -42,17 +42,15 @@ def validate(command):
     return repo.strip(), assignee, label
 
 
-def fetch(repo, assignee, label):
-    query = {"state": "all", "sort": "updated", "direction": "desc", "per_page": 100}
-    if assignee:
-        query["assignee"] = assignee
-    if label:
-        query["labels"] = label
-    req = request.Request(API + "/repos/" + repo + "/issues?" + parse.urlencode(query),
-                          headers={"User-Agent": "Shishi-Desktop", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+MAX_PAGES = 10
+
+
+def get_page(url):
+    req = request.Request(url, headers={"User-Agent": "Shishi-Desktop", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
     try:
         with OPENER.open(req, timeout=10) as response:
             raw = response.read(4 * 1024 * 1024 + 1)
+            link = response.headers.get("Link", "") or ""
     except error.HTTPError as exc:
         if exc.code == 404:
             raise ValueError("Check that the repository exists and is public.") from None
@@ -68,7 +66,25 @@ def fetch(repo, assignee, label):
     rows = json.loads(raw)
     if not isinstance(rows, list):
         raise ValueError("GitHub returned an unexpected response.")
-    return rows
+    found = re.search(r'<(https://api\.github\.com/[^>]+)>;\s*rel="next"', link)
+    return rows, found.group(1) if found else ""
+
+
+def fetch(repo, assignee, label, state="open", pages=MAX_PAGES):
+    """Every open issue, following GitHub's next-page links (C03), or as many pages as allowed.
+    Returns (rows, complete): complete is False when more pages were left unread."""
+    query = {"state": state, "sort": "updated", "direction": "desc", "per_page": 100}
+    if assignee:
+        query["assignee"] = assignee
+    if label:
+        query["labels"] = label
+    url, rows = API + "/repos/" + repo + "/issues?" + parse.urlencode(query), []
+    for _ in range(pages):
+        page, url = get_page(url)
+        rows.extend(page)
+        if not url:
+            return rows, True
+    return rows, False
 
 
 def issues(rows, repo):
@@ -89,7 +105,11 @@ def issues(rows, repo):
 def main():
     try:
         repo, assignee, label = validate(json.load(sys.stdin))
-        result = {"ok": True, "repo": repo, "issues": issues(fetch(repo, assignee, label), repo)}
+        open_rows, complete = fetch(repo, assignee, label, "open")
+        # Recently closed issues let linked tasks complete; one page is enough for a sync every 15 minutes.
+        closed_rows, _ = fetch(repo, assignee, label, "closed", pages=1)
+        result = {"ok": True, "repo": repo, "issues": issues(open_rows + closed_rows, repo), "complete": complete,
+                  "openPagesRead": min(MAX_PAGES, len(open_rows) // 100 + 1)}
     except ValueError as problem:
         result = {"ok": False, "error": str(problem)}
     json.dump(result, sys.stdout)

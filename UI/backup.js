@@ -4,7 +4,14 @@
 // Account secrets never live in the workspace, so they cannot end up in a backup.
 window.Backup = (() => {
   const FORMAT = 'shishi-backup', VERSION = 1;
-  const DATE = /^\d{4}-\d{2}-\d{2}$/, TIME = /^\d{2}:\d{2}$/;
+  // Real calendar days and clock times only: 2026-99-99, 2026-02-30 and 99:99 are refused (UX-N01).
+  const isDate = value => {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [y, m, d] = value.split('-').map(Number), date = new Date(Date.UTC(y, m - 1, d));
+    return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+  };
+  const isTime = value => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const DATE = {test: isDate}, TIME = {test: isTime};
   const SECRET = /token|secret|password|credential|api[_-]?key/i;
 
   function build() {
@@ -28,6 +35,7 @@ window.Backup = (() => {
     if (ws.version !== 1) problems.push('The workspace format is not supported.');
     const projects = Array.isArray(ws.projects) ? ws.projects : [];
     if (!projects.length || projects.some(name => typeof name !== 'string' || !name.trim()) || new Set(projects).size !== projects.length) problems.push('The list names are missing or repeated.');
+    if (!Array.isArray(ws.tasks)) problems.push('The backup has no task list, so it may be damaged.');
     const ids = new Set();
     const tasks = (Array.isArray(ws.tasks) ? ws.tasks : []).map((task, index) => {
       const where = 'Task ' + (index + 1) + (typeof task?.title === 'string' && task.title ? ' (“' + task.title.slice(0, 40) + '”)' : '');
@@ -45,6 +53,9 @@ window.Backup = (() => {
       if (task.dueTime !== undefined && (!TIME.test(task.dueTime) || !task.dueDate)) problems.push(where + ' has a deadline time without a valid date.');
       if (task.repeat !== undefined && !TaskLogic.repeatLabels[task.repeat]) problems.push(where + ' has an unknown repeat rule.');
       if (task.subtasks !== undefined && (!Array.isArray(task.subtasks) || task.subtasks.some(item => typeof item?.title !== 'string'))) problems.push(where + ' has invalid subtasks.');
+      if (task.notes !== undefined && typeof task.notes !== 'string') problems.push(where + ': its notes are not text.');
+      for (const flag of ['evening', 'someday']) if (task[flag] !== undefined && typeof task[flag] !== 'boolean') problems.push(where + ' has an invalid “' + flag + '” value.');
+      if (task.title !== undefined && typeof task.title !== 'string') problems.push(where + ' has a title that is not text.');
       return clean;
     }).filter(Boolean);
     const workspace = {...ws, projects, tasks};
@@ -77,14 +88,27 @@ window.Backup = (() => {
         '<div class="stat-grid"><div class="stat"><b>' + s.tasks + '</b><span>Tasks</span></div><div class="stat"><b>' + s.open + '</b><span>Open</span></div>' +
         '<div class="stat"><b>' + s.lists + '</b><span>Lists</span></div><div class="stat"><b>' + s.notes + '</b><span>With notes</span></div></div>' +
         '<p class="hint">Also: ' + [count(s.subtasks, 'task') + ' with subtasks', count(s.repeating, 'repeating task'), count(s.multiDay, 'multi-day task'), count(s.deadlines, 'deadline')].join(', ') + '.</p>' +
+        (s.tasks ? '' : '<p class="feedback">This backup has no tasks. Importing it removes all ' + data.tasks.length + ' of your current tasks.</p>') +
         '<p class="hint">Importing replaces your current ' + count(data.tasks.length, 'task') + ' in ' + count(data.projects.length, 'list') + '. A copy of your current data is saved first, and you can undo right after.</p>' +
-        '<div class="actions"><button type="button" class="secondary" data-close>Cancel</button><button type="button" class="primary" id="confirmImport">Replace My Data</button></div>'));
-    if (!result.problems.length) $('confirmImport').onclick = () => replace(result.workspace);
+        '<p class="feedback" id="importProblem" role="alert"></p>' +
+        '<div class="actions"><button type="button" class="secondary" data-close>Cancel</button><button type="button" class="primary" id="confirmImport">' +
+        (s.tasks ? 'Replace My Data' : 'Replace with Empty Backup') + '</button></div>'));
+    if (!result.problems.length) $('confirmImport').onclick = () => {
+      $('confirmImport').disabled = true;
+      replace(result.workspace).catch(error => {
+        // Nothing was replaced: say why, keep the sheet open (UX-N02).
+        if ($('importProblem')) $('importProblem').textContent = error.message;
+        if ($('confirmImport')) $('confirmImport').disabled = false;
+      });
+    };
   }
 
   async function replace(workspace) {
     const previous = structuredClone(data);
-    const snapshot = await native('snapshotWorkspace').catch(() => '');
+    // No safety copy, no import: the current data stays exactly as it is (UX-N02).
+    let snapshot = '';
+    try { snapshot = await native('snapshotWorkspace'); }
+    catch (error) { throw Error('Not imported: Shishi could not save a copy of your current data first (' + error.message + '). Nothing was changed.'); }
     await change(state => { for (const key of Object.keys(state)) delete state[key]; Object.assign(state, structuredClone(workspace)); });
     closeDialog(true);
     toast('Imported ' + count(workspace.tasks.length, 'task') + (snapshot ? '. Your previous data was saved as a copy.' : '.'), () => action(change(state => {

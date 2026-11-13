@@ -66,7 +66,7 @@
   function brief(note, agent = {}) {
     const text = String(note?.summary || '');
     const digest = root.ShishiDigest.summarize(text || agent.detail || '', note?.title || '');
-    const facts = agent.facts && ['passed', 'failed', 'none'].includes(agent.facts.tests) ? agent.facts : null;
+    const facts = agent.facts && ['passed', 'failed', 'none', 'unclear'].includes(agent.facts.tests) ? agent.facts : null;
     const claim = claimedChecks(text);
     const touchedCode = !!facts && facts.files.some(file => code.test(file));
 
@@ -79,8 +79,10 @@
     // 2. Verification: an observed run outranks any claim; a claim is reported as a claim; otherwise unknown.
     let verification;
     if (facts) {
-      const state = facts.tests === 'none' ? 'not-run' : facts.tests;
-      verification = {state, source: 'observed', evidence: facts.testCommand ? 'Ran ' + facts.testCommand : 'No test, build or lint command ran in this turn.'};
+      // "unclear": a check ran but did not show a pass (masked exit, background launch, no result printed).
+      const state = facts.tests === 'none' ? 'not-run' : facts.tests === 'unclear' ? 'unverified' : facts.tests;
+      verification = {state, source: 'observed', evidence: facts.tests === 'unclear' ? 'Ran ' + facts.testCommand + ', but it did not show a passing result.'
+        : facts.testCommand ? 'Ran ' + facts.testCommand : 'No test, build or lint command ran in this turn.'};
     } else if (claim.state !== 'unknown') {
       verification = {state: claim.state, source: 'claimed', evidence: claim.evidence};
     } else {
@@ -107,7 +109,8 @@
       action = 'review'; reason = 'Something is unresolved.'; evidence = unresolved;
     } else {
       reason = {passed: verification.source === 'observed' ? 'Checks ran and passed.' : 'The reply says checks pass. Shishi did not see them run.',
-                'not-run': 'No checks ran.', unverified: 'Nothing shows whether checks ran.'}[verification.state];
+                'not-run': 'No checks ran.',
+                unverified: verification.source === 'observed' ? 'A check ran, but its result does not show a pass.' : 'Nothing shows whether checks ran.'}[verification.state];
     }
 
     const verificationLabel = {passed: verification.source === 'observed' ? 'Checks passed' : 'Checks reported passing',

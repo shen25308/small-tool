@@ -177,6 +177,40 @@ CHECKS = re.compile(r"\b(?:pytest|py\.test|unittest|tox|nox|jest|vitest|mocha|av
                     r"swift (?:test|build)|xcodebuild\b|mvn\b|gradle\w* (?:test|build|check)|rspec\b|rake test|phpunit|mix test|"
                     r"dotnet (?:test|build)|ctest\b|make(?: \w+)?\b|bazel (?:test|build))")
 EDITS = {"Edit", "MultiEdit", "Write", "NotebookEdit"}
+# Test runners print a result when they finish; a silent exit is not evidence of a pass.
+RUNNERS = re.compile(r"\b(?:pytest|py\.test|unittest|tox|nox|jest|vitest|mocha|ava|playwright test|cypress run|node --test|"
+                     r"(?:npm|pnpm|yarn|bun)(?: run)? test\b|npx (?:jest|vitest)|go test|cargo test|swift test|rspec\b|rake test|"
+                     r"phpunit|mix test|dotnet test|ctest\b|bazel test|gradle\w* test|mvn\b)")
+PASS_OUTPUT = re.compile(r"(?i)\b\d+ (?:passed|passing|tests? passed)\b|\ball (?:\d+ )?tests? passed\b|^ok\b|\bOK(?: \(|\s*$)|"
+                         r"\btests?:\s+\d+ passed|\btest result: ok\b|\b0 fail(?:ed|ures?)\b|\bBUILD SUCCEEDED\b|\bBUILD SUCCESSFUL\b|"
+                         r"\bSuccess: no issues\b|\bFound 0 errors\b|\bAll checks passed\b|\bno issues found\b|^PASS\b", re.M)
+FAIL_OUTPUT = re.compile(r"(?i)\b[1-9]\d* (?:failed|failing|failures?|errors?)\b|^FAILED\b|^FAIL\b|\bBUILD FAILED\b|"
+                         r"\btest result: FAILED\b|^error(?:\[\w+\])?:|\bTraceback \(most recent call last\)|"
+                         r"\bcommand not found\b|\bNo module named\b|\bnot installed\b", re.M)
+
+
+def check_run(command, body, failed):
+    """Classify one shell command as a check run: None when it is not a real check, else "passed", "failed"
+    or "unclear". Echoed names, --version/--help, masked exit codes and background launches never count as
+    passing: only a check that ran to the end and printed a passing result does."""
+    # Words inside quotes are text, not programs: printf 'pytest is not installed' runs no test.
+    bare = re.sub(r"'[^']*'|\"(?:[^\"\\]|\\.)*\"", " ", command)
+    segments = [part.strip() for part in re.split(r"&&|\|\||;|\||\n", bare) if part.strip()]
+    runs = [part for part in segments if CHECKS.search(part) and not re.match(r"(?:echo|printf|cat|which|type|command -v|man)\b", part)]
+    if not runs:
+        return None
+    if all(re.search(r"(?:^|\s)(?:--version|--help|-h|-V)(?:\s|$)", part) for part in runs):
+        return None
+    if failed or FAIL_OUTPUT.search(body):
+        return "failed"
+    masked = re.search(r"\|\|\s*(?:true|:|exit 0)\b|;\s*(?:true|exit 0)\s*$|\bset \+e\b", bare)
+    background = re.search(r"(?:^|[^&])&\s*(?:$|;|\n)|\bnohup\b|\bdisown\b", bare)
+    if masked or background:
+        return "unclear"
+    if PASS_OUTPUT.search(body):
+        return "passed"
+    # Builds, linters and type checkers often finish silently; test runners always report a result.
+    return "unclear" if any(RUNNERS.search(part) for part in runs) else "passed"
 
 
 def content_text(content):
@@ -237,24 +271,28 @@ def turn_facts(transcript, cwd):
             elif part.get("type") == "tool_result":
                 body = content_text(part.get("content"))
                 failed = part.get("is_error") is True or bool(re.match(r"\s*Exit code [1-9]", body))
-                results[text(part.get("tool_use_id"))] = failed
+                results[text(part.get("tool_use_id"))] = (failed, body)
     # The last run of each check decides: a test that failed and then passed counts as passed.
     checks, failed_tools, commands = {}, 0, 0
     for key, (name, args) in calls.items():
-        if key in results and results[key]:
+        if key in results and results[key][0]:
             failed_tools += 1
         if name != "Bash":
             continue
         commands += 1
         command = " ".join(text(args.get("command")).split())
-        if CHECKS.search(command) and key in results:
-            checks[command] = results[key]
-    failing = [command for command, failed in checks.items() if failed]
-    shown_command = (failing or list(checks))[-1] if checks else ""
+        if key in results:
+            # A check that never finished (no result yet) is not counted at all.
+            outcome = check_run(text(args.get("command")), results[key][1], results[key][0])
+            if outcome:
+                checks[command] = outcome
+    failing = [command for command, outcome in checks.items() if outcome == "failed"]
+    unclear = [command for command, outcome in checks.items() if outcome == "unclear"]
+    state = "failed" if failing else "unclear" if unclear else "passed" if checks else "none"
+    shown_command = (failing or unclear or list(checks))[-1] if checks else ""
     return {
         "files": files[:12], "fileCount": len(files), "commands": commands, "failedTools": failed_tools,
-        "tests": "failed" if failing else "passed" if checks else "none",
-        "testCommand": shown_command[:120],
+        "tests": state, "testCommand": shown_command[:120],
     }
 
 

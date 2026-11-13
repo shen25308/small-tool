@@ -45,7 +45,8 @@ const titles = {today: 'Today', upcoming: 'Upcoming', all: 'All', someday: 'Some
 function setWhen(id, when) {
   return patchTask(id, task => {
     if (when === 'evening') { planOn(task, day()); task.evening = true; }
-    else if (when === 'someday') { planOn(task, []); delete task.evening; delete task.dueDate; delete task.dueTime; task.someday = true; }
+    // Someday removes the planned days only; a deadline is a fact about the task and stays (UX-N05).
+    else if (when === 'someday') { planOn(task, []); delete task.evening; task.someday = true; }
     else { delete task.evening; delete task.someday; }
   });
 }
@@ -501,6 +502,12 @@ function renderBoard() {
   }
 }
 
+// Goes somewhere else only after an open task sheet has saved, or the person has chosen to discard it.
+function leaveSheet(next) {
+  if (dialogGuard?.leave) return dialogGuard.leave(next);
+  next();
+  return Promise.resolve(true);
+}
 let dialogBack = closeDialog;
 // Set by a sheet that autosaves. Closing goes through it so nothing typed is lost.
 let dialogGuard = null;
@@ -602,15 +609,21 @@ function taskForm(t, context = {}) {
     set('repeat', $('fieldRepeat').value);
     set('subtasks', subtasks.map(item => ({...item, title: item.title.trim()})).filter(item => item.title));
     let problem = '';
+    // A new task with notes or subtasks but no title is not empty: it must not vanish (UX-N03). Dates alone do
+    // not count, since a new task starts with the day of the list it was opened from.
+    const content = !!(updated.notes || updated.subtasks?.length || $('subtaskNew')?.value.trim());
     if (time && !date) problem = 'time';
-    else if (!title && created) problem = 'title';
+    else if (!title && (created || content)) problem = 'title';
     $('fieldDueTime').setAttribute('aria-invalid', String(problem === 'time'));
     $('fieldTitle').setAttribute('aria-invalid', String(problem === 'title'));
     return {updated, problem, empty: !title && !created};
   }
   let timer = 0, queue = Promise.resolve();
+  // A late input or change event (a field losing focus as the sheet closes) must not touch a form that is gone.
+  const live = () => $('taskForm') === form && form.isConnected;
   function changed() {
     clearTimeout(timer);
+    if (!live()) return;
     $('closePrompt').hidden = true;
     const {problem} = collect();
     if (problem) { state(problem === 'time' ? 'Not saved: the time needs a deadline date.' : 'Not saved: a task needs a title.', 'error'); return; }
@@ -619,6 +632,7 @@ function taskForm(t, context = {}) {
   }
   function flush() {
     clearTimeout(timer);
+    if (!live()) return Promise.resolve(true);
     const {updated, problem, empty} = collect();
     if (problem || empty) return Promise.resolve(!problem);
     const before = JSON.stringify(data.tasks.find(x => x.id === updated.id) || null);
@@ -642,31 +656,48 @@ function taskForm(t, context = {}) {
     box.querySelector('button').focus();
     box.onclick = event => { const button = event.target.closest('[data-choice]'); if (button) choices[Number(button.dataset.choice)].run(); };
   }
-  async function close() {
+  // Leaving the sheet any way at all (Close, Escape, ⌘, Settings, a link, another sheet) goes through here,
+  // so what is typed is saved, or the person chooses what happens to it (UX-N03, UX-N04).
+  async function leave(next) {
+    if ($('subtaskNew').value.trim()) addSubtask();
     const {problem} = collect();
     if (problem === 'time') {
       prompt('The time ' + $('fieldDueTime').value + ' has no deadline date, so it has not been saved.', [
         {label: 'Keep Editing', run: () => { $('closePrompt').hidden = true; $('fieldDue').focus(); }},
-        {label: 'Use Today', run: () => { $('fieldDue').value = day(); changed(); close(); }},
-        {label: 'Remove the Time', run: () => { $('fieldDueTime').value = ''; changed(); close(); }}]);
-      return;
+        {label: 'Use Today', run: () => { $('fieldDue').value = day(); changed(); leave(next); }},
+        {label: 'Remove the Time', run: () => { $('fieldDueTime').value = ''; changed(); leave(next); }}]);
+      return false;
     }
     if (problem === 'title') {
-      prompt('A task needs a title. Your other changes have not been saved.', [
+      if (original) prompt('A task needs a title. Your other changes have not been saved.', [
         {label: 'Keep Editing', run: () => { $('closePrompt').hidden = true; $('fieldTitle').focus(); }},
-        {label: 'Revert Changes', run: revert}]);
-      return;
+        {label: 'Revert Changes', run: () => revert(next)}]);
+      else prompt('This new task has no title yet, so its notes, subtasks and dates are not saved.', [
+        {label: 'Keep Editing', run: () => { $('closePrompt').hidden = true; $('fieldTitle').focus(); }},
+        {label: 'Discard Draft', run: () => discard(next)}]);
+      return false;
     }
-    if ($('subtaskNew').value.trim()) addSubtask();
-    if (await flush()) closeDialog(true);
+    if (!(await flush())) return false;
+    dialogGuard = null;
+    closeDialog(true);
+    next?.();
+    return true;
   }
-  function revert() {
+  const close = () => leave();
+  function discard(next) {
+    clearTimeout(timer);
+    dialogGuard = null;
+    closeDialog(true);
+    next?.();
+  }
+  function revert(next) {
     clearTimeout(timer);
     dialogGuard = null;
     action(change(s => { const i = s.tasks.findIndex(x => x.id === original.id); if (i < 0) s.tasks.push(original); else s.tasks[i] = original; })
-      .then(() => { closeDialog(true); toast('Changes reverted'); }));
+      .then(() => { closeDialog(true); toast('Changes reverted'); next?.(); }));
   }
-  dialogGuard = {close, flush};
+  const form = $('taskForm');
+  dialogGuard = {close, flush, leave};
   // Planned days: one, several, or a range, chosen in a calendar that opens below the button (F11).
   let plannedDates = [...plannedDays(t)];
   const picker = DayPicker.create({dates: plannedDates, today: day(), onChange: dates => {
@@ -700,7 +731,7 @@ function taskForm(t, context = {}) {
   if ($('openNotionPage')) $('openNotionPage').onclick = () => action(native('openNotion', {page: t.notion.id}));
   if ($('openIssue')) $('openIssue').onclick = () => action(native('openIssue', {url: t.github.url}));
   window.AgentTasks?.bindDetails(t, () => dialogGuard?.flush());
-  $('revertTask').onclick = revert;
+  $('revertTask').onclick = () => revert();
   $('removeTask').onclick = () => {
     clearTimeout(timer);
     dialogGuard = null;
@@ -713,8 +744,9 @@ function taskForm(t, context = {}) {
 
 // Repeating tasks form a series. Every occurrence keeps the rule. Completing one creates its successor once;
 // reopening it removes that successor only while it is untouched, otherwise you decide (F05).
-const occurrenceSignature = task => JSON.stringify(['title', 'notes', 'project', 'tag', 'priority', 'planned', 'dueDate', 'dueTime', 'subtasks', 'repeat', 'done']
-  .map(key => task[key] ?? null));
+// Every field a person can change counts, including several planned days, This Evening and Someday (UX-N06).
+const occurrenceSignature = task => JSON.stringify(['title', 'notes', 'project', 'tag', 'priority', 'planned', 'plannedDates', 'evening', 'someday',
+  'dueDate', 'dueTime', 'subtasks', 'repeat', 'done'].map(key => task[key] ?? null));
 
 function toggleTask(id) {
   let outcome = null;
@@ -873,6 +905,8 @@ function quickDefaults(key) {
   else {
     if (projectOfView()) fields.project = projectOfView();
     if (view === 'today') fields.planned = day();
+    // Typed while looking at Someday: it belongs there, unless a date is typed (UX-N08).
+    if (view === 'someday') fields.someday = true;
     if (tag) fields.tag = tag;
   }
   return fields;
@@ -936,7 +970,10 @@ document.addEventListener('submit', event => {
   if (!found.title) return;
   const fields = quickDefaults(form.dataset.quickForm);
   for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat', 'evening', 'someday']) if (found[key]) fields[key] = found[key];
+  const leftSomeday = fields.someday && !found.someday && (found.planned || found.evening);
+  if (leftSomeday) delete fields.someday;
   const task = newTask({...fields, title: found.title});
+  if (leftSomeday) toast('Added “' + task.title + '” for ' + dayLabel(task.planned || day()) + ', so it is not in Someday.');
   input.value = '';
   input.dataset.ignore = '';
   showQuickHint(input);
@@ -1032,7 +1069,8 @@ $('newProject').onclick = projectForm;
 function startNewTask() { if (view === 'done') taskForm(); else openQuick('view'); }
 $('manual').onclick = startNewTask;
 $('pin').onclick = async () => { try { await native('compact', {value: !compact}); } catch (e) { toast(e.message); } };
-$('dialog').addEventListener('close', () => { captureToken++; dialogGuard = null; document.body.append($('toast')); });
+// The close event arrives a moment later; a task sheet opened in the meantime keeps its guard.
+$('dialog').addEventListener('close', () => { captureToken++; if (!$('dialog').open) dialogGuard = null; document.body.append($('toast')); });
 window.setCompact = v => {
   compact = v;
   if (v) { window.setWorkspaceReturn?.(false); window.Card?.setPrefs().catch(() => {}); }

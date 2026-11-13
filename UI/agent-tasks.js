@@ -98,9 +98,19 @@ window.AgentTasks = (() => {
     if (!box) return;
     box.onclick = event => {
       if (event.target.closest('[data-agent-folder]')) { action(chooseFolder(task.project).then(path => { if (path) taskForm(data.tasks.find(item => item.id === task.id)); })); return; }
-      if (event.target.closest('[data-agent-report]')) { openNotice(task.agentReceipt, {original: true}); return; }
+      if (event.target.closest('[data-agent-report]')) { leaveSheet(() => openNotice(task.agentReceipt, {original: true})); return; }
       const send_ = event.target.closest('[data-agent-send]');
-      if (send_) { flush?.(); action(send(data.tasks.find(item => item.id === task.id) || task, send_.dataset.agentSend)); }
+      if (send_ && !send_.disabled) {
+        // Save what is typed first and send the saved task, never an older copy (C05). If the draft is
+        // invalid or cannot be saved, nothing starts.
+        const buttons = [...box.querySelectorAll('[data-agent-send]')];
+        buttons.forEach(button => { button.disabled = true; });
+        action(Promise.resolve(flush ? flush() : true).then(saved => {
+          const current = data.tasks.find(item => item.id === task.id);
+          if (!saved || !current) throw Error('Not sent: fix the task first, so the agent gets what you see.');
+          return send(current, send_.dataset.agentSend);
+        }).finally(() => buttons.forEach(button => { button.disabled = false; })));
+      }
     };
   }
 
