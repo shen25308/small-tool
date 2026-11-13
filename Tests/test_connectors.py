@@ -5,12 +5,14 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RECEIVE = ROOT / "ClaudeCode" / "receive.py"
 INSTALL = ROOT / "ClaudeCode" / "install.py"
+PERMISSION = ROOT / "ClaudeCode" / "permission.py"
 AGENTS = ROOT / "Connectors" / "shishi_agents.py"
 
 
@@ -294,6 +296,87 @@ class ClaudeCodeInstaller(Sandbox):
     def test_remove_without_settings_creates_nothing(self):
         self.assertEqual(self.install("remove")["installed"], False)
         self.assertFalse(self.home.exists())
+
+
+class ApprovalHook(Sandbox):
+    """The opt-in PermissionRequest hook: Shishi's card answers, or Claude Code asks in the terminal as usual."""
+    EVENT = {"hook_event_name": "PermissionRequest", "session_id": "s-1", "cwd": "/Users/me/code/web-app",
+             "tool_name": "Bash", "tool_input": {"command": "rm -rf node_modules", "description": "Clean install"}}
+
+    def setUp(self):
+        super().setUp()
+        self.approvals = self.base / "Approvals"
+        self.approvals.mkdir()
+
+    def start(self, event=None):
+        return subprocess.Popen([sys.executable, "-B", str(PERMISSION)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, env=self.env)
+
+    def request(self, process):
+        process.stdin.write(json.dumps(self.EVENT))
+        process.stdin.close()
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            found = [p for p in self.approvals.glob("*.json") if p.name != "settings.json"]
+            if found:
+                return json.loads(found[0].read_text())
+            time.sleep(0.05)
+        self.fail("no request appeared")
+
+    def alive(self):
+        (self.approvals / ".alive").write_text("")
+
+    def test_allow_and_deny_from_the_card(self):
+        self.alive()
+        for behavior in ("allow", "deny"):
+            process = self.start()
+            request = self.request(process)
+            self.assertEqual((request["tool"], request["detail"], request["project"]), ("Bash", "rm -rf node_modules", "web-app"))
+            state, = self.states()
+            self.assertEqual((state["state"], state["approval"]), ("attention", request["id"]))
+            self.assertEqual(state["detail"], "Wants to use Bash: rm -rf node_modules")
+            (self.approvals / (request["id"] + ".decision")).write_text(json.dumps({"behavior": behavior}))
+            out, _ = process.communicate(timeout=10)
+            decision = json.loads(out)["hookSpecificOutput"]
+            self.assertEqual((decision["hookEventName"], decision["decision"]["behavior"]), ("PermissionRequest", behavior))
+            self.assertEqual(list(self.approvals.glob("*.json")), [], "the request is cleaned up")
+
+    def test_closed_shishi_or_no_answer_leaves_it_to_the_terminal(self):
+        started = time.time()
+        result = self.run_script(PERMISSION, stdin=json.dumps(self.EVENT))
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        self.assertLess(time.time() - started, 5, "no waiting when Shishi is not open")
+        self.assertEqual(self.states(), [])
+        self.alive()
+        (self.approvals / "settings.json").write_text(json.dumps({"wait": 5}))
+        started = time.time()
+        result = self.run_script(PERMISSION, stdin=json.dumps(self.EVENT))
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
+        self.assertGreaterEqual(time.time() - started, 4.5)
+        self.assertEqual(list(self.approvals.glob("*.json")), [p for p in self.approvals.glob("*.json") if p.name == "settings.json"])
+
+    def test_answered_in_the_terminal_withdraws_the_card_request(self):
+        self.alive()
+        process = self.start()
+        self.request(process)
+        self.hook(hook_event_name="PostToolUse", tool_name="Bash", tool_input={"command": "rm -rf node_modules"})
+        out, _ = process.communicate(timeout=10)
+        self.assertEqual(out, "")
+        self.assertEqual(self.states()[0]["state"], "working")
+
+    def test_installer_adds_the_approval_hook_only_when_asked(self):
+        home = self.base / "claude"
+        run = lambda *args: json.loads(self.run_script(INSTALL, *args, "--json", "--claude-home", str(home)).stdout)
+        plain = run("install")
+        self.assertEqual((plain["working"], plain["approvals"]), (True, False))
+        self.assertNotIn("PermissionRequest", json.loads((home / "settings.json").read_text())["hooks"])
+        withApprovals = run("install", "--approvals")
+        self.assertEqual((withApprovals["working"], withApprovals["approvals"]), (True, True))
+        handler = json.loads((home / "settings.json").read_text())["hooks"]["PermissionRequest"][0]["hooks"][0]
+        self.assertTrue(handler["command"].endswith("permission.py"))
+        self.assertNotIn("async", handler)
+        self.assertEqual(run("install")["approvals"], False, "turning it off removes the hook")
+        self.assertEqual(run("remove")["installed"], False)
 
 
 class AgentStatusCommand(Sandbox):

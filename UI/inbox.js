@@ -180,6 +180,8 @@ function showConnectors() {
   dialog('Connections','<div class="connector-list">'+
     '<h3>Coding agents</h3><div class="group-box">'+
     connectorRow('claudeRow','var(--orange)','i-terminal','Claude Code','Checking…','<button id="claudeConnection" class="secondary" disabled>Connect</button>','Claude Code')+
+    '<label class="group-row toggle-label sub-row" id="approvalRow" hidden><span class="row-text"><b>Answer permission requests in Shishi</b><small>Claude Code waits <select id="approvalWait" aria-label="Seconds to wait">'+
+      [15,25,45,90].map(n=>'<option value="'+n+'">'+n+' seconds</option>').join('')+'</select> for Allow or Deny on the card, then asks in the terminal as usual. While it waits, the terminal shows no prompt.</small></span><input type="checkbox" id="approvalChoice"></label>'+
     connectorRow('codexRow','var(--ink)','i-terminal','Codex','Checking…','<button id="codexConnection" class="secondary" disabled>Connect</button>','Codex')+
     connectorRow('grokRow','var(--gray)','i-bolt','Grok Bot',esc(receipt),'<button id="copyGrok" class="secondary">Copy Instructions</button>','Grok Bot')+
     connectorRow('mcpRow','var(--indigo)','i-link','Other AI apps (MCP)','Any app that supports local MCP servers','<button id="copyMCP" class="secondary">Copy Configuration</button>','Other AI apps')+
@@ -193,6 +195,15 @@ function showConnectors() {
     '<label class="group-row toggle-label"><span class="row-text"><b>Keep above other windows</b><small>Otherwise the card stays behind the app you are using.</small></span><input type="checkbox" data-card-pref="pinned" disabled></label>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Show on all Spaces</b><small>Otherwise the card stays on the Space where you put it.</small></span><input type="checkbox" data-card-pref="allSpaces" disabled></label>'+
     '<label class="group-row toggle-label"><span class="row-text"><b>Snap to screen corners</b><small>Otherwise the card stays exactly where you drop it.</small></span><input type="checkbox" data-card-pref="snap" disabled></label>'+
+    '</div>'+
+    '<h3>Alerts</h3><p>Shishi is silent unless you choose otherwise. Results always wait in the inbox.</p><div class="group-box" id="alertBox">'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>When an agent needs you</b><small>A permission request or a question, and once more if it is still waiting after <select data-alert="remindAfter" aria-label="Remind after">'+
+      [[0,'never'],[2,'2 minutes'],[5,'5 minutes'],[10,'10 minutes']].map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('')+'</select>.</small></span><input type="checkbox" data-alert="needsYou" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>When a task is due</b><small>At the deadline time of a task that is still open.</small></span><input type="checkbox" data-alert="due" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Play a sound</b></span><input type="checkbox" data-alert="sound" disabled></label>'+
+    '<label class="group-row toggle-label"><span class="row-text"><b>Show a banner</b><small id="bannerNote">macOS asks once whether Shishi may show banners.</small></span><input type="checkbox" data-alert="banner" disabled></label>'+
+    '<div class="group-row"><span class="row-text"><b>Quiet hours</b><small id="quietNote">No sound or banner between these times.</small></span><span class="quiet-hours"><input type="time" data-alert="quietFrom" aria-label="Quiet from"> – <input type="time" data-alert="quietTo" aria-label="Quiet until"></span></div>'+
+    '<div class="group-row"><span class="row-text"><small>Hear and see an alert now, even in quiet hours.</small></span><button type="button" class="secondary" id="testAlert">Test</button></div>'+
     '</div>'+
     '<h3>Shishi</h3><div class="group-box">'+
     '<div class="group-row"><span class="row-text"><b>Appearance</b></span><div class="menu-segment appearance-choice" id="appearanceChoice">'+
@@ -214,6 +225,25 @@ function showConnectors() {
   const showPrefs=value=>cardBoxes.forEach(box=>{box.checked=!!value[box.dataset.cardPref];box.disabled=false});
   action(native('cardPrefs').then(showPrefs));
   cardBoxes.forEach(box=>{box.onchange=()=>action(Card.setPrefs({[box.dataset.cardPref]:box.checked}).then(showPrefs).catch(error=>{box.checked=!box.checked;throw error}))});
+  const alertFields=[...document.querySelectorAll('[data-alert]')];
+  const showAlerts=value=>{
+    for(const field of alertFields){
+      const key=field.dataset.alert;
+      if(field.type==='checkbox')field.checked=!!value[key];else field.value=String(value[key]??'');
+      field.disabled=false;
+    }
+    const subordinate=!value.needsYou&&!value.due;
+    alertFields.filter(field=>['sound','banner','quietFrom','quietTo'].includes(field.dataset.alert)).forEach(field=>{field.disabled=subordinate});
+    if($('bannerNote'))$('bannerNote').textContent=value.banner&&value.bannersAllowed===false?'macOS is not allowing banners from Shishi. Turn them on in System Settings → Notifications.':'macOS asks once whether Shishi may show banners.';
+    if($('quietNote'))$('quietNote').textContent=value.quietFrom&&value.quietTo?(value.quietNow?'Quiet now. ':'')+'No sound or banner from '+value.quietFrom+' to '+value.quietTo+'.':'No sound or banner between these times.';
+  };
+  action(native('alerts').then(showAlerts));
+  alertFields.forEach(field=>{field.onchange=()=>{
+    const key=field.dataset.alert;
+    const value=field.type==='checkbox'?field.checked:key==='remindAfter'?Number(field.value):field.value;
+    action(native('alerts',{[key]:value}).then(showAlerts));
+  }});
+  $('testAlert').onclick=()=>action(native('testAlert'));
   const settingBoxes=[...document.querySelectorAll('[data-setting]')];
   const showSettings=value=>{
     settingBoxes.forEach(box=>{box.checked=!!value[box.dataset.setting];box.disabled=false});
@@ -243,6 +273,8 @@ function showConnectors() {
     };
   }
   action(native('codexConnection').then(setCodex));
+  action(native('approvalWait').then(value=>{const select=$('approvalWait');if(!select)return;select.value=String(value);
+    select.onchange=()=>action(native('approvalWait',{value:Number(select.value)}))}));
 
   const claudeButton=$('claudeConnection'), claudeState=$('claudeRow').querySelector('[data-state]');
   function setClaude(state) {
@@ -251,9 +283,19 @@ function showConnectors() {
     claudeButton.disabled=false;
     const repair=state.installed&&!state.working;
     claudeButton.textContent=repair?'Repair':state.installed?'Disconnect':'Connect';
+    const approvalRow=$('approvalRow'), approvalChoice=$('approvalChoice');
+    approvalRow.hidden=!state.installed;
+    approvalChoice.checked=!!state.approvals;
+    approvalChoice.onchange=()=>{
+      approvalChoice.disabled=true;
+      action(native('claudeCode',{action:'install',approvals:approvalChoice.checked}).then(next=>{
+        setClaude(next);
+        toast(next.approvals?'Permission requests now come to Shishi first. New Claude Code sessions pick this up.':'Permission requests go straight to the terminal again.');
+      }).catch(error=>{approvalChoice.checked=!approvalChoice.checked;throw error}).finally(()=>{approvalChoice.disabled=false}));
+    };
     claudeButton.onclick=()=>{
       claudeButton.disabled=true;
-      action(native('claudeCode',{action:state.installed&&!repair?'remove':'install'}).then(next=>{
+      action(native('claudeCode',{action:state.installed&&!repair?'remove':'install',approvals:!!state.approvals}).then(next=>{
         setClaude(next);
         if(next.working&&!state.installed)toast('Claude Code is connected. Finish a turn to see it here.');
       }).finally(()=>{claudeButton.disabled=false}));

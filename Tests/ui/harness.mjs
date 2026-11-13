@@ -89,7 +89,7 @@ function fakeHost(seed) {
     nativeMenu: message => { state.lastMenu = message.items; return state.menuChoice ? String(message.items.findIndex(item => item.title === state.menuChoice)) : ''; },
     menuBar: message => { if (typeof message.value === 'boolean') state.menuBar = message.value; return state.menuBar; },
     claudeCode: message => {
-      if (message.action === 'install') state.claude = {installed: true, working: true, cli: true, problem: ''};
+      if (message.action === 'install') state.claude = {installed: true, working: true, cli: true, problem: '', approvals: !!message.approvals};
       if (message.action === 'remove') state.claude = {installed: false, working: false, cli: true, problem: ''};
       return state.claude;
     },
@@ -115,6 +115,18 @@ function fakeHost(seed) {
     settings: message => {
       state.settings = {hotkeys: true, keepAwake: false, hotkeyLabels: ['⌃⌥Space', '⌃⌥N'], takenShortcuts: [], keepingAwake: false, ...state.settings, ...message};
       return state.settings;
+    },
+    alerts: message => {
+      state.alerts = {needsYou: false, due: false, sound: true, banner: false, quietFrom: '', quietTo: '', remindAfter: 5, bannersAllowed: null, quietNow: false, ...state.alerts};
+      for (const [key, value] of Object.entries(message)) state.alerts[key] = value;
+      return state.alerts;
+    },
+    testAlert: () => { state.testAlerts = (state.testAlerts || 0) + 1; return true; },
+    approvalWait: message => { if (message.value) state.approvalWait = message.value; return state.approvalWait || 25; },
+    answerApproval: message => {
+      if (message.request === 'gone') throw Error('Claude Code is no longer waiting for this answer. Check the terminal.');
+      state.answers = [...(state.answers || []), {request: message.request, behavior: message.behavior}];
+      return true;
     },
     hookLog: () => [
       {time: now - 30, source: 'Claude Code', event: 'PostToolUse', session: '1a2b3c4d', outcome: 'delivered'},

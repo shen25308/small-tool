@@ -286,15 +286,17 @@ final class ExternalProviders {
     }
 
     /// Adds, checks or removes Shishi's hooks in the user's Claude Code settings.
-    func claudeCode(_ action:String, completion:@escaping Callback) {
+    /// `approvals` adds the optional PermissionRequest hook that lets the card answer permission requests.
+    func claudeCode(_ action:String, approvals:Bool = false, completion:@escaping Callback) {
         guard ["status","install","remove"].contains(action) else {
             completion(.failure(AppIssue("Unsupported connector action.")));return
         }
         io.async {
             let result = Result { () throws -> Response in
-                let raw = try self.launch("install.py",[action,"--json"],input:nil,timeout:30,folder:"ClaudeCode")
+                let raw = try self.launch("install.py",[action,"--json"] + (action == "install" && approvals ? ["--approvals"] : []),
+                                          input:nil,timeout:30,folder:"ClaudeCode")
                 var state: Response = [:]
-                for key in ["installed","working","cli","problem"] {
+                for key in ["installed","working","cli","problem","approvals"] {
                     if let value=raw[key], value is String || value is NSNumber {state[key]=value}
                 }
                 return state

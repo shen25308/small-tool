@@ -34,7 +34,9 @@ window.Card = (() => {
   const FEEDS = new Set(['Gmail', 'Outlook', 'GitHub Actions', 'Reminders']);
   function candidates() {
     const entries = agentEntries();
-    const waiting = entries.filter(entry => entry.state === 'attention').map(entry => ({entry, note: null}));
+    // A request already on the card with Allow and Deny needs no second "Needs you" report.
+    const asking = new Set((window.Approvals?.rows() || []).filter(row => row.expires > Date.now() / 1000).map(row => row.id));
+    const waiting = entries.filter(entry => entry.state === 'attention' && !asking.has(entry.approval)).map(entry => ({entry, note: null}));
     const unread = allNotices().filter(note => !note.read && !note.archived && !FEEDS.has(note.source)).map(note => {
       const entry = entries.find(item => item.receipt === note.id || item.notice?.id === note.id) ||
         {key: 'note:' + note.id, source: sourceName(note), title: note.title, time: note.time, state: 'done', receipt: note.id,

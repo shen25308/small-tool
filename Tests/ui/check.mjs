@@ -1077,6 +1077,64 @@ await check('global shortcut focuses the card add field', {width: 340, height: 6
   assert.equal(await page.evaluate(() => document.activeElement.id), 'cardAddInput');
 });
 
+await check('approve a permission request from the card', {width: 340, height: 640, compact: true, scale: 2}, async ({page, host, shot}) => {
+  const now = Date.now() / 1000;
+  await page.evaluate(now => window.setApprovals([
+    {id: 'a'.repeat(32), session: 's', source: 'Claude Code', project: 'web-app', tool: 'Bash', detail: 'rm -rf node_modules && npm install', reason: 'Clean install', time: now, expires: now + 25}
+  ]), now);
+  const box = page.locator('#cardApprovals');
+  await box.waitFor();
+  assert.match(await box.innerText(), /web-app[\s\S]*Claude Code wants to use Bash: Clean install[\s\S]*rm -rf node_modules && npm install[\s\S]*Then it asks in the terminal/);
+  assert.match(await box.locator('[data-left]').innerText(), /^2[45] s$/);
+  // The same session's request is not repeated as a "Needs you" report while Allow and Deny are on the card.
+  await page.evaluate(() => window.setAgents(window.__host.agents.map(row => row.state === 'attention' ? {...row, approval: 'a'.repeat(32)} : row)));
+  await page.waitForFunction(() => !/Needs you/.test(document.getElementById('cardReport').innerText));
+  await shot('card-approval');
+  await box.locator('[data-answer="allow"]').click();
+  await page.waitForFunction(() => window.__host.answers?.length === 1);
+  assert.deepEqual((await host()).answers[0], {request: 'a'.repeat(32), behavior: 'allow'});
+  assert.equal(await box.isHidden(), true);
+  assert.match(await text(page, '#toast'), /Allowed/);
+  // An answer that arrives too late says so, and an expired request disappears by itself.
+  await page.evaluate(now => window.setApprovals([{id: 'gone', project: 'api', tool: 'Edit', detail: 'a.py', time: now, expires: now + 30},
+                                                   {id: 'b'.repeat(32), project: 'old', tool: 'Bash', detail: 'ls', time: now - 30, expires: now + 1.2}]), now);
+  await page.locator('#cardApprovals [data-approval="gone"] [data-answer="deny"]').click();
+  await page.waitForFunction(() => /no longer waiting/.test(document.getElementById('toast').textContent));
+  await page.waitForFunction(() => !document.querySelector('[data-approval]'), null, {timeout: 5000});
+});
+
+await check('approvals and alerts in Connections', {}, async ({page, host}) => {
+  await page.evaluate(() => { window.__host.claude = {installed: true, working: true, cli: true, problem: '', approvals: false}; });
+  await page.click('#boardMore');
+  await page.click('#openConnectors');
+  await page.locator('#approvalRow:not([hidden])').waitFor();
+  await page.check('#approvalChoice');
+  await page.waitForFunction(() => window.__host.claude.approvals === true);
+  assert.match(await text(page, '#toast'), /Permission requests now come to Shishi first/);
+  await page.selectOption('#approvalWait', '45');
+  await page.waitForFunction(() => window.__host.approvalWait === 45);
+  // Alerts are off until chosen; sound and banner follow the two triggers.
+  await page.waitForFunction(() => !document.querySelector('[data-alert="needsYou"]').disabled);
+  assert.equal(await page.locator('[data-alert="sound"]').isDisabled(), true);
+  await page.check('[data-alert="needsYou"]');
+  await page.waitForFunction(() => window.__host.alerts.needsYou === true && !document.querySelector('[data-alert="sound"]').disabled);
+  await page.fill('[data-alert="quietFrom"]', '22:00');
+  await page.locator('[data-alert="quietFrom"]').dispatchEvent('change');
+  await page.fill('[data-alert="quietTo"]', '08:00');
+  await page.locator('[data-alert="quietTo"]').dispatchEvent('change');
+  await page.waitForFunction(() => window.__host.alerts.quietTo === '08:00');
+  assert.match(await text(page, '#quietNote'), /from 22:00 to 08:00/);
+  await page.selectOption('[data-alert="remindAfter"]', '10');
+  await page.waitForFunction(() => window.__host.alerts.remindAfter === 10);
+  await page.click('#testAlert');
+  await page.waitForFunction(() => window.__host.testAlerts === 1);
+  // Reconnecting keeps the approval choice.
+  await page.click('#claudeConnection');
+  await page.waitForFunction(() => window.__host.claude.installed === false);
+  await page.click('#claudeConnection');
+  await page.waitForFunction(() => window.__host.claude.installed === true);
+});
+
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.match(await text(page, '#tasks'), /Nothing planned for today/);

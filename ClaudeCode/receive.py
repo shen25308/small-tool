@@ -102,6 +102,19 @@ def log_delivery(event, outcome):
         pass
 
 
+def withdraw_approvals(session):
+    """A tool ran or the turn ended, so any request still waiting on Shishi's card was answered elsewhere."""
+    base = agents.directory().parent / "Approvals"
+    if not base.is_dir():
+        return
+    for path in base.glob("*.json"):
+        try:
+            if json.loads(path.read_text(encoding="utf-8")).get("session") == session:
+                path.unlink(missing_ok=True)
+        except (OSError, ValueError, AttributeError):
+            continue
+
+
 def title_for(event, previous):
     name = text(event.get("session_title")).strip() or text(previous.get("label")).strip()
     folder = Path(text(event.get("cwd"))).name
@@ -261,6 +274,8 @@ def receive(event):
     if pid or isinstance(previous.get("pid"), int):
         keep["pid"] = pid or previous["pid"]
 
+    if name in ("PostToolUse", "Stop", "SessionEnd"):
+        withdraw_approvals(session)
     if name == "UserPromptSubmit":
         prompt = agents.clean(event.get("prompt"), "detail", required=False)
         agents.write(SOURCE, session, "working", title, prompt, {**keep, "task": prompt, "started": time.time()})

@@ -66,6 +66,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     private lazy var card = CornerCard()
     private lazy var hotkeys = GlobalHotkeys { [weak self] action in self?.hotkey(action) }
     private let keepAwake = KeepAwake()
+    private let alerts = Alerts()
     private var hotkeysOn: Bool { UserDefaults.standard.object(forKey:"ShiShiHotkeys") as? Bool ?? true }
     private var keepAwakeOn: Bool { UserDefaults.standard.bool(forKey:"ShiShiKeepAwake") }
     private var takenShortcuts: [String] = []
@@ -122,6 +123,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     )
     private lazy var externalInbox = ConnectorInbox(directory: file.deletingLastPathComponent().appendingPathComponent("Incoming", isDirectory:true))
     private lazy var agentBoard = AgentBoard(directory: file.deletingLastPathComponent().appendingPathComponent("Agents", isDirectory:true))
+    private lazy var approvals = ApprovalBoard(directory: file.deletingLastPathComponent().appendingPathComponent("Approvals", isDirectory:true))
+    private func scanApprovals() {
+        let rows=approvals.pending()
+        DispatchQueue.main.async { self.tell("setApprovals",rows) }
+    }
     private var watchers: [DirectoryWatcher] = []
     private let menuBar = MenuBarStatus()
     private var unreadByChannel: [String:Int] = [:]
@@ -143,6 +149,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             do {
                 try externalInbox.receive(source:"Reminders",title:task.title,summary:task.summary,eventID:task.id)
                 deliveredReminders.insert(task.id)
+                // Only a deadline that just arrived makes a sound; reopening Shishi after a week stays quiet.
+                if task.date >= DeadlineReminder.localMinute(Date().addingTimeInterval(-600)) {
+                    let alerts=self.alerts
+                    DispatchQueue.main.async {alerts.taskDue(title:task.title,summary:task.summary,id:task.id)}
+                }
             } catch { problem = error.localizedDescription }
         }
         return problem
@@ -188,6 +199,8 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
     }
     private func scanAgents(force:Bool = false) {
         let update=agentBoard.scan()
+        let waiting=update.items.filter {$0.state=="attention"}.map {(key:$0.key,title:$0.title,detail:$0.detail)}
+        DispatchQueue.main.async {self.alerts.agentsWaiting(waiting)}
         guard force || update.changed else {return}
         let rows=AgentBoard.wire(update.items)
         let working=update.items.contains {$0.state=="working"}
@@ -206,13 +219,18 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         _ = agentBoard
         let timer=DispatchSource.makeTimerSource(queue:inboxQueue)
         timer.schedule(deadline:.now(),repeating:.seconds(10),leeway:.seconds(1))
-        timer.setEventHandler { [weak self] in self?.scanInboxes() }
+        timer.setEventHandler { [weak self] in
+            self?.approvals.heartbeat()
+            self?.scanInboxes()
+            self?.scanApprovals()
+        }
         inboxTimer=timer
         timer.resume()
         // Hooks publish by adding a file. Watching the folders shows a result as soon as it lands.
         let base=file.deletingLastPathComponent()
         watchers=[
             DirectoryWatcher(url:base.appendingPathComponent("Agents",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanAgents() },
+            DirectoryWatcher(url:base.appendingPathComponent("Approvals",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanApprovals() },
             DirectoryWatcher(url:base.appendingPathComponent("Incoming",isDirectory:true),queue:inboxQueue) { [weak self] in self?.scanExternal() }
         ]
     }
@@ -304,6 +322,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps:true)
         if inbox {tell("openInbox","main")}
+    }
+    func applicationWillTerminate(_ notification: Notification) {
+        // A permission request must never wait for a Shishi that has quit.
+        approvals.closed()
     }
     // With the menu bar item on, Shishi keeps collecting results after its window closes.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !menuBar.enabled }
@@ -722,7 +744,7 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 if let choice=body["value"] as? Bool {menuBar.enabled=choice}
                 reply(id,true,menuBar.enabled)
             case "claudeCode":
-                providers.claudeCode(body["action"] as? String ?? "status") { [weak self] result in
+                providers.claudeCode(body["action"] as? String ?? "status",approvals:body["approvals"] as? Bool == true) { [weak self] result in
                     switch result {
                     case .success(let state):self?.reply(id,true,state)
                     case .failure(let error):self?.reply(id,false,error.localizedDescription)
@@ -756,6 +778,26 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                     keepAwake.update(working:on && agentsWorking)
                 }
                 reply(id,true,settingsState())
+            case "alerts":
+                alerts.update(body)
+                reply(id,true,alerts.wire)
+            case "testAlert":
+                alerts.test()
+                reply(id,true,true)
+            case "answerApproval":
+                guard let request=body["request"] as? String, let behavior=body["behavior"] as? String else {throw AppIssue("The request is missing.")}
+                let board=approvals
+                inboxQueue.async {
+                    let answered=board.answer(request,behavior:behavior)
+                    self.scanApprovals()
+                    DispatchQueue.main.async {
+                        if answered {self.reply(id,true,true)}
+                        else {self.reply(id,false,"Claude Code is no longer waiting for this answer. Check the terminal.")}
+                    }
+                }
+            case "approvalWait":
+                if let seconds=body["value"] as? Int {approvals.wait=seconds}
+                reply(id,true,approvals.wait)
             case "hookLog":
                 // The last hook deliveries, newest first: event names and outcomes only, never content.
                 let log=file.deletingLastPathComponent().appendingPathComponent("HookLog.jsonl")

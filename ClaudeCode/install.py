@@ -26,6 +26,10 @@ EVENTS = {
     "PostToolUse": None,
     "SessionEnd": None,
 }
+# Optional, and the only handler that makes Claude wait: it gives Shishi's card a short time to answer a
+# permission request before Claude Code asks in the terminal.
+APPROVALS = "PermissionRequest"
+APPROVAL_TIMEOUT = 130
 
 
 def atomic_write(path, contents):
@@ -85,7 +89,8 @@ def installed_command(settings):
         for group in groups if isinstance(groups, list) else []:
             for handler in (group.get("hooks") or []) if isinstance(group, dict) else []:
                 if is_ours(handler):
-                    command = handler["command"]
+                    if event != APPROVALS:
+                        command = handler["command"]
                     events.append(event)
     return command, sorted(set(events))
 
@@ -106,16 +111,17 @@ def status(home, settings_path):
     command, events = installed_command(load(settings_path))
     parts = shlex.split(command) if command else []
     runtime_ok = bool(parts) and all(Path(part).exists() for part in parts if part.startswith("/"))
-    complete = bool(command) and set(events) == set(EVENTS)
+    complete = bool(command) and set(events) - {APPROVALS} == set(EVENTS)
     return {
         "ok": True, "installed": bool(command), "working": complete and runtime_ok,
-        "events": events, "cli": bool(shutil.which("claude")),
+        "events": [event for event in events if event != APPROVALS], "approvals": APPROVALS in events,
+        "cli": bool(shutil.which("claude")),
         "problem": "" if not command or (complete and runtime_ok)
         else "The connection is out of date. Connect again to repair it.",
     }
 
 
-def install(action, home, sources):
+def install(action, home, sources, approvals=False):
     settings_path = home / "settings.json"
     if action == "status":
         return status(home, settings_path)
@@ -158,6 +164,13 @@ def install(action, home, sources):
                 if not isinstance(groups, list):
                     raise ValueError(f"The {event} hooks in settings.json have an unexpected format.")
                 groups.append(group)
+            if approvals:
+                approve = shlex.quote(sys.executable) + " -B " + shlex.quote(str(generation / "permission.py"))
+                groups = hooks.setdefault(APPROVALS, [])
+                if not isinstance(groups, list):
+                    raise ValueError(f"The {APPROVALS} hooks in settings.json have an unexpected format.")
+                # Not async: Claude Code waits for the answer. The hook gives up well before this timeout.
+                groups.append({"hooks": [{"type": "command", "command": approve, "timeout": APPROVAL_TIMEOUT}]})
         updated = (json.dumps(settings, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
         if updated != original:
             backup = target.with_name(BACKUP_NAME)
@@ -177,10 +190,12 @@ def main():
     parser.add_argument("--connectors", type=Path, default=HERE.parent / "Connectors",
                         help="Folder that holds shishi-send.py and shishi_agents.py")
     parser.add_argument("--json", action="store_true", help="Print one JSON object for Shishi")
+    parser.add_argument("--approvals", action="store_true",
+                        help="Also let Shishi's card answer permission requests (Claude waits briefly for it)")
     options = parser.parse_args()
-    sources = [HERE / "receive.py", options.connectors / "shishi-send.py", options.connectors / "shishi_agents.py"]
+    sources = [HERE / "receive.py", HERE / "permission.py", options.connectors / "shishi-send.py", options.connectors / "shishi_agents.py"]
     try:
-        result = install(options.action, options.claude_home.expanduser(), sources)
+        result = install(options.action, options.claude_home.expanduser(), sources, approvals=options.approvals)
     except (OSError, ValueError) as problem:
         if options.json:
             print(json.dumps({"ok": False, "error": str(problem)}))

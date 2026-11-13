@@ -27,7 +27,7 @@ struct AgentFacts: Equatable {
 }
 
 struct AgentState: Equatable {
-    let key, source, title, detail, state, receipt, task, app, activity: String
+    let key, source, title, detail, state, receipt, task, app, activity, approval: String
     let time, started: Double
     let tools: Int
     let facts: AgentFacts?
@@ -101,6 +101,7 @@ final class AgentBoard {
                                    receipt: receipt.hasPrefix("connector/") ? receipt : "",
                                    task: Self.line(object["task"], limit: 400), app: Self.validBundle(app) ? app : "",
                                    activity: ended ? "" : Self.line(object["activity"], limit: 120),
+                                   approval: (object["approval"] as? String).flatMap { $0.count == 32 && $0.allSatisfy(\.isHexDigit) ? $0 : nil } ?? "",
                                    time: time, started: started, tools: max(0, min(object["tools"] as? Int ?? 0, 1_000_000)),
                                    facts: AgentFacts(object["facts"]), ended: ended))
         }
@@ -120,7 +121,7 @@ final class AgentBoard {
         rows.map { row in
             var wire: [String: Any] = ["key": row.key, "source": row.source, "title": row.title, "detail": row.detail,
                                        "state": row.state, "receipt": row.receipt, "time": row.time, "task": row.task,
-                                       "app": row.app, "started": row.started, "activity": row.activity, "tools": row.tools,
+                                       "app": row.app, "started": row.started, "activity": row.activity, "tools": row.tools, "approval": row.approval,
                                        "ended": row.ended]
             if let facts = row.facts { wire["facts"] = facts.wire }
             return wire

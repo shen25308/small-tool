@@ -44,6 +44,7 @@
       <div class="content">
         <div id="aurora" class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
         <div class="board-content" id="board">
+          <section id="workspaceApprovals" class="approvals" aria-live="assertive" hidden></section>
           <section class="page-heading">
             <div class="heading-line"><h1 id="pageTitle">Today</h1><span id="pageCount" data-count-key="page"></span>
               <span id="dayRing" class="progress-ring" role="img" hidden><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle class="ring-fill" cx="18" cy="18" r="15" pathLength="100"/></svg></span></div>
@@ -60,6 +61,7 @@
   <section id="card" aria-label="Today card">
     <div class="card-inner">
       <div class="card-island-slot"></div>
+      <section id="cardApprovals" class="approvals" aria-live="assertive" hidden></section>
       <section id="cardReport" class="card-report" aria-live="polite" hidden></section>
       <section id="cardWelcome" class="card-welcome" hidden>
         <b>Know when Claude Code is done</b>
@@ -103,6 +105,6 @@
   </dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="task-logic.js"></script><script src="notion-sync.js"></script><script src="motion.js"></script>
-  <script src="app.js"></script><script src="day-picker.js"></script><script src="backup.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="notion-ui.js"></script>
+  <script src="app.js"></script><script src="day-picker.js"></script><script src="backup.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script><script src="agents.js"></script><script src="demo.js"></script><script src="source-colors.js"></script><script src="report.js"></script><script src="island.js"></script><script src="card.js"></script><script src="approvals.js"></script><script src="notion-ui.js"></script>
 </body>
 </html>
