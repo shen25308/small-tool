@@ -159,6 +159,9 @@
     const by = '(?:(by|due|until|before) )?';
     const dayNames = weekdays.map(name => name + '|' + name.slice(0, 3)).join('|');
     const monthNames = months.map(name => name + '|' + name.slice(0, 3)).join('|');
+    // "this evening" plans the task for Today's evening section; "someday" parks it without a date (as in Things).
+    take('evening', / (this evening)(?= )/i, () => { if (!found.planned) setDate(today, ''); found.evening = true; });
+    take('someday', / (someday|some day)(?= )/i, () => { found.someday = true; });
     if (!zhDate) {
       take('date', new RegExp(' ' + by + '(today|tonight|tomorrow|tmr|tmrw)(?= )', 'i'), m => {
         setDate(/^to(day|night)$/i.test(m[2]) ? today : addDays(today, 1), m[1]);

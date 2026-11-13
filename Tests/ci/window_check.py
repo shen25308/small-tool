@@ -43,9 +43,16 @@ def card_windows(pid):
 
 def launch():
     process = subprocess.Popen([str(app / "Contents/MacOS/ShiShi"), "--compact-workspace"])
-    time.sleep(8)
+    # The card appears once the page has loaded. On a busy CI machine that took longer than 8 seconds once,
+    # so wait for the card itself, up to 20 seconds, and record how long it took.
+    started = time.time()
+    time.sleep(3)
+    while time.time() - started < 20 and process.poll() is None and not card_windows(process.pid):
+        time.sleep(1)
     if process.poll() is not None:
         raise SystemExit("Shishi exited during launch.")
+    record["notes"].append(f"Card visible after {time.time() - started:.1f} s")
+    time.sleep(2)
     return process
 
 

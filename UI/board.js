@@ -114,6 +114,9 @@ function taskMenu(task, at, anchor) {
     !task.done && {segment: [['Today', today], ['Tomorrow', addDays(today, 1)], ['Next Week', TaskLogic.nextWeekday(today, 1)]].map(([label, date]) =>
       ({label, pressed: plannedDays(task).length === 1 && plannedDays(task)[0] === date, run: plan(date)}))},
     !task.done && {label: 'Choose Days…', icon: 'i-calendar', run: () => editPlanned(anchor, task)},
+    !task.done && (task.evening ? {label: 'Move Out of This Evening', icon: 'i-sun', run: () => action(setWhen(task.id, ''))}
+      : {label: 'This Evening', icon: 'i-moon', hint: '⌘E', run: () => action(setWhen(task.id, 'evening'))}),
+    !task.done && !task.someday && {label: 'Someday', icon: 'i-someday', hint: '⌘O', run: () => action(setWhen(task.id, 'someday'))},
     !task.done && task.planned && {label: 'Remove Date', icon: 'i-xmark', run: plan('')},
     !task.done && '-',
     {heading: 'Priority'},
@@ -283,13 +286,13 @@ function drawPalette() {
   const sections = [];
   const commands = paletteCommands().filter(item => match(item.label));
   const lists = [
-    ...['today', 'upcoming', 'all', 'done'].map((id, index) => ({label: titles[id], icon: 'i-list', hint: '⌘' + (index + 1), run: () => go(id)})),
+    ...['today', 'upcoming', 'all', 'someday', 'done'].map((id, index) => ({label: titles[id], icon: 'i-list', hint: '⌘' + (index + 1), run: () => go(id)})),
     ...data.projects.map(name => ({label: projectLabel(name), icon: 'i-list', hint: 'List', run: () => go('p:' + name)})),
     ...availableTaskTags().map(name => ({label: name, icon: 'i-tag', hint: 'Tag', run: () => { view = 'all'; tag = name; render(); }}))
   ].filter(item => match(item.label));
   const tasks = query ? data.tasks.filter(task => match([task.title, projectLabel(task.project), task.tag, task.notes || ''].join(' '))).slice(0, 40)
     .map(task => ({label: task.title, icon: task.done ? 'i-check-circle' : 'i-clock', hint: projectLabel(task.project), done: task.done, run: () => taskForm(task)})) : [];
-  const goTo = ['Go To', query ? lists : lists.slice(0, 4 + data.projects.length)];
+  const goTo = ['Go To', query ? lists : lists.slice(0, 5 + data.projects.length)];
   // Typing a list or tag name should reach that list first. Otherwise matching tasks lead.
   const listFirst = query && lists.some(item => item.label.toLocaleLowerCase().startsWith(query));
   if (listFirst) sections.push(goTo);
@@ -300,7 +303,7 @@ function drawPalette() {
     const found = parseQuick(paletteInput.value);
     if (!found.title) return;
     const fields = quickDefaults('view');
-    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat']) if (found[key]) fields[key] = found[key];
+    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat', 'evening', 'someday']) if (found[key]) fields[key] = found[key];
     action(change(state => { state.tasks.push(newTask({...fields, title: found.title})); }).then(() => toast('Task added')));
   }}]]);
   paletteRows = sections.flatMap(([, rows]) => rows);
@@ -500,7 +503,7 @@ window.openURLAction = fields => {
     if (!found.title) { toast('The link had no task title.'); return; }
     const list = data.projects.find(name => name.toLocaleLowerCase() === String(fields.list || '').toLocaleLowerCase());
     const task = newTask({project: list || found.project || data.projects[0], title: found.title});
-    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'repeat']) if (found[key]) task[key] = found[key];
+    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'repeat', 'evening', 'someday']) if (found[key]) task[key] = found[key];
     if (fields.notes) task.notes = String(fields.notes).slice(0, 4000);
     addFromLink(task);
     return;

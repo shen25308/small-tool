@@ -23,7 +23,15 @@ const example = 'Maya: Please send the new homepage prototype to the design team
 let data = {version: 1, projects: ['My Work'], tasks: []}, view = 'today', tag = '', compact = false, dragId = '', lastDay = day(), locked = false;
 // The inline "New Task" field that is open: 'view', 'p:<list>' or 'd:<date>'.
 let quickTarget = null;
-const titles = {today: 'Today', upcoming: 'Upcoming', all: 'All', done: 'Completed'};
+const titles = {today: 'Today', upcoming: 'Upcoming', all: 'All', someday: 'Someday', done: 'Completed'};
+// Things-style "When": This Evening keeps a task in Today but after the rest; Someday parks it without a date.
+function setWhen(id, when) {
+  return patchTask(id, task => {
+    if (when === 'evening') { planOn(task, day()); task.evening = true; }
+    else if (when === 'someday') { planOn(task, []); delete task.evening; delete task.dueDate; delete task.dueTime; task.someday = true; }
+    else { delete task.evening; delete task.someday; }
+  });
+}
 const projectOfView = () => view.startsWith('p:') ? view.slice(2) : null;
 // Project names are storage keys. Display the original built-in list in English
 // without changing task references, even when the user also has a list named My Work.
@@ -38,6 +46,9 @@ const plannedDays = t => t.plannedDates?.length ? t.plannedDates : t.planned ? [
 const nextPlanned = (t, today = day()) => { const days = plannedDays(t); return days.find(d => d >= today) || days.at(-1) || ''; };
 function planOn(task, dates) {
   const days = [...new Set((Array.isArray(dates) ? dates : [dates]).filter(Boolean))].sort();
+  // A date takes a task out of Someday; a day other than today takes it out of This Evening.
+  if (days.length) delete task.someday;
+  if (!days.includes(day())) delete task.evening;
   if (days.length > 1) task.plannedDates = days; else delete task.plannedDates;
   task.planned = days.length > 1 ? nextPlanned(task) : days[0] || '';
 }
@@ -124,7 +135,7 @@ function deadlineLabel(task) {
 
 function smartTile(id, label, count, icon) {
   return '<button class="smart-tile tile-' + id + (view === id && !tag ? ' active" aria-current="page' : '') + '" data-view="' + id + '"' +
-    (id === 'today' ? ' data-target="today"' : '') + '><span class="tile-icon">' + icon + '</span><span class="tile-count" data-count-key="tile-' + id + '">' + count +
+    (id === 'today' ? ' data-target="today"' : '') + '><span class="tile-icon">' + icon + '</span><span class="tile-count" data-count-key="tile-' + id + '">' + (count || '') +
     '</span><span class="tile-label">' + label + '</span></button>';
 }
 function navButton(id, label, count) {
@@ -397,7 +408,8 @@ function renderBoard() {
   const now = new Date();
   $('nav').innerHTML = smartTile('today', 'Today', today.filter(t => !t.done).length, String(now.getDate())) +
     smartTile('upcoming', 'Upcoming', open.filter(t => taskDate(t) > day()).length, symbol('i-calendar')) +
-    smartTile('all', 'All', open.length, symbol('i-tray')) +
+    smartTile('all', 'All', open.filter(t => !t.someday).length, symbol('i-tray')) +
+    smartTile('someday', 'Someday', open.filter(t => t.someday).length, symbol('i-someday')) +
     smartTile('done', 'Completed', tasks.length - open.length, symbol('i-check'));
   $('projects').innerHTML = data.projects.map(p => navButton('p:' + p, p, open.filter(t => t.project === p).length)).join('');
   $('board').className = 'board-content ' + (project ? 'view-project ' + projectTone(project) : 'view-' + view);
@@ -419,9 +431,9 @@ function renderBoard() {
   pin.setAttribute('aria-label', compact ? 'Open full workspace' : 'Switch to the floating Today list');
   $('manual').hidden = view === 'done';
 
-  const flat = view === 'today' || view === 'all' || !!project;
+  const flat = view === 'today' || view === 'all' || view === 'someday' || !!project;
   document.querySelector('.board-content > .listhead').hidden = !flat;
-  let list = view === 'today' ? today : project ? tasks.filter(t => t.project === project) : open;
+  let list = view === 'today' ? today : project ? tasks.filter(t => t.project === project) : view === 'someday' ? open.filter(t => t.someday) : open.filter(t => !t.someday);
   const tags = [...new Set(list.map(t => t.tag).filter(Boolean))];
   const filterable = view === 'all' || !!project;
   if (!filterable || !(view === 'all' ? availableTaskTags() : tags).includes(tag)) tag = '';
@@ -437,10 +449,16 @@ function renderBoard() {
   else if (view === 'done') $('tasks').innerHTML = completedMarkup(tasks);
   else {
     const empty = tag ? emptyState('i-tag', 'No open tasks with this tag.') : view === 'today' ? emptyState('i-sun', 'Nothing planned for today. Add a task or drag one here.')
+      : view === 'someday' ? emptyState('i-someday', 'Ideas and tasks without a date wait here until you plan them.')
       : emptyState('i-check-circle', 'No tasks here yet.');
     const listAttrs = view === 'today' ? 'class="task-list drop" data-target="today"' : 'class="task-list"';
+    // Today ends with This Evening, as in Things.
+    const evening = view === 'today' ? list.filter(t => t.evening && !t.done) : [];
+    const main = evening.length ? list.filter(t => !evening.includes(t)) : list;
     $('tasks').innerHTML = filters + (view === 'today' && !tag ? window.CalendarEvents?.markup(day()) || '' : '') + '<div ' + listAttrs + '>' +
-      (list.map(t => row(t, {project: !project})).join('') || empty) + quickAdd('view') + '</div>';
+      (main.map(t => row(t, {project: !project})).join('') || (evening.length ? '' : empty)) + quickAdd('view') + '</div>' +
+      (evening.length ? '<section class="evening-group"><div class="day-head"><h3>This Evening</h3><span>' + evening.length + '</span></div>' +
+        evening.map(t => row(t, {project: !project})).join('') + '</section>' : '');
   }
 
   let groups = '';
@@ -848,7 +866,9 @@ function parseChips(found) {
       repeat: () => symbol('i-repeat') + esc(TaskLogic.repeatLabels[found.repeat]),
       priority: () => esc(found.priority),
       tag: () => symbol('i-tag') + esc(found.tag),
-      project: () => symbol('i-list') + esc(projectLabel(found.project))
+      project: () => symbol('i-list') + esc(projectLabel(found.project)),
+      evening: () => symbol('i-moon') + 'This Evening',
+      someday: () => symbol('i-someday') + 'Someday'
     }[part.kind]?.();
     if (!label) return '';
     return '<span class="chip" data-kind="' + part.kind + '" title="Read from “' + esc(part.text) + '”">' + label +
@@ -890,7 +910,7 @@ document.addEventListener('submit', event => {
   const input = form.querySelector('input'), found = parseQuick(input.value, ignoredKinds(input));
   if (!found.title) return;
   const fields = quickDefaults(form.dataset.quickForm);
-  for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat']) if (found[key]) fields[key] = found[key];
+  for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat', 'evening', 'someday']) if (found[key]) fields[key] = found[key];
   const task = newTask({...fields, title: found.title});
   input.value = '';
   input.dataset.ignore = '';
@@ -1011,8 +1031,44 @@ window.openMessage = text => { capture(text || ''); };
 document.addEventListener('keydown', e => {
   if (!e.metaKey || e.altKey || $('dialog').open) return;
   if (e.key === 'n') { e.preventDefault(); startNewTask(); }
-  const index = ['1', '2', '3', '4'].indexOf(e.key);
-  if (index >= 0) { e.preventDefault(); go(['today', 'upcoming', 'all', 'done'][index]); }
+  const index = ['1', '2', '3', '4', '5'].indexOf(e.key);
+  if (index >= 0) { e.preventDefault(); go(['today', 'upcoming', 'all', 'someday', 'done'][index]); }
+});
+
+// Keyboard control of the task list, as in Things: ↑ ↓ move between tasks, Return opens one, Space checks it off,
+// Delete removes it (with Undo), ⌘T plans it for today, ⌘E for this evening, ⌘O for someday.
+document.addEventListener('keydown', e => {
+  if ($('dialog').open || $('palette').open || compact) return;
+  const body = e.target.closest?.('#tasks .row .task-body, #pool .row .task-body');
+  if (!body) {
+    // ↓ from anywhere outside a field starts at the first task.
+    if (e.key === 'ArrowDown' && !e.target.closest?.('input, textarea, select, [contenteditable]') && !e.metaKey) {
+      const first = document.querySelector('#tasks .row .task-body');
+      if (first) { e.preventDefault(); first.focus(); }
+    }
+    return;
+  }
+  const row = body.closest('.row'), id = row.dataset.id;
+  const bodies = [...document.querySelectorAll('#tasks .row .task-body, #pool .row .task-body')];
+  const at = bodies.indexOf(body);
+  const focusRow = rowId => requestAnimationFrame(() => document.querySelector('.row[data-id="' + CSS.escape(rowId) + '"] .task-body')?.focus());
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    bodies[Math.max(0, Math.min(bodies.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+  } else if (e.key === ' ' && !e.metaKey) {
+    e.preventDefault();
+    const next = bodies[at + 1]?.closest('.row')?.dataset.id;
+    action(toggleTask(id).then(() => focusRow(next || id)));
+  } else if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey) {
+    e.preventDefault();
+    const task = data.tasks.find(item => item.id === id), next = (bodies[at + 1] || bodies[at - 1])?.closest('.row')?.dataset.id;
+    if (task) action(removeTask(task).then(() => next && focusRow(next)));
+  } else if (e.metaKey && ['t', 'e', 'o'].includes(e.key.toLowerCase())) {
+    e.preventDefault();
+    const key = e.key.toLowerCase();
+    action((key === 't' ? patchTask(id, task => { planOn(task, day()); delete task.evening; }) : setWhen(id, key === 'e' ? 'evening' : 'someday'))
+      .then(() => { toast(key === 't' ? 'Planned for today' : key === 'e' ? 'Moved to This Evening' : 'Moved to Someday'); focusRow(id); }));
+  }
 });
 setInterval(() => { if (lastDay !== day()) { lastDay = day(); render(); } }, 30000);
 document.addEventListener('DOMContentLoaded', async () => {

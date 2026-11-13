@@ -288,7 +288,7 @@ window.Card = (() => {
     const input = $('cardAddInput'), found = parseQuick(input.value, ignoredKinds(input));
     if (!found.title) return;
     const fields = {planned: day()};
-    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat']) if (found[key]) fields[key] = found[key];
+    for (const key of ['planned', 'dueDate', 'dueTime', 'priority', 'tag', 'project', 'repeat', 'evening', 'someday']) if (found[key]) fields[key] = found[key];
     input.value = '';
     input.dataset.ignore = '';
     showParseHint(input, $('cardAddHint'));

@@ -109,3 +109,10 @@ dialog, .menu, #boardMenu, .task-picker, .focus-pop, #palette { box-shadow: var(
 /* Agents: the dot carries the state; the word stays quiet. */
 .agent-state, .agent-state.working, .agent-state.done, .agent-state.attention { color: var(--secondary) }
 .agent-state.attention { color: var(--warning) }
+
+/* The task the keyboard is on reads as selected, like a row in Finder or Things. */
+.row:has(.task-body:focus-visible) { background: var(--selection) }
+.row .task-body:focus-visible { box-shadow: none; outline: none }
+/* This Evening closes Today, under a quiet heading. */
+.evening-group { margin-top: 18px }
+.evening-group .day-head h3 { display: flex; align-items: center; gap: 6px }

@@ -29,7 +29,7 @@ const text = (page, selector) => page.locator(selector).first().innerText();
 await check('today view and sidebar counts', {scale: 2}, async ({page, shot}) => {
   assert.equal(await text(page, '#pageTitle'), 'Today');
   assert.equal(await text(page, '#pageCount'), '5');
-  assert.deepEqual(await page.locator('#nav .tile-count').allInnerTexts(), ['5', '6', '14', '4']);
+  assert.deepEqual(await page.locator('#nav .tile-count').allInnerTexts(), ['5', '6', '14', '', '4']);
   assert.equal(await page.locator('#tasks .row').count(), 6);
   assert.equal(await page.locator('#tasks .row.done').count(), 1);
   assert.equal(await page.locator('#agentList .agent-row').count(), 4);
@@ -238,7 +238,7 @@ await check('upcoming and completed views', {}, async ({page, tasks, shot}) => {
   assert.equal((await tasks()).find(t => t.title === 'Water the plants').planned, day(1));
   await page.keyboard.press('Escape');
 
-  await page.keyboard.press('Meta+4');
+  await page.keyboard.press('Meta+5');
   assert.equal(await text(page, '#pageTitle'), 'Completed');
   assert.deepEqual((await page.locator('.day-head h3').allInnerTexts()).slice(0, 2), ['Today', 'Yesterday']);
   await shot('completed');
@@ -1314,6 +1314,52 @@ await check('update check: quiet, once per version, never installs', {}, async (
   await page.waitForFunction(() => window.__host.openedRelease === 'https://github.com/shen25308/small-tool/releases/tag/v1.8');
   await page.uncheck('#updateChoice');
   await page.waitForFunction(() => window.__host.updatesOn === false);
+});
+
+await check('This Evening, Someday and keyboard control of the list', {}, async ({page, tasks}) => {
+  // Keyboard: ↓ starts at the first task, ↓ moves on, ⌘E moves it to This Evening.
+  await page.locator('#pageTitle').click();
+  await page.keyboard.press('ArrowDown');
+  assert.match(await page.evaluate(() => document.activeElement.closest('.row').textContent), /Organize the review notes/);
+  await page.keyboard.press('ArrowDown');
+  assert.match(await page.evaluate(() => document.activeElement.closest('.row').textContent), /Send the release checklist/);
+  await page.keyboard.press('Meta+e');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Send the release checklist').evening);
+  const evening = page.locator('.evening-group');
+  await evening.waitFor();
+  assert.match(await evening.innerText(), /This Evening[\s\S]*Send the release checklist/);
+  await page.waitForFunction(() => /Send the release checklist/.test(document.activeElement.closest('.row')?.textContent || ''));
+  // Space checks it off; ⌘O parks another one in Someday; Delete removes with Undo.
+  await page.keyboard.press(' ');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Send the release checklist').done);
+  await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).locator('.task-body').focus();
+  await page.keyboard.press('Meta+o');
+  await page.waitForFunction(() => window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').someday);
+  const parked = (await tasks()).find(t => t.title === 'Review the product roadmap');
+  assert.deepEqual([parked.planned, parked.someday], ['', true]);
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).count(), 0, 'gone from Today');
+  await page.keyboard.press('Meta+4');
+  assert.equal(await text(page, '#pageTitle'), 'Someday');
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).count(), 1);
+  await page.click('#nav [data-view="all"]');
+  assert.equal(await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).count(), 0, 'All leaves Someday out, as Anytime does');
+  // Planning a date brings it back from Someday.
+  await page.click('#nav [data-view="someday"]');
+  await page.locator('#tasks .row', {hasText: 'Review the product roadmap'}).locator('.task-body').focus();
+  await page.keyboard.press('Meta+t');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.find(t => t.title === 'Review the product roadmap').someday);
+  await page.click('#nav [data-view="today"]');
+  await page.locator('#tasks .row', {hasText: "Prepare Friday's update"}).locator('.task-body').focus();
+  await page.keyboard.press('Backspace');
+  await page.waitForFunction(() => !window.__host.workspace.tasks.some(t => t.title === "Prepare Friday's update"));
+  await page.locator('#toast button', {hasText: 'Undo'}).click();
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === "Prepare Friday's update"));
+  // Typing works too: "this evening" is understood.
+  await page.click('#tasks [data-quick="view"]');
+  await page.locator('.quick-add input').fill('Call mum this evening');
+  assert.match(await text(page, '.quick-hint'), /This Evening/);
+  await page.locator('.quick-add input').press('Enter');
+  await page.waitForFunction(() => window.__host.workspace.tasks.some(t => t.title === 'Call mum' && t.evening));
 });
 
 await check('first launch with no data', {workspace: null, empty: true}, async ({page, tasks, shot}) => {
