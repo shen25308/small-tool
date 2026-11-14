@@ -162,3 +162,29 @@ AI result rows have no status, archive flag or start time today:
 | M6 screenshots | `tests/shots/compare.html` | — |
 
 The fake host goes in `tests/fixtures/`, outside `UI/`, so `build.py` never bundles it.
+
+## 7. Status after M6
+
+Decisions taken (from your reply): D1 follow the system language, English fallback · D2 bump to format 2 with a backup · D3 carry-over change accepted · D4/D5 "not provided" and end points only · D6 push to `claude/festive-gates-07h0zs` after each milestone · D7 you run the Mac checks at the end.
+
+**Data model.** `Entry` gains optional `plannedTime` ("HH:mm"), `completedAt` (ISO 8601) and `deferCount`. `Workspace.version` is 2; `validate()` accepts 1 and 2. On the first load of a v1 file the host writes `Workspace.v1.backup.json` (only if it does not exist yet) and rewrites the file with `version: 2`; tasks are untouched. An older app refuses a v2 file ("Shishi could not load your lists", saving paused) until the backup is copied back over `Workspace.json`.
+
+**AI results.** Status is derived on the page (`UI/result-status.js`): "needs you" for replies that ask for confirmation and for due reminders, "failed" for failed builds and replies that report an unfixed failure, otherwise "done". Read, archived and accepted are saved by the host: Codex in `CodexInbox.json` (two optional fields), connectors as empty receipt files beside the existing `.read` (`.archived`, `.accepted`). Accept marks the result and opens its source; nothing is sent to any agent. Results appear on the band at the moment they finished; a bar is drawn only if a row carries a real `started` time, which no source provides today.
+
+**Quota.** The `quota` op reports Codex, Claude Code and Grok as not readable, with a reason, and local Qwen as available offline plus the last extraction's duration and count. No file is read for quota and no request is made.
+
+**Not carried over from the old UI.** Drag and drop of tasks onto Today or a project (moving is now "Today", "→ Tomorrow", "Schedule" and the details sheet); the inline tag and priority pickers (now in the details sheet); the sort menu (the list is ordered by time); the "Latest result" peek (replaced by the results drawer and the panel).
+
+## 8. Checks to run on the Mac
+
+From the repo root after `git pull`:
+
+```sh
+python3 build.py --assets /Applications/Shishi.app --output build/Shishi.app
+python3 Release/verify-release.py build/Shishi.app
+cp ~/Library/Application\ Support/ShiShiDesk/Workspace.json ~/Desktop/Workspace.before-redesign.json
+open build/Shishi.app
+cd tests && npm install && node run.js && npx playwright install webkit && SHISHI_BROWSER=webkit node run.js && node audit.js
+```
+
+What to look for is listed in the final report of the port.
