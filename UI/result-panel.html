@@ -1,1 +1,41 @@
-<!doctype html><html lang="en-US"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="results.css"><link rel="stylesheet" href="panel.css"><title>Shishi · Result panel</title></head><body><div id="edgeResult"><p class="edge-empty">Waiting for the first result…</p></div><div id="edgeBottom"><button id="workspace" type="button">← Back to workspace</button><button id="edgeBack" type="button" hidden>Back to summary</button><button id="newer" hidden>Show latest</button><button id="history">Inbox</button></div><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="result-panel.js"></script></body></html>
+<!doctype html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="mini.css">
+  <link rel="stylesheet" href="motion.css">
+  <link rel="stylesheet" href="panel.css">
+  <title>Shishi · Results</title>
+</head>
+<body class="panel">
+  <div class="rv2 preview" id="rv2" data-i18n-aria="pn.title">
+    <button class="rv2-peek" id="rvPeek" type="button"></button>
+    <header class="rv2-head">
+      <div class="rv2-title"><h2 data-i18n="pn.title"></h2><span id="rvUnread"></span></div>
+      <div class="seg rv2-seg" role="tablist" data-i18n-aria="pn.sources"><button class="on" data-src="all" role="tab" aria-selected="true" data-i18n="pn.src.all"></button><button data-src="ai" role="tab" aria-selected="false" data-i18n="pn.src.ai"></button><button data-src="mail" role="tab" aria-selected="false" data-i18n="pn.src.mail"></button><button data-src="ci" role="tab" aria-selected="false" data-i18n="pn.src.ci"></button></div>
+      <button class="icon-btn" id="rvCollapse" data-i18n-aria="pn.collapse" data-i18n-title="pn.collapse"><svg class="i"><use href="#chev-down"/></svg></button>
+    </header>
+    <button class="rv2-newer glass" id="rvNewer" hidden></button>
+    <div class="rv2-body" id="inbox"></div>
+    <footer class="rv2-foot">
+      <button class="btn primary rv2-primary" id="rvPrimary"></button>
+      <button class="btn rv2-more" id="rvMore" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="pn.more"><svg class="i"><use href="#ellipsis"/></svg></button>
+      <div class="rv2-menu glass hidden" id="rvMenu" role="menu" data-i18n-aria="pn.more">
+        <button role="menuitem" data-rv="today"><svg class="i"><use href="#plus"/></svg><span data-i18n="pn.addToday"></span><kbd>⌘T</kbd></button>
+        <button role="menuitem" data-rv="raw"><svg class="i"><use href="#doc"/></svg><span data-i18n="pn.viewRaw"></span></button>
+        <button role="menuitem" data-rv="inbox"><svg class="i"><use href="#tray"/></svg><span data-i18n="pn.inbox"></span><kbd>⌘2</kbd></button>
+        <hr>
+        <button role="menuitem" data-rv="back"><svg class="i"><use href="#chev-left"/></svg><span data-i18n="pn.workspace"></span><kbd>⌘1</kbd></button>
+      </div>
+    </footer>
+    <div class="rv2-note" id="rvNote" role="status" aria-live="polite" hidden></div>
+  </div>
+  <script src="theme.js"></script><script src="sprite.js"></script><script src="i18n.js"></script><script src="sky.js"></script>
+  <script src="result-digest.js"></script><script src="result-status.js"></script><script src="result-panel.js"></script>
+</body>
+</html>

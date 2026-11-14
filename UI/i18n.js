@@ -1,0 +1,271 @@
+'use strict';
+/* String table. The interface follows the Mac's preferred language: Simplified Chinese for zh, English otherwise.
+   Task titles, project names, tags and AI replies are the user's own text and are never translated.
+   tr('key', a, b)   {0} {1} are the arguments · {0|item|items} picks a word by whether argument 0 is 1
+                     {1:l} writes Today / Tomorrow / Yesterday in lower case inside an English sentence */
+const I18n=(()=>{
+const EN={
+'app.name':'Shishi','quote':'“{0}”','cancel':'Cancel','save':'Save','create':'Create','done':'Done','later':'Later','list.sep':', ',
+'day.today':'Today','day.tomorrow':'Tomorrow','day.yesterday':'Yesterday','now':'Now {0}',
+'n.items':'{0} {0|item|items}','n.itemsB':'{b} items',
+'undo':'Undo','undo.done':'Undone','undo.none':'Nothing to undo','toast.close':'Dismiss',
+'save.failed':'Could not save: {0}','save.paused':'Shishi could not read the workspace file. Saving is paused so your data is not overwritten.',
+'load.failed':'Shishi could not load your tasks. Saving is paused to protect your data. {0}','project.default':'My Work',
+// sidebar and toolbar
+'side.aria':'Sidebar','side.hide':'Hide sidebar','side.show':'Show sidebar','side.views':'Views','side.projects':'Projects','side.tags':'Tags',
+'nav.plan':'Plan','nav.all':'All tasks','nav.todayTitle':'Today (T)','nav.planTitle':'Plan: 3 days or week (2)','nav.allTitle':'Every open task','nav.resultsTitle':'AI results (I)',
+'tb.backEdge':'Back to panel','tb.backToday':'‹ Back to today','tb.add':'Add','tb.addTitle':'Quick add (N)','tb.searchAria':'Search (/ or ⌘F)','tb.searchTitle':'Search (/)',
+'tb.focusAria':'Focus mode (F)','tb.focusTitle':'Focus mode: results are held and delivered together afterwards (F)','tb.more':'More',
+'seg.aria':'Time range','seg.day':'Day','seg.three':'3 days','seg.week':'Week',
+'mm.done':'Show completed','mm.rm':'Reduce motion','mm.edge':'Show result panel','mm.sky':'Sky','mm.message':'Capture tasks from a message','mm.wrap':'Wrap up today',
+'mm.compact':'Floating Today','mm.connectors':'Connectors','mm.keys':'Keyboard shortcuts',
+'pal.pearl':'Pearl blue hour','pal.rose':'Rose dusk','pal.pastel':'Mint periwinkle','pal.mono':'Mono blue',
+'keys.t':'Back to today and focus the next item on the band','keys.arrows':'With the band focused: move between tasks','keys.enter':'Open the focused cluster; Esc closes it and returns to the band',
+'keys.days':'Previous or next day','keys.scale':'Day / 3 days / week','keys.search':'Search','keys.undo':'Undo the last step (complete, defer and move can all be undone)',
+'keys.esc':'Close the top layer; press again to clear all filters','keys.n':'Quick add: write “tomorrow 3pm send weekly report #team”','keys.i':'Open AI results',
+'keys.jk':'Move through results; Space expands','keys.eaux':'Done (archive) · accept · mark unread · select','keys.c':'Go through unread results one by one (shows 3/10)',
+'keys.f':'Focus mode: results are held and delivered together afterwards','keys.help':'Show this sheet',
+// band
+'carry':'Carried over','carry.aria':'{0} carried over, {1} tidy-up','carry.collapse':'collapse','carry.expand':'open','carry.none':'Nothing carried over',
+'band.backTo':'Back to {0:l}','band.aria':'Time band for {0:l}. Use the left and right arrow keys to move between tasks, Return to open','band.tonight':'Tonight',
+'band.moreRuns':'{0} more {0|result|results}','band.isOverdue':', overdue','band.hasOverdue':', includes overdue','band.clusterAria':'{0} to {1}, {2} items','band.nOverdue':'{0} overdue',
+'band.legend':'Legend','band.aiResults':'AI results','band.empty':'No timed tasks {0:l} · use “Schedule” in the list to place one',
+'band.reset':'{0} resets {1}','band.resetTitle':'{0} {1} quota resets at {2} ({3}% left now)','band.resetAria':'{0} quota resets at {1}',
+'due.at':'Due {0}','due.title':'Deadline (separate from when you plan to do it)',
+// filters and list
+'f.all':'All','f.over':'Overdue','f.next':'Up next','f.timed':'Scheduled','f.untimed':'Untimed','f.done':'Done',
+'f.clearTag':'Clear tag filter {0}','f.clearProj':'Clear project filter {0}','f.clearSearch':'Clear search','f.clearOnly':'Clear cluster filter','f.only':'Only these {0}',
+'f.clearRange':'Clear time range','f.clearAll':'Clear all filters','f.dragHint':'Drag on the band to filter by time','f.clear':'Clear filters','f.seeAll':'See all','search.placeholder':'Search tasks',
+'prio.high':'High priority','prio.mid':'Medium priority','prio.0':'High (!!)','prio.1':'Medium (!)','prio.2':'Normal',
+'row.slot':'Schedule','row.slotTitle':'Place in the next free slot','row.deferTo':'Defer to {0:l}','row.deferToOf':'Defer to {0:l}: {1}','row.checkOf':'Complete: {0}','row.uncheckOf':'Mark as not done: {0}',
+'row.deferHint':'A task deferred again and again usually needs splitting up or moving to Later','row.deferred':'Deferred {0} times','row.details':'Details','row.detailsOf':'Edit: {0}',
+'row.toToday':'Today','row.toTodayOf':'Move to today: {0}',
+'grp.tonight':'Tonight','grp.doneEarlier':'Completed earlier',
+'empty.today':'Today is clear','empty.day':'Nothing planned {0:l}','empty.hint':'Add something, or look at {0:l} first.','empty.look':'Look at {0:l} · {1} {1|item|items}',
+'empty.filtered':'No tasks match','empty.none':'No tasks here','capture.title':'Quick add',
+'over.noGuilt':'No guilt, just pick a slot','over.suggest':'Suggest slots','over.suggestTitle':'Preview free slots on the band; nothing moves until you accept','over.evening':'Roll all to tonight',
+'un.slotAll':'Schedule…','un.collapse':'Collapse untimed','un.more':'{0} more untimed','done.collapse':'Collapse {0} done','done.expand':'{0} done · click to expand',
+'more.collapse':'Collapse','more.nMore':'{0} more',
+'cluster.aria':'{1} {1|item|items} from {0}','cluster.hasOverdue':'includes overdue','cluster.only':'Show only these in the list','cluster.shift':'Push all back 30 min',
+// carry-over tidy-up
+'review.aria':'Carry-over tidy-up','review.hello':'Good morning. ','review.title':'{0} earlier {0|item is|items are} unfinished','review.sub':'They are not piled into today; deal with them here and this clears',
+'review.later':'Later','review.laterAria':'Later (close without changing tasks)','review.toToday':'Move to today','review.slot':'Schedule','review.top6':'Show only the top 6',
+'review.more':'{0} more · listing the 6 highest priority first','review.allToday':'Move all to today','review.allMonday':'Defer all to next Monday','review.allLater':'Put in Later',
+'review.hint':'Items untouched for more than 7 days are better moved to Later',
+// week
+'week.done':'Done {0}/{1}','week.pastTitle':'{0} has passed · handle carried-over tasks in today’s “Carried over”','week.openDay':'{0} {1}, open this day','week.left':'{0} left over',
+'week.none':'Nothing to do','week.next':'Next week','week.after':'After','week.later':'Later · no date','week.sum':'{a} coming up · {b} left this week',
+'week.hint':'Click today or a later day to open it · past days are read-only','head.done':'done {0}/{1}',
+// floating Today
+'cw.sub':'Done {0}/{1} · overdue {2} · untimed {3}','cw.empty':'No tasks today','cw.next':'Next · {0}','cw.inMin':'in {0} min','cw.allDone':'All done ✓','cw.noMore':'No more timed tasks',
+'cw.rollAll':'Roll all','cw.moreOver':'{0} more overdue','cw.add':'Add task','cw.expand':'Open full workspace',
+// quota
+'q.title':'AI quota','q.aria':'AI quota: tightest is {0}, {1} window, {2}% left','q.ariaNone':'AI quota: nothing readable on this Mac','q.ariaShort':'AI quota, tightest {0}% left','q.label':'{0} {b} left',
+'q.none':'Not provided','q.source':'Plan','q.limitOf':'{0} limit','q.limit':'Limit','q.left':'{0}% left','q.credits':'Credits','q.foot':'Read from local logs · updated {0}',
+'q.footNone':'No quota figure is readable on this Mac yet','q.leftLabel':'Remaining','q.resetAt':'resets {0}','q.lastRun':'Last run','q.lastRunValue':'{0} tasks found · {1} s',
+'q.state':'Status','q.offline':'Available offline','q.modelMissing':'Model file not found','q.localPlan':'On this Mac · no limit','q.planName':'{0} plan',
+'q.win.fiveHour':'5 hours','q.win.weekly':'Weekly','q.win.sevenDay':'7 days','q.win.daily':'Daily','q.win.monthly':'Monthly',
+'q.why.unconfirmed':'local log format not confirmed yet','q.why.needsStatusLine':'needs the status line script first','q.why.usageOnly':'only shown in /usage','q.why.unknown':'not readable on this Mac','q.why.local':'',
+'pv.codex':'Codex','pv.claude':'Claude Code','pv.grok':'Grok','pv.grokBuild':'Grok Build','pv.qwen':'Local Qwen','pv.ci':'GitHub Actions','pv.mail':'Mail','pv.bell':'Reminders','pv.other':'AI',
+// toasts
+'rollover':'It is now {0} · {1} {1|item is|items are} left from before, in “Carried over”',
+'t.completed':'Completed {0}','t.restored':'Restored {0}','t.deferred':'Deferred {0} to {1:l}','t.deferredOften':' · deferred {0} times now. Split it up, or put it in Later?',
+'t.noSlotDefer':'No free slot left today · defer to tomorrow instead','t.slotted':'Scheduled {0} for {1:l} {2}','t.toToday':'Moved {0} to today','t.evening':'Rolled {0} overdue to tonight',
+'t.noSlot':'No free slot left today','t.slotAll':'Placed {0} untimed in today’s free slots','t.slotAllRest':' · {0} did not fit','t.pastMidnight':'This would cross midnight · defer to tomorrow instead',
+'t.shift':'Pushed these {0} back 30 min','t.allToday':'Moved {0} carried over to today','t.allMonday':'Deferred {0} to next Monday ({1})','t.allLater':'Put {0} in Later',
+'t.reviewHidden':'Closed · carried-over tasks are still there; open them from “Carried over” left of the band','t.motionOff':'Motion reduced','t.motionOn':'Motion restored',
+'t.added':'Added {0} · {1:l}','t.removed':'Removed {0}','t.saved':'Saved {0}',
+// AI results
+'res.title':'AI results','res.group.confirm':'Needs you','res.group.fail':'Failed','res.group.done':'Done · nothing to do','res.one':'{0}: {1}',
+'res.many':'{0} new results','res.manyGroups':' ({0} groups)','res.manyConfirm':' · {0} need you','res.manyFail':' · {0} failed','res.view':'View','res.duringFocus':'While focusing: ',
+'res.markedUnread':'Marked unread','res.markedRead':'Marked {0} {0|group|groups} read','res.archivedOne':'Archived “{0}…”','res.archivedMany':'Archived {0} groups',
+'res.nothingToAccept':'Nothing to accept on this one','res.accepted':'Accepted: {0}','res.acceptOpen':'Accept and open session','res.accept':'Mark accepted',
+'res.noUnread':'No unread','res.noDone':'No completed results','res.select':'Select','res.updates':'{0} updates','res.handled':'handled','res.unread':'Unread',
+'res.openMail':'Open email','res.openBuild':'View build','res.openSession':'Open session','res.onBand':'See on the band','res.raw':'Raw reply','res.hideRaw':'Hide raw reply',
+'res.markRead':'Mark read','res.markUnread':'Mark unread','res.handledBtn':'Done','res.nUnread':'{0} unread','res.catchup':'One by one','res.catchupTitle':'Go through unread one by one (C)',
+'res.close':'Close results (Esc)','res.byStatus':'By status','res.f.confirm':'Needs you','res.f.fail':'Failed','res.allSources':'All sources','res.digest':'Summary',
+'res.digestTitle':'{1} arrived together at {0}','res.digestRead':'Mark completed as read','res.bulk':'Bulk actions','res.selected':'{0} selected','res.archive':'Archive','res.selectAll':'Select all {0}',
+'res.allRead':'Mark all read','res.archiveDone':'Archive completed','res.keys':'J/K move · Space expand · E done · A accept · U unread · X select','res.list':'Results',
+'res.emptyHere':'No results here','res.allHandled':'All done','res.emptyHint':'New results will be summarised here in one card when they arrive.','res.gUnread':'{0} unread',
+'res.backToInbox':'← Back to inbox','res.archived':'{0} archived','res.connectors':'Manage connectors','res.focusHeld':'Focusing · {0} for later',
+'res.cuSummary':'Handled {0} · archived {1} · accepted {2}','res.backToList':'Back to list','res.listShort':'List','res.next':'Next','res.prev':'Previous',
+'res.badgeAria':'AI results, {0} unread','res.badgeConfirm':', {0} need you','res.islandNew':'{b} new','res.islandConfirm':' · {0} need you','res.islandNone':'No new results','res.islandAria':'{0} new results',
+'res.notOnBand':'This result is not on today’s band','res.located':'On the band: {0}',
+'focus.on':'Focusing','focus.later':' · {0} for later','focus.aria':'Focusing, {0} results held for later','focus.started':'Focusing · AI results are held and delivered together afterwards',
+'focus.ended':'Focus ended','focus.now':'now: {0} ({1})','focus.held':'{0} {0|result|results} held for later','focus.willHold':'Results will be held','focus.end':'End focus',
+// quick capture and suggested slots
+'cap.placeholder':'tomorrow 3pm send weekly report #team !','cap.help':'Write the time in: today / tomorrow / fri / next mon / 3:30pm / 30 min / #tag / P0','cap.add':'add',
+'cap.empty':'The recognised date and time will show here as you type','cap.task':'Task','cap.date':'Date','cap.time':'Time','cap.tag':'Tag','cap.prio':'Priority',
+'cap.noTag':'No tag called #{0}; it will be added without a tag','cap.note.pm':'read as afternoon','cap.note.tomorrow':'that time has passed today, so it goes to tomorrow','cap.note.passed':'that time has already passed',
+'cap.moveTo':'Move to {0}','cap.quota':'{0} {1} window has {2}% left, {3}','cap.quotaAfter':'; better after {0}',
+'sg.none':'Nothing overdue','sg.accepted':'Placed {0} overdue in today’s free slots','sg.pill':'Suggested {0}','sg.bar':'Found free slots today for {0} overdue: {1} (dashed dots)','sg.accept':'Accept all',
+// sheets
+'dlg.back':'Back','dlg.close':'Close',
+'task.title':'Task details','task.name':'Task','task.project':'Project','task.priority':'Priority','task.tag':'Tag','task.plan':'Plan','task.planDate':'Day','task.planTime':'Time (optional)',
+'task.planHint':'When you mean to do it. Leave the day empty to keep the task in Later.','task.deadline':'Deadline','task.dueDate':'Due date','task.dueTime':'Time (optional)',
+'task.deadlineHint':'When it has to be finished. Shishi adds a quiet reminder to AI results when it arrives.','task.source':'Source message','task.remove':'Remove task',
+'project.new':'New project','project.name':'Project name','project.exists':'A project with this name already exists.','project.created':'Created project {0}',
+'tag.new':'New tag','tag.name':'Tag name','tag.exists':'This tag already exists.','tag.created':'Created tag {0}',
+'msg.title':'Capture tasks from a message','msg.hint':'Paste a chat or meeting notes. Shishi finds tasks on this Mac. Review each suggestion beside its source before adding it.','msg.label':'Message',
+'msg.placeholder':'Paste a work message here…','msg.paste':'Paste','msg.find':'Find tasks','msg.finding':'Finding tasks…','msg.findAgain':'Find tasks again',
+'msg.running':'Qwen is running on this Mac. The first run may take a few seconds.','msg.none':'No clear tasks found. Add more context, or add a task yourself.','msg.addOne':'Add a task',
+'msg.tooLong':'This message is over 2,400 characters. Paste it in shorter sections.','msg.noClipboard':'The clipboard has no text.','msg.empty':'Enter a message first.',
+'msg.review':'Review {0} {0|task|tasks}','msg.select':'Select task {0}','msg.toToday':'Add to today','msg.add':'Add selected','msg.pick':'Select at least one task and give each a title.',
+'msg.dupes':'These tasks are already on your list.','msg.added':'Added {0} {0|task|tasks}',
+'wrap.title':'Daily wrap-up','wrap.open':'Still open','wrap.none':'None',
+'con.title':'Connectors','con.mail':'Mail and build updates','con.checking':'Checking…','con.edgeMail':'Show new mail in the result panel',
+'con.codexHint':'Shishi reads Codex sessions on this Mac and saves the final reply from each new turn. Your inbox keeps those replies after you disconnect.','con.check':'Check connection',
+'con.enabled':'Enabled','con.off':'Not connected','con.codexOn':'Connect local Codex','con.codexOff':'Disconnect Codex',
+'con.grokHint':'Copy the instructions into Grok Bot on your Mac. It can then run a local command to send a summary when a task finishes.','con.copyGrok':'Copy Grok Bot instructions',
+'con.mcp':'Other AI apps (MCP)','con.mcpHint':'Add Shishi to an app that supports local MCP servers, then ask it to send the result when its task finishes.','con.copyMcp':'Copy MCP configuration',
+'con.copied':'Copied','con.sync':'Sync','con.syncNow':'Sync now','con.synced':'Synced',
+// results panel
+'pn.title':'Results','pn.waiting':'Waiting for the first result…','pn.unread':'{0} unread','pn.src.all':'All','pn.src.ai':'AI','pn.src.mail':'Mail','pn.src.ci':'Builds','pn.sources':'Source',
+'pn.newer':'{0} newer {0|result|results}','pn.show':'Show','pn.confirm':'Needs you','pn.failed':'Failed','pn.changes':'Changes','pn.files':'Files','pn.raw':'Raw reply','pn.chars':'{0} chars',
+'pn.earlier':'Earlier','pn.open':'Open session','pn.openMail':'Open email','pn.openBuild':'View build','pn.more':'More actions','pn.addToday':'Add to Today','pn.viewRaw':'View raw reply',
+'pn.inbox':'Open inbox','pn.workspace':'Back to workspace','pn.none':'Nothing from this source yet','pn.burst':'{0} results arrived together','pn.burstSub':'{0} need you · {1} failed · {2} done',
+'pn.review':'Open inbox to go through them','pn.from':'from “{0}”','pn.detail':'Details','pn.collapse':'Collapse','pn.added':'Added to Today','pn.state.confirm':'Needs you','pn.state.fail':'Failed','pn.state.done':'Done','pn.state.mail':'New mail','pn.state.due':'Due',
+};
+const ZH={
+'quote':'「{0}」','cancel':'取消','save':'保存','create':'创建','done':'好','later':'以后','list.sep':'、',
+'day.today':'今天','day.tomorrow':'明天','day.yesterday':'昨天','now':'现在 {0}',
+'n.items':'{0} 项','n.itemsB':'{b} 项',
+'undo':'撤销','undo.done':'已撤销','undo.none':'没有可撤销的操作','toast.close':'关闭提示',
+'save.failed':'没能保存：{0}','save.paused':'读不到任务文件，已暂停保存，以免覆盖你的数据。',
+'load.failed':'读不到你的任务，已暂停保存以保护数据。{0}','project.default':'我的工作',
+'side.aria':'侧边栏','side.hide':'隐藏侧边栏','side.show':'显示侧边栏','side.views':'视图','side.projects':'项目','side.tags':'标签',
+'nav.plan':'计划','nav.all':'全部任务','nav.todayTitle':'今天（T）','nav.planTitle':'计划：3 天 / 周（2）','nav.allTitle':'全部未完成的任务','nav.resultsTitle':'AI 结果（I）',
+'tb.backEdge':'回到结果面板','tb.backToday':'‹ 回到今天','tb.add':'添加','tb.addTitle':'快速添加（N）','tb.searchAria':'搜索（/ 或 ⌘F）','tb.searchTitle':'搜索（/）',
+'tb.focusAria':'专注模式（F）','tb.focusTitle':'专注模式：结果先攒着，结束后一次送达（F）','tb.more':'更多',
+'seg.aria':'时间范围','seg.day':'日','seg.three':'3 天','seg.week':'周',
+'mm.done':'显示已完成','mm.rm':'减少动态效果','mm.edge':'显示结果面板','mm.sky':'天色','mm.message':'从消息里提取任务','mm.wrap':'今日小结',
+'mm.compact':'浮动今日','mm.connectors':'连接器','mm.keys':'键盘快捷键',
+'pal.pearl':'珍珠蓝调','pal.rose':'玫瑰暮光','pal.pastel':'薄荷长春花','pal.mono':'单色蓝',
+'keys.t':'回到今天 · 聚焦时间带上的下一项','keys.arrows':'时间带聚焦时：在任务之间移动','keys.enter':'展开当前簇，Esc 收起并回到时间带',
+'keys.days':'前一天 / 后一天','keys.scale':'日 / 3 天 / 周','keys.search':'搜索','keys.undo':'撤销上一步（完成、推迟、移动都可以撤销）',
+'keys.esc':'关闭弹层；再按一次清除全部筛选','keys.n':'快速添加：直接写“明天下午3点 发周报 #团队”','keys.i':'打开 AI 结果',
+'keys.jk':'结果里上下移动；空格展开','keys.eaux':'处理完（归档）· 接受建议 · 标为未读 · 选择','keys.c':'逐条处理未读结果（显示 3/10 进度）',
+'keys.f':'专注模式：结果先攒着，结束后汇总送达','keys.help':'显示这张表',
+'carry':'遗留','carry.aria':'遗留 {0} 项，{1}整理','carry.collapse':'收起','carry.expand':'展开','carry.none':'没有遗留任务',
+'band.backTo':'回到{0}','band.aria':'{0}时间带，用左右方向键在任务之间移动，回车展开','band.tonight':'今晚',
+'band.moreRuns':'还有 {0} 条结果','band.isOverdue':'，已逾期','band.hasOverdue':'，含逾期','band.clusterAria':'{0} 到 {1} 共 {2} 项','band.nOverdue':'{0} 项逾期',
+'band.legend':'图例','band.aiResults':'AI 结果','band.empty':'{0}还没有定时任务 · 在列表里点「安排时间」放进来',
+'band.reset':'{0} {1} 重置','band.resetTitle':'{0} {1}额度在 {2} 重置（现在剩 {3}%）','band.resetAria':'{0} {1} 额度重置',
+'due.at':'截止 {0}','due.title':'截止时间（和计划做的时间分开）',
+'f.all':'全部','f.over':'逾期','f.next':'接下来','f.timed':'已定时','f.untimed':'未定时','f.done':'已完成',
+'f.clearTag':'清除标签筛选 {0}','f.clearProj':'清除项目筛选 {0}','f.clearSearch':'清除搜索','f.clearOnly':'清除簇筛选','f.only':'只看这 {0} 项',
+'f.clearRange':'清除时间段筛选','f.clearAll':'清除全部筛选','f.dragHint':'在时间带上拖动可按时间段筛选','f.clear':'清除筛选','f.seeAll':'看全部','search.placeholder':'搜索任务',
+'prio.high':'高优先级','prio.mid':'中优先级','prio.0':'高（!!）','prio.1':'中（!）','prio.2':'普通',
+'row.slot':'安排','row.slotTitle':'安排到下一个空档','row.deferTo':'推迟到{0}','row.deferToOf':'推迟到{0}：{1}','row.checkOf':'完成：{0}','row.uncheckOf':'标记为未完成：{0}',
+'row.deferHint':'反复推迟的任务通常需要拆小或放进以后','row.deferred':'推迟 {0} 次','row.details':'详情','row.detailsOf':'编辑：{0}',
+'row.toToday':'今天','row.toTodayOf':'移到今天：{0}',
+'grp.tonight':'今晚','grp.doneEarlier':'更早完成',
+'empty.today':'今天很空','empty.day':'{0}还没有安排','empty.hint':'可以先加几件事，或者先看看{0}。','empty.look':'看看{0} · {1} 项',
+'empty.filtered':'没有符合条件的任务','empty.none':'这里没有任务','capture.title':'快速添加',
+'over.noGuilt':'不用愧疚，挑个空档就好','over.suggest':'建议空档','over.suggestTitle':'在时间带上预览空档，确认后才会移动','over.evening':'全部顺延到今晚',
+'un.slotAll':'安排时间…','un.collapse':'收起未定时','un.more':'还有 {0} 项未定时','done.collapse':'收起已完成 {0} 项','done.expand':'已完成 {0} 项 · 点按展开',
+'more.collapse':'收起','more.nMore':'还有 {0} 项',
+'cluster.aria':'{0} 起 {1} 项','cluster.hasOverdue':'含逾期','cluster.only':'在列表中只看这些','cluster.shift':'整体推迟 30 分钟',
+'review.aria':'遗留整理','review.hello':'早上好，','review.title':'之前还有 {0} 项没完成','review.sub':'不会自动堆进今天，处理完这里就清空',
+'review.later':'稍后再说','review.laterAria':'稍后再说（收起，不改动任务）','review.toToday':'移到今天','review.slot':'安排时间','review.top6':'只看最重要的 6 项',
+'review.more':'还有 {0} 项 · 按优先级只先列出 6 项','review.allToday':'全部移到今天','review.allMonday':'全部推迟到下周一','review.allLater':'放进“以后”',
+'review.hint':'超过 7 天未处理的会建议放进“以后”',
+'week.done':'完成 {0}/{1}','week.pastTitle':'{0}已过去 · 遗留任务在今天的「遗留」里处理','week.openDay':'{0} {1}，打开这一天','week.left':'遗留 {0}',
+'week.none':'没有待办','week.next':'下周','week.after':'之后','week.later':'以后 · 未定日期','week.sum':'接下来 {a} 项 · 本周剩余 {b} 项',
+'week.hint':'点今天或之后的某一天打开它 · 过去的日子只读','head.done':'已完成 {0}/{1}',
+'cw.sub':'已完成 {0}/{1} · 逾期 {2} · 未定时 {3}','cw.empty':'今天还没有任务','cw.next':'下一个 · {0}','cw.inMin':'{0} 分钟后','cw.allDone':'全部完成 ✓','cw.noMore':'没有更多定时任务',
+'cw.rollAll':'全部顺延','cw.moreOver':'还有 {0} 项逾期','cw.add':'添加任务','cw.expand':'展开工作区',
+'q.title':'AI 额度','q.aria':'AI 额度：最紧的是 {0}，{1}窗口剩余 {2}%','q.ariaNone':'AI 额度：本机没有可读取的额度','q.ariaShort':'AI 额度，最紧剩余 {0}%','q.label':'{0} 剩 {b}',
+'q.none':'未提供','q.source':'额度来源','q.limitOf':'{0}限额','q.limit':'限额','q.left':'剩余 {0}%','q.credits':'额度','q.foot':'读取本机日志 · 更新于 {0}',
+'q.footNone':'本机暂时读不到任何额度数据','q.leftLabel':'剩余量','q.resetAt':'{0} 重置','q.lastRun':'上次运行','q.lastRunValue':'提取 {0} 条 · {1} 秒',
+'q.state':'状态','q.offline':'离线可用','q.modelMissing':'找不到模型文件','q.localPlan':'本机模型 · 不限额','q.planName':'{0} 套餐',
+'q.win.fiveHour':'5 小时','q.win.weekly':'每周','q.win.sevenDay':'7 天','q.win.daily':'每天','q.win.monthly':'每月',
+'q.why.unconfirmed':'本机日志格式尚未确认','q.why.needsStatusLine':'需要先接入状态栏脚本','q.why.usageOnly':'仅在 /usage 显示','q.why.unknown':'本机读不到',
+'pv.qwen':'本地 Qwen','pv.mail':'邮件','pv.bell':'提醒',
+'rollover':'已经是{0}了 · 之前还有 {1} 项没完成，在「遗留」里处理',
+'t.completed':'已完成{0}','t.restored':'已恢复{0}','t.deferred':'已推迟{0}到{1}','t.deferredOften':' · 已经推迟 {0} 次了，要不要拆小或放进“以后”？',
+'t.noSlotDefer':'今天已经没有空档了 · 可以推迟到明天','t.slotted':'已把{0}安排在{1} {2}','t.toToday':'已把{0}移到今天','t.evening':'已把 {0} 项逾期顺延到今晚',
+'t.noSlot':'今天已经没有空档了','t.slotAll':'已把 {0} 项未定时排进今天的空档','t.slotAllRest':' · 还有 {0} 项放不下','t.pastMidnight':'推迟后会跨过午夜 · 请改为推迟到明天',
+'t.shift':'已把这 {0} 项整体推迟 30 分钟','t.allToday':'已把 {0} 项遗留移到今天','t.allMonday':'已把 {0} 项推迟到下周一（{1}）','t.allLater':'已把 {0} 项放进“以后”',
+'t.reviewHidden':'已收起 · 遗留任务还在，点时间带左侧的「遗留」随时打开','t.motionOff':'已减少动态效果','t.motionOn':'已恢复动态效果',
+'t.added':'已添加{0} · {1}','t.removed':'已删除{0}','t.saved':'已保存{0}',
+'res.title':'AI 结果','res.group.confirm':'需要你确认','res.group.fail':'失败','res.group.done':'已完成 · 无需处理','res.one':'{0}：{1}',
+'res.many':'收到 {0} 条新结果','res.manyGroups':'（{0} 组）','res.manyConfirm':' · {0} 条需要你确认','res.manyFail':' · {0} 条失败','res.view':'查看','res.duringFocus':'专注期间',
+'res.markedUnread':'已标为未读','res.markedRead':'已把 {0} 组标为已读','res.archivedOne':'已归档「{0}…」','res.archivedMany':'已归档 {0} 组',
+'res.nothingToAccept':'这条没有可接受的建议','res.accepted':'已接受：{0}','res.acceptOpen':'接受并打开会话','res.accept':'标为已接受',
+'res.noUnread':'没有未读','res.noDone':'没有已完成的结果','res.select':'选择','res.updates':'{0} 次更新','res.handled':'已处理','res.unread':'未读',
+'res.openMail':'打开邮件','res.openBuild':'查看构建','res.openSession':'打开会话','res.onBand':'在时间带上看','res.raw':'原始回复','res.hideRaw':'收起原始回复',
+'res.markRead':'标为已读','res.markUnread':'标为未读','res.handledBtn':'处理完','res.nUnread':'{0} 条未读','res.catchup':'逐条处理','res.catchupTitle':'逐条处理未读（C）',
+'res.close':'关闭结果（Esc）','res.byStatus':'按状态','res.f.confirm':'需确认','res.f.fail':'失败','res.allSources':'全部来源','res.digest':'摘要',
+'res.digestTitle':'{0} 一次到达 {1} 条','res.digestRead':'已完成的标为已读','res.bulk':'批量操作','res.selected':'已选 {0}','res.archive':'归档','res.selectAll':'全选 {0}',
+'res.allRead':'全部标为已读','res.archiveDone':'归档已完成','res.keys':'J/K 移动 · 空格展开 · E 处理完 · A 接受 · U 未读 · X 选择','res.list':'结果列表',
+'res.emptyHere':'这里没有结果','res.allHandled':'全部处理完','res.emptyHint':'新的结果到达时，会在这里汇总成一条摘要。','res.gUnread':'{0} 未读',
+'res.backToInbox':'← 回到收件箱','res.archived':'已归档 {0} 组','res.connectors':'管理连接器','res.focusHeld':'专注中 · {0} 条稍后送达',
+'res.cuSummary':'处理了 {0} 条 · 归档 {1} · 接受 {2}','res.backToList':'回到列表','res.listShort':'列表','res.next':'下一条','res.prev':'上一条',
+'res.badgeAria':'AI 结果，{0} 条未读','res.badgeConfirm':'，{0} 条需要你确认','res.islandNew':'{b} 条新结果','res.islandConfirm':' · {0} 需确认','res.islandNone':'没有新结果','res.islandAria':'{0} 条新结果',
+'res.notOnBand':'这条结果不在今天的时间带上','res.located':'时间带上的这条结果：{0}',
+'focus.on':'专注中','focus.later':' · {0} 条稍后','focus.aria':'专注中，{0} 条结果稍后送达','focus.started':'专注中 · AI 结果会先攒着，结束后一次送达',
+'focus.ended':'专注结束','focus.now':'现在做：{0}（{1}）','focus.held':'{0} 条结果稍后送达','focus.willHold':'结果会先攒着','focus.end':'结束专注',
+'cap.placeholder':'明天下午3点 发周报 #团队 !','cap.help':'直接写时间：今天 / 明天 / 周五 / 下周一 / 下午3点半 / 30分钟 / #标签 / !!','cap.add':'添加',
+'cap.empty':'输入后这里会显示识别出的日期和时间','cap.task':'任务','cap.date':'日期','cap.time':'时间','cap.tag':'标签','cap.prio':'优先级',
+'cap.noTag':'没有 #{0} 这个标签，会先不加标签','cap.note.pm':'按下午理解','cap.note.tomorrow':'这个时间今天已过，排到明天','cap.note.passed':'这个时间已经过了',
+'cap.moveTo':'改到 {0}','cap.quota':'{0} {1}窗口剩 {2}%，{3}','cap.quotaAfter':'，建议排在 {0} 之后',
+'sg.none':'没有逾期任务','sg.accepted':'已把 {0} 项逾期放进今天的空档','sg.pill':'建议 {0}','sg.bar':'为 {0} 项逾期找到了今天的空档：{1}（虚线圆点）','sg.accept':'全部接受',
+'dlg.back':'返回','dlg.close':'关闭',
+'task.title':'任务详情','task.name':'任务','task.project':'项目','task.priority':'优先级','task.tag':'标签','task.plan':'计划','task.planDate':'哪一天','task.planTime':'时间（可不填）',
+'task.planHint':'打算什么时候做。日期留空就放在“以后”。','task.deadline':'截止','task.dueDate':'截止日期','task.dueTime':'时间（可不填）',
+'task.deadlineHint':'必须完成的时间。到点时 Shishi 会在 AI 结果里安静地提醒一次。','task.source':'来源消息','task.remove':'删除任务',
+'project.new':'新建项目','project.name':'项目名称','project.exists':'已经有同名的项目。','project.created':'已创建项目 {0}',
+'tag.new':'新建标签','tag.name':'标签名称','tag.exists':'这个标签已经存在。','tag.created':'已创建标签 {0}',
+'msg.title':'从消息里提取任务','msg.hint':'粘贴一段聊天或会议记录，Shishi 在这台 Mac 上找出任务。添加前可以对照原文逐条检查。','msg.label':'消息',
+'msg.placeholder':'把工作消息粘贴到这里…','msg.paste':'粘贴','msg.find':'提取任务','msg.finding':'正在提取…','msg.findAgain':'重新提取',
+'msg.running':'Qwen 正在这台 Mac 上运行，第一次可能需要几秒。','msg.none':'没有找到明确的任务。可以补充上下文，或者自己添加。','msg.addOne':'添加一个任务',
+'msg.tooLong':'这段消息超过 2,400 个字符，请分段粘贴。','msg.noClipboard':'剪贴板里没有文字。','msg.empty':'先输入一段消息。',
+'msg.review':'检查 {0} 个任务','msg.select':'选择第 {0} 个任务','msg.toToday':'加入今天','msg.add':'添加所选','msg.pick':'至少选一个任务，并给每个任务写上标题。',
+'msg.dupes':'这些任务已经在列表里了。','msg.added':'已添加 {0} 个任务',
+'wrap.title':'今日小结','wrap.open':'还没完成','wrap.none':'没有',
+'con.title':'连接器','con.mail':'邮件和构建通知','con.checking':'正在检查…','con.edgeMail':'在结果面板里显示新邮件',
+'con.codexHint':'Shishi 读取这台 Mac 上的 Codex 会话，保存每轮新对话的最终回复。断开后，已保存的回复仍然留在收件箱。','con.check':'检查连接',
+'con.enabled':'已启用','con.off':'未连接','con.codexOn':'连接本机 Codex','con.codexOff':'断开 Codex',
+'con.grokHint':'把说明复制给这台 Mac 上的 Grok Bot，它就能在任务结束时运行本地命令送来摘要。','con.copyGrok':'复制 Grok Bot 说明',
+'con.mcp':'其他 AI 应用（MCP）','con.mcpHint':'把 Shishi 加到支持本地 MCP 服务器的应用里，再让它在任务结束时送来结果。','con.copyMcp':'复制 MCP 配置',
+'con.copied':'已复制','con.sync':'同步','con.syncNow':'立即同步','con.synced':'已同步',
+'pn.title':'结果','pn.waiting':'等待第一条结果…','pn.unread':'{0} 条未读','pn.src.all':'全部','pn.src.ai':'AI','pn.src.mail':'邮件','pn.src.ci':'构建','pn.sources':'来源',
+'pn.newer':'有 {0} 条更新的结果','pn.show':'显示','pn.confirm':'需要你确认','pn.failed':'失败','pn.changes':'改动','pn.files':'文件','pn.raw':'原始回复','pn.chars':'{0} 字',
+'pn.earlier':'更早','pn.open':'打开会话','pn.openMail':'打开邮件','pn.openBuild':'查看构建','pn.more':'更多操作','pn.addToday':'加入今天','pn.viewRaw':'查看原始回复',
+'pn.inbox':'打开收件箱','pn.workspace':'返回工作区','pn.none':'这个来源暂时没有结果','pn.burst':'同时到达 {0} 条结果','pn.burstSub':'{0} 条需要你确认 · {1} 条失败 · {2} 条已完成',
+'pn.review':'打开收件箱逐条处理','pn.from':'来自“{0}”','pn.detail':'详情','pn.collapse':'收起','pn.added':'已加入今天','pn.state.confirm':'需要你确认','pn.state.fail':'失败','pn.state.done':'已完成','pn.state.mail':'新邮件','pn.state.due':'已到期',
+};
+const WD_ZH='日一二三四五六';
+const DATES={
+  en:{md:(m,d)=>`${MONTHS_EN[m-1]} ${d}`,weekdayShort:w=>WD_EN[w].slice(0,3),long:(m,d,w)=>`${WD_EN[w]}, ${MONTHS_LONG[m-1]} ${d}`,range:(m,a,b)=>`${MONTHS_EN[m-1]} ${a} – ${b}`},
+  zh:{md:(m,d)=>`${m}月${d}日`,weekdayShort:w=>'周'+WD_ZH[w],long:(m,d,w)=>`${m}月${d}日 星期${WD_ZH[w]}`,range:(m,a,b)=>`${m}月${a}日 – ${b}日`},
+};
+const MONTHS_EN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_LONG=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const WD_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+let lang='en',table=EN,timeZone='';
+function use(languages,zone){
+  const first=String((languages||[])[0]||'en').toLowerCase();
+  lang=first.startsWith('zh')?'zh':'en';table=lang==='zh'?ZH:EN;timeZone=zone||'';
+  document.documentElement.lang=lang==='zh'?'zh-Hans':'en-US';
+}
+const RELATIVE=/^(Today|Tomorrow|Yesterday)$/;
+function tr(key,...args){
+  const s=table[key]??EN[key];
+  if(s==null)return key;
+  return s.replace(/\{(\d)(:l)?(?:\|([^|}]*)\|([^}]*))?\}/g,(_,i,lower,one,many)=>{
+    const v=args[+i];
+    if(one!==undefined)return +v===1?one:many;
+    return lower&&RELATIVE.test(v)?String(v).toLowerCase():String(v??'');
+  });
+}
+/* Fill static markup: data-i18n (text), data-i18n-title, data-i18n-aria (aria-label). */
+function apply(root){
+  root.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=tr(el.dataset.i18n)});
+  root.querySelectorAll('[data-i18n-title]').forEach(el=>{el.title=tr(el.dataset.i18nTitle)});
+  root.querySelectorAll('[data-i18n-aria]').forEach(el=>{el.setAttribute('aria-label',tr(el.dataset.i18nAria))});
+}
+return {use,tr,apply,keys:()=>({en:Object.keys(EN),zh:Object.keys(ZH)}),get zh(){return lang==='zh'},get lang(){return lang},get timeZone(){return timeZone},get dates(){return DATES[lang]}};
+})();
+const tr=I18n.tr;

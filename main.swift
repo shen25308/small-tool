@@ -6,6 +6,9 @@ struct Entry: Codable {
     let id, title, project, tag, priority, planned, source, quote: String
     let done: Bool
     let dueDate, dueTime: String?
+    // Format 2. `planned` + `plannedTime` say when the user means to do the task; `dueDate` + `dueTime` stay the deadline.
+    let plannedTime, completedAt: String?
+    let deferCount: Int?
 }
 struct DeadlineReminder: Equatable {
     let id, title, summary, date: String
@@ -43,8 +46,9 @@ struct Workspace: Codable {
     let version: Int
     let projects: [String]
     let tasks: [Entry]
+    static let currentVersion = 2
     func validate() throws {
-        guard version == 1, !projects.isEmpty, Set(projects).count == projects.count,
+        guard version == 1 || version == Workspace.currentVersion, !projects.isEmpty, Set(projects).count == projects.count,
               Set(tasks.map(\.id)).count == tasks.count,
               tasks.allSatisfy({projects.contains($0.project) && !$0.title.isEmpty}) else {
             throw AppIssue("Invalid workspace data.")
@@ -181,10 +185,67 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         result.onHistory = { [weak self] in self?.openWorkspace(inbox:true,fromEdge:true) }
         result.onWorkspace = { [weak self] in self?.openWorkspace(inbox:false,fromEdge:true) }
         result.onRead = { [weak self] id, channel in self?.markNotice(id,channel:channel) }
+        result.onOpen = { [weak self] id, channel, thread in self?.openSource(key:id,channel:channel,thread:thread) }
+        result.onAddTask = { [weak self] title in self?.tell("addTaskFromResult",title) }
         return result
     }()
     private lazy var providers = ExternalProviders(resources:resources)
     private var storeUnreadable = false
+    private var lastExtraction: [String:Any]?
+    /// Format 1 gains three optional task fields in format 2. The original file is kept beside the new one,
+    /// because earlier versions of Shishi refuse to open a format 2 file.
+    private func upgradeWorkspace(_ bytes:Data) throws -> Data {
+        let backup=file.deletingLastPathComponent().appendingPathComponent("Workspace.v1.backup.json")
+        if !FileManager.default.fileExists(atPath:backup.path) {try bytes.write(to:backup,options:.atomic)}
+        guard var object=try JSONSerialization.jsonObject(with:bytes) as? [String:Any] else {throw AppIssue("Invalid workspace data.")}
+        object["version"]=Workspace.currentVersion
+        let upgraded=try JSONSerialization.data(withJSONObject:object,options:[.sortedKeys])
+        try upgraded.write(to:file,options:.atomic)
+        return upgraded
+    }
+    private func openSource(key:String,channel:String,thread:String) {
+        if UUID(uuidString:thread) != nil, let url=URL(string:"codex://threads/"+thread) {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        guard channel=="external" else {return}
+        inboxQueue.async {
+            guard let row=self.lastExternalRows.first(where:{$0["id"] as? String == key}),
+                  let link=row["link"] as? String, let source=row["source"] as? String,
+                  let url=ConnectorInbox.safeLink(link,source:source) else {return}
+            DispatchQueue.main.async {NSWorkspace.shared.open(url)}
+        }
+    }
+    private func applyInboxChanges(_ changes:[[String:Any]],request:String) {
+        let codex=inbox, external=externalInbox
+        inboxQueue.async {
+            do {
+                for change in changes {
+                    guard let key=change["id"] as? String else {continue}
+                    let flags=NoticeFlags(read:change["read"] as? Bool,archived:change["archived"] as? Bool,accepted:change["accepted"] as? Bool)
+                    if change["channel"] as? String=="external" {try external.setFlags(key,flags)} else {try codex.setFlags(key,flags)}
+                }
+                self.scanInboxes(force:true)
+                DispatchQueue.main.async {self.reply(request,true,true)}
+            } catch {
+                self.scanInboxes(force:true)
+                DispatchQueue.main.async {self.reply(request,false,error.localizedDescription)}
+            }
+        }
+    }
+    /// Only figures this Mac can read without a network request. Providers with no confirmed local source say why.
+    private func quotaReport() -> [String:Any] {
+        var local:[String:Any]=["id":"qwen","windows":[Any](),"status":"local",
+                                "available":FileManager.default.fileExists(atPath:resources.appendingPathComponent("assistant.gguf").path)]
+        if let run=lastExtraction {local["lastRun"]=run}
+        func unread(_ id:String, _ status:String) -> [String:Any] {
+            let row:[String:Any]=["id":id,"windows":[Any](),"status":status]
+            return row
+        }
+        let providers:[[String:Any]]=[unread("codex","unconfirmed"),unread("claude","needsStatusLine"),unread("grok","usageOnly"),local]
+        let report:[String:Any]=["providers":providers]
+        return report
+    }
     private let resources = Bundle.main.resourceURL!
 
     override init() {
@@ -452,9 +513,10 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
             case "load":
                 if FileManager.default.fileExists(atPath:file.path) {
                     do{
-                        let bytes=try Data(contentsOf:file)
+                        var bytes=try Data(contentsOf:file)
                         let state=try JSONDecoder().decode(Workspace.self,from:bytes)
                         try state.validate()
+                        if state.version < Workspace.currentVersion {bytes=try upgradeWorkspace(bytes)}
                         updateReminders(state)
                         reply(id,true,try JSONSerialization.jsonObject(with:bytes))
                     }catch{storeUnreadable=true;throw error}
@@ -485,6 +547,27 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 }
                 reply(id,true,true)
                 if let text=pendingSource{pendingSource=nil;receive(text)}
+            case "locale":
+                let info:[String:Any]=["languages":Locale.preferredLanguages,"timeZone":TimeZone.current.identifier]
+                reply(id,true,info)
+            case "prefs":
+                // Interface preferences (sky palette, hidden sidebar, …). The web view keeps no storage of its own.
+                var stored=UserDefaults.standard.dictionary(forKey:"ShiShiUIPrefs") ?? [:]
+                if let changes=body["set"] as? [String:Any] {
+                    for (key,value) in changes where key.count<=40 {
+                        if value is NSNull {stored.removeValue(forKey:key)}
+                        else if value is String || value is NSNumber {stored[key]=value}
+                    }
+                    UserDefaults.standard.set(stored,forKey:"ShiShiUIPrefs")
+                }
+                reply(id,true,stored)
+            case "quota": reply(id,true,quotaReport())
+            case "inboxState":
+                guard let changes=body["changes"] as? [[String:Any]] else {throw AppIssue("The inbox change is missing.")}
+                applyInboxChanges(changes,request:id)
+            case "focus":
+                edge.holding=body["value"] as? Bool == true
+                reply(id,true,edge.holding)
             case "syncInboxes":
                 inboxQueue.async {
                     self.scanInboxes(force:true)
@@ -596,10 +679,14 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
                 processing=true
                 let resources=self.resources
                 let runtime=Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/Inference")
+                let started=Date()
                 DispatchQueue.global(qos:.userInitiated).async {
                     let result=Result{try Engine.extract(text,resources:resources,runtime:runtime)}
                     DispatchQueue.main.async {
                         self.processing=false
+                        if case .success(let rows)=result {
+                            self.lastExtraction=["seconds":Date().timeIntervalSince(started),"count":rows.count,"at":Date().timeIntervalSince1970]
+                        }
                         switch result {
                         case .success(let rows): self.reply(id,true,rows.map{["title":$0.title,"quote":$0.quote,"tag":$0.tag]})
                         case .failure(let error):self.reply(id,false,error.localizedDescription)

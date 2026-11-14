@@ -9,17 +9,22 @@ final class EdgeResultsPanel: NSObject, WKScriptMessageHandler, WKNavigationDele
     var onWorkspace: (() -> Void)?
     var onHistory: (() -> Void)?
     var onVisibility: ((Bool) -> Void)?
+    var onOpen: ((String,String,String) -> Void)?
+    var onAddTask: ((String) -> Void)?
+    /// Focus mode: results keep arriving in the inbox, and the panel shows them together once focus ends.
+    var holding = false { didSet { if !holding {send()} } }
     var showsMail = UserDefaults.standard.bool(forKey:"ShiShiDesktopMail")
     private var loaded = false
-    private var byChannel: [String:[String:Any]] = [:]
+    private var byChannel: [String:[[String:Any]]] = [:]
+    private let rowLimit = 40
     private enum Mode: String {
         case preview, details, original
 
         var contentSize: NSSize {
             switch self {
-            case .preview: return NSSize(width:292,height:80)
-            case .details: return NSSize(width:372,height:272)
-            case .original: return NSSize(width:410,height:430)
+            case .preview: return NSSize(width:320,height:96)
+            case .details: return NSSize(width:400,height:460)
+            case .original: return NSSize(width:400,height:620)
             }
         }
     }
@@ -116,18 +121,22 @@ final class EdgeResultsPanel: NSObject, WKScriptMessageHandler, WKNavigationDele
         web.evaluateJavaScript("window.forgetDisplayedResult()",completionHandler:nil)
     }
     func accept(channel:String,items:[[String:Any]]) {
-        let suitable=items.first { row in
+        // The page merges results that arrive together into one preview, so it needs every open row, not only the latest.
+        let suitable=items.filter { row in
             let source=row["source"] as? String
-            return showsMail || (source != "Gmail" && source != "Outlook")
+            return row["archived"] as? Bool != true && (showsMail || (source != "Gmail" && source != "Outlook"))
         }
-        if var latest=suitable {latest["channel"]=channel;byChannel[channel]=latest}
-        else {byChannel.removeValue(forKey:channel)}
+        byChannel[channel]=suitable.prefix(rowLimit).map { row -> [String:Any] in
+            var row=row
+            row["channel"]=channel
+            return row
+        }
         send()
     }
     private func send() {
-        guard loaded else {return}
-        let items=byChannel.values.sorted {($0["time"] as? Double ?? 0)>($1["time"] as? Double ?? 0)}
-        web.callAsyncJavaScript("window.setEdgeInbox(value);",arguments:["value":["items":items]],in:nil,in:.page,completionHandler:nil)
+        guard loaded, !holding else {return}
+        let items=byChannel.values.flatMap {$0}.sorted {($0["time"] as? Double ?? 0)>($1["time"] as? Double ?? 0)}
+        web.callAsyncJavaScript("window.setEdgeInbox(value);",arguments:["value":["items":Array(items.prefix(rowLimit))]],in:nil,in:.page,completionHandler:nil)
     }
     func userContentController(_ controller:WKUserContentController,didReceive message:WKScriptMessage) {
         guard message.frameInfo.isMainFrame, message.frameInfo.request.url?.lastPathComponent=="result-panel.html",
@@ -138,6 +147,10 @@ final class EdgeResultsPanel: NSObject, WKScriptMessageHandler, WKNavigationDele
         case "history":onHistory?()
         case "read":
             if let id=body["key"] as? String,let channel=body["channel"] as? String {onRead?(id,channel)}
+        case "open":
+            if let id=body["key"] as? String,let channel=body["channel"] as? String {onOpen?(id,channel,body["thread"] as? String ?? "")}
+        case "addTask":
+            if let title=body["title"] as? String, !title.isEmpty {onAddTask?(String(title.prefix(240)))}
         case "resize":
             if let name=body["mode"] as? String,let mode=Mode(rawValue:name) { resize(to:mode) }
         case "expanded":

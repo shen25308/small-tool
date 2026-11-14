@@ -244,7 +244,8 @@ def purge_deliveries(account):
         if not re.fullmatch(r"[0-9a-f]{64}",event[len(prefix):]):continue
         expected=hashlib.sha256((source+"\0"+event).encode()).hexdigest()
         if expected!=path.stem:continue
-        path.with_suffix(".read").unlink(missing_ok=True)
+        for receipt in (".read",".archived",".accepted"):
+            path.with_suffix(receipt).unlink(missing_ok=True)
         path.unlink(missing_ok=True)
         count+=1
     return count

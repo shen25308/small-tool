@@ -6,56 +6,122 @@
   <meta name="color-scheme" content="light dark">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'">
   <link rel="stylesheet" href="tokens.css">
-  <link rel="stylesheet" href="symbols.css">
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="results.css">
-  <link rel="stylesheet" href="board.css">
-  <link rel="stylesheet" href="task-list.css">
-  <title>My Notes · Shishi</title>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="plan.css">
+  <link rel="stylesheet" href="inbox.css">
+  <link rel="stylesheet" href="mini.css">
+  <link rel="stylesheet" href="motion.css">
+  <link rel="stylesheet" href="app.css">
+  <title>Shishi</title>
 </head>
 <body>
-  <div id="shell">
-    <aside aria-label="Sidebar">
-      <h2 class="side-title">My notes</h2>
-      <nav id="nav" aria-label="Lists"></nav>
-      <div class="side-heading"><h2>Projects</h2><button id="newProject" title="New project" aria-label="New project"><span class="symbol plus" aria-hidden="true"></span></button></div>
-      <nav id="projects" aria-label="Projects"></nav>
-      <div class="side-heading"><h2>Tags</h2><button id="newTag" title="New tag" aria-label="New tag"><span class="symbol plus" aria-hidden="true"></span></button></div>
-      <nav id="labels" aria-label="Tags"></nav>
-    </aside>
-    <main>
-      <div class="content">
-        <header class="mountain-cover">
-          <div class="mountain-art" aria-hidden="true"><i class="back-range"></i><i class="middle-range"></i><i class="front-hills"></i></div>
-          <button id="workspaceReturn" hidden><span class="symbol back" aria-hidden="true"></span>Back to panel</button>
-          <div class="cover-tools">
-            <button id="inboxButton" title="Open inbox"><span>Inbox</span><span id="inboxBadge" hidden></span></button>
-            <button id="searchTasks" aria-label="Search tasks" title="Search tasks (⌘F)"><span class="search-icon" aria-hidden="true"></span></button>
-            <button id="boardMore" aria-label="More options" aria-haspopup="true" popovertarget="boardMenu" title="More options"><span aria-hidden="true">•••</span></button>
-          </div>
-        </header>
-        <div class="board-content">
-          <section class="page-heading">
-            <div class="heading-line"><span id="viewIcon" aria-hidden="true"></span><h1 id="pageTitle">Today</h1></div>
-            <div id="dateline"></div>
-            <button id="wrapUp" title="Review today's tasks">Wrap up</button>
-          </section>
-          <div id="latestPeek" hidden><section id="latestResult" hidden><div class="result-shelf-head"><h2>Latest result</h2><button id="closePeek" aria-label="Hide latest result">×</button></div><div id="latestCard"></div></section></div>
-          <div class="listhead"><div class="reader-only"><h2 id="sectionTitle"></h2><span id="count"></span></div><label class="sort-menu"><span aria-hidden="true">⇅</span><select id="taskSort" aria-label="Sort tasks"><option value="manual">Manual order</option><option value="priority">Priority</option><option value="deadline">Deadline</option></select></label></div>
-          <div id="tasks"></div><div id="pool"></div>
-        </div>
+  <div class="ws dense-ws" id="ws">
+    <aside class="side" data-i18n-aria="side.aria">
+      <div class="side-top">
+        <span class="side-name" data-i18n="app.name"></span>
+        <button class="icon-btn" id="sideToggle" aria-pressed="false" data-i18n-aria="side.hide" data-i18n-title="side.hide"><svg class="i"><use href="#sidebar"/></svg></button>
       </div>
+      <div class="scroll">
+        <nav data-i18n-aria="side.views">
+          <button class="nav-row sel" data-nav="today" data-i18n-title="nav.todayTitle"><svg class="i fill star"><use href="#star"/></svg><span data-i18n="day.today"></span><span class="n"></span></button>
+          <button class="nav-row" data-nav="plan" data-i18n-title="nav.planTitle"><svg class="i"><use href="#calendar"/></svg><span data-i18n="nav.plan"></span><span class="n"></span></button>
+          <button class="nav-row" data-nav="all" data-i18n-title="nav.allTitle"><svg class="i"><use href="#list"/></svg><span data-i18n="nav.all"></span><span class="n"></span></button>
+          <button class="nav-row" data-inbox data-inbox-label data-i18n-title="nav.resultsTitle"><svg class="i"><use href="#tray"/></svg><span data-i18n="res.title"></span><span class="n"></span></button>
+          <button class="nav-row" data-nav="done"><svg class="i"><use href="#check-circle"/></svg><span data-i18n="f.done"></span></button>
+        </nav>
+        <h3><span data-i18n="side.projects"></span><button class="icon-btn" id="newProject" data-i18n-aria="project.new" data-i18n-title="project.new"><svg class="i sm"><use href="#plus"/></svg></button></h3>
+        <nav id="sideProjects" data-i18n-aria="side.projects"></nav>
+        <h3><span data-i18n="side.tags"></span><button class="icon-btn" id="newTag" data-i18n-aria="tag.new" data-i18n-title="tag.new"><svg class="i sm"><use href="#plus"/></svg></button></h3>
+        <nav id="sideTags" data-i18n-aria="side.tags"></nav>
+      </div>
+      <button class="side-quota" id="sideQuota" aria-haspopup="dialog" aria-expanded="false">
+        <svg class="qring" viewBox="0 0 36 36" data-ring></svg>
+        <span class="sq-l" data-i18n="q.title"></span>
+        <span class="sq-r"></span>
+      </button>
+    </aside>
+    <main class="main">
+      <div class="toolbar"><button class="btn small" id="backEdge" hidden><svg class="i"><use href="#chev-left"/></svg><span data-i18n="tb.backEdge"></span></button><button class="btn small" id="backToday" hidden data-i18n="tb.backToday"></button><button class="isl" id="island"></button><button class="btn small addbtn" id="addBtn" data-i18n-title="tb.addTitle"><svg class="i"><use href="#plus"/></svg><span data-i18n="tb.add"></span></button><div class="tb-group glass">
+        <button id="sideShow" aria-pressed="false" data-i18n-aria="side.show" data-i18n-title="side.show"><svg class="i"><use href="#sidebar"/></svg></button>
+        <button id="searchBtn" data-i18n-aria="tb.searchAria" data-i18n-title="tb.searchTitle"><svg class="i"><use href="#search"/></svg></button>
+        <button id="focusBtn" aria-pressed="false" data-i18n-aria="tb.focusAria" data-i18n-title="tb.focusTitle"><svg class="i"><use href="#moon"/></svg></button>
+        <button id="inboxBtn" data-inbox-label data-i18n-title="nav.resultsTitle"><svg class="i"><use href="#tray"/></svg><span class="badge" data-inbox-badge hidden></span></button>
+        <button id="moreBtn" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="tb.more" data-i18n-title="tb.more"><svg class="i"><use href="#ellipsis"/></svg></button></div>
+        <div class="mmenu glass" id="moreMenu" role="menu" hidden>
+          <button role="menuitemcheckbox" id="mmDone" data-m="done" aria-checked="false" data-i18n="mm.done"></button>
+          <button role="menuitemcheckbox" id="mmRm" data-m="rm" aria-checked="false" data-i18n="mm.rm"></button>
+          <button role="menuitemcheckbox" id="mmEdge" data-m="edge" aria-checked="false" data-i18n="mm.edge"></button>
+          <div class="sep"></div>
+          <div class="mm-h" data-i18n="mm.sky"></div>
+          <button role="menuitemradio" data-m="pal" data-pal="pearl" aria-checked="false" data-i18n="pal.pearl"></button>
+          <button role="menuitemradio" data-m="pal" data-pal="rose" aria-checked="false" data-i18n="pal.rose"></button>
+          <button role="menuitemradio" data-m="pal" data-pal="pastel" aria-checked="false" data-i18n="pal.pastel"></button>
+          <button role="menuitemradio" data-m="pal" data-pal="mono" aria-checked="false" data-i18n="pal.mono"></button>
+          <div class="sep"></div>
+          <button role="menuitem" data-m="message"><span data-i18n="mm.message"></span><kbd>⌘K</kbd></button>
+          <button role="menuitem" data-m="wrap" data-i18n="mm.wrap"></button>
+          <button role="menuitem" data-m="compact"><span data-i18n="mm.compact"></span><kbd>⌘P</kbd></button>
+          <button role="menuitem" data-m="connectors" data-i18n="mm.connectors"></button>
+          <div class="sep"></div>
+          <button role="menuitem" data-m="keys"><span data-i18n="mm.keys"></span><kbd>?</kbd></button>
+        </div></div>
+      <div class="content">
+        <p class="load-error" id="loadError" role="alert" hidden></p>
+        <div class="title-row">
+          <h1><svg class="i fill"><use href="#star"/></svg><span id="dTitle"></span></h1>
+          <span class="date" id="dDate"></span>
+          <div class="seg scale" role="tablist" data-i18n-aria="seg.aria">
+            <button data-scale="day" class="on" role="tab" data-i18n="seg.day"></button><button data-scale="3" role="tab" data-i18n="seg.three"></button><button data-scale="week" role="tab" data-i18n="seg.week"></button></div>
+        </div>
+        <div class="filters" id="filters"></div>
+        <div id="bandWrap"></div>
+        <div id="review"></div>
+        <div class="dlist" id="dList"></div>
+      </div>
+      <div class="cpop glass hidden" id="cpop" role="dialog"></div>
+      <div class="sr" id="bandSR" aria-live="polite"></div>
     </main>
   </div>
-  <div id="boardMenu" popover="auto" aria-label="Workspace options">
-    <button id="openCapture"><span class="symbol sparkles" aria-hidden="true"></span>Capture tasks from a message</button>
-    <button id="manual"><span class="symbol plus" aria-hidden="true"></span>Add task</button>
-    <button id="peekLatest"><span class="symbol inbox" aria-hidden="true"></span>Latest result</button>
-    <button id="edgeToggle" aria-pressed="false"><span class="symbol edge" aria-hidden="true"></span><span>Show result panel</span></button>
-    <button id="pin" aria-label="Switch to compact view">Compact view</button>
+
+  <div class="compact-win dense-compact" id="cw" hidden>
+    <div class="cw-head">
+      <div class="r1"><span></span><div class="cw-tools"><button class="icon-btn" id="cwQuota" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="q.title"><svg class="qring sm" viewBox="0 0 36 36" data-ring></svg></button><button class="icon-btn wide" id="cwInbox" data-inbox-label data-i18n-title="res.title"><svg class="i"><use href="#tray"/></svg><span class="badge" data-inbox-badge hidden></span></button><button class="icon-btn" id="cwExpand" data-i18n-aria="cw.expand" data-i18n-title="cw.expand"><svg class="i"><use href="#sidebar"/></svg></button></div></div>
+      <div class="cw-title"><svg class="ring" viewBox="0 0 36 36"><circle class="tr" cx="18" cy="18" r="15"/><circle class="fg" id="cwRing" cx="18" cy="18" r="15" transform="rotate(-90 18 18)" stroke-dasharray="94.25"/></svg>
+        <div><h2 data-i18n="day.today"></h2><p id="cwSub"></p></div></div>
+      <div class="cband" id="cBand"></div>
+    </div>
+    <div class="cw-list" id="cList"></div>
+    <div class="cw-foot"><button class="quick" id="cwAdd" data-i18n-title="tb.addTitle"><svg class="i sm"><use href="#plus"/></svg><span data-i18n="cw.add"></span><kbd>N</kbd></button></div>
   </div>
+
+  <div class="qpop glass hidden" id="qpop" role="dialog" tabindex="-1" data-i18n-aria="q.title">
+    <div class="hd"><h3 data-i18n="q.title"></h3></div>
+    <div id="qcards"></div>
+    <div class="ft"><span id="qFoot"></span><span data-i18n="q.leftLabel"></span></div>
+  </div>
+  <div class="keys-scrim" id="keys" hidden><div class="keys glass" role="dialog" aria-modal="true" data-i18n-aria="mm.keys">
+    <div class="kh"><b data-i18n="mm.keys"></b><button class="icon-btn" data-close-sheet data-i18n-aria="dlg.close"><svg class="i rot45"><use href="#plus"/></svg></button></div>
+    <dl>
+      <dt><kbd>T</kbd></dt><dd data-i18n="keys.t"></dd>
+      <dt><kbd>←</kbd><kbd>→</kbd></dt><dd data-i18n="keys.arrows"></dd>
+      <dt><kbd>↩</kbd> <kbd>Esc</kbd></dt><dd data-i18n="keys.enter"></dd>
+      <dt><kbd>⌥</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd data-i18n="keys.days"></dd>
+      <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd data-i18n="keys.scale"></dd>
+      <dt><kbd>/</kbd> <kbd>⌘F</kbd></dt><dd data-i18n="keys.search"></dd>
+      <dt><kbd>⌘Z</kbd></dt><dd data-i18n="keys.undo"></dd>
+      <dt><kbd>Esc</kbd></dt><dd data-i18n="keys.esc"></dd>
+      <dt><kbd>N</kbd></dt><dd data-i18n="keys.n"></dd>
+      <dt><kbd>I</kbd></dt><dd data-i18n="keys.i"></dd>
+      <dt><kbd>J</kbd><kbd>K</kbd> <kbd>Space</kbd></dt><dd data-i18n="keys.jk"></dd>
+      <dt><kbd>E</kbd> <kbd>A</kbd> <kbd>U</kbd> <kbd>X</kbd></dt><dd data-i18n="keys.eaux"></dd>
+      <dt><kbd>C</kbd></dt><dd data-i18n="keys.c"></dd>
+      <dt><kbd>F</kbd></dt><dd data-i18n="keys.f"></dd>
+      <dt><kbd>?</kbd></dt><dd data-i18n="keys.help"></dd>
+    </dl></div></div>
   <dialog id="dialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
-  <div id="toast" role="status" aria-live="polite"></div>
-  <script src="theme.js"></script><script src="sprite.js"></script><script src="sky.js"></script><script src="app.js"></script><script src="result-digest.js"></script><script src="result-ui.js"></script><script src="providers.js"></script><script src="inbox.js"></script><script src="board.js"></script>
+  <script src="theme.js"></script><script src="sprite.js"></script><script src="i18n.js"></script><script src="sky.js"></script><script src="bridge.js"></script>
+  <script src="store.js"></script><script src="mini.js"></script><script src="plan.js"></script><script src="motion.js"></script>
+  <script src="result-digest.js"></script><script src="result-status.js"></script><script src="results.js"></script>
+  <script src="capture-zh.js"></script><script src="capture.js"></script><script src="dialogs.js"></script><script src="providers.js"></script><script src="main.js"></script>
 </body>
 </html>

@@ -1,0 +1,123 @@
+/* Production layout on top of the ported design: the page fills the real window (min 635×420, floating Today
+   356×484), lists scroll, the sidebar collapses when the window is narrow, and modal sheets use the tokens. */
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg)}
+[hidden]{display:none!important}
+button:disabled{opacity:.45}
+.rot45{transform:rotate(45deg)}
+svg.i.sm{width:13px;height:13px}
+svg.i.big{width:28px;height:28px}
+.sp{flex:1}
+
+/* ---------- main window ---------- */
+.ws{position:fixed;inset:0;left:0;top:0;transform:none;width:auto;height:auto;grid-template-columns:236px minmax(0,1fr)}
+.ws.noside{grid-template-columns:minmax(0,1fr)}
+.ws .side{display:flex;flex-direction:column;min-height:0}
+.side-top{padding:2px 4px 10px 10px}
+.side-name{font:600 13px/20px var(--font);color:var(--label2)}
+.side .scroll{overflow-y:auto;min-height:0}
+.nav-row>span:not(.n):not(.dot){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.side-quota .sq-l{white-space:nowrap;flex:none}
+.side-quota .sq-r{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.main{min-width:0;display:flex;flex-direction:column}
+.dense-ws .content{flex:1;min-height:0;height:auto;overflow-y:auto;overflow-x:hidden;padding:18px 28px 24px 28px}
+.dense-ws .title-row{padding-right:0;height:auto;min-height:60px;padding-top:34px;flex-wrap:wrap;row-gap:6px}
+.title-row .date{min-width:0}
+.toolbar{max-width:calc(100% - 28px)}
+.filters{flex-wrap:wrap;row-gap:6px}
+.load-error{margin:0 0 8px;padding:10px 12px;border-radius:9px;background:color-mix(in srgb,var(--red) 10%,transparent);color:var(--red);font:var(--t-body)}
+#sideShow{display:none}
+.ws.noside #sideShow{display:inline-flex}
+@media (max-width:719px){
+  .ws{grid-template-columns:minmax(0,1fr)}
+  .ws .side{display:none}
+  .ws.forceside .side{display:flex;position:absolute;left:0;top:0;bottom:0;width:236px;z-index:40;margin:8px;background:var(--bg-raised);box-shadow:var(--glass-shadow)}
+  .ws.forceside #sideToggle{display:none}
+  #sideShow{display:inline-flex}
+  .dense-ws .content{padding:14px 16px 20px}
+  .edge-zone{width:44px}
+  .drow .racts .ra[data-a="details"]{display:none}
+}
+@media (max-height:520px){.dense-ws .title-row{padding-top:30px;min-height:0}}
+
+/* ---------- list additions ---------- */
+.qpop{max-width:calc(100vw - 16px);max-height:calc(100vh - 56px);overflow-y:auto}
+.drow .ttl{min-width:0}
+.due{font:var(--t-cap);color:var(--label2);white-space:nowrap;margin-right:8px;font-variant-numeric:tabular-nums}
+.due.over{color:var(--red)}
+.cpop .tm.over{color:var(--red)}
+.dgrp.inset{margin-left:8px}
+.collapsed-row.inset{padding-left:44px}
+.btrack .bdue{position:absolute;bottom:9px;width:7px;height:7px;margin-left:-3.5px;transform:rotate(45deg);border:1.5px solid var(--label2);border-radius:1.5px;background:var(--bg);z-index:2}
+.btrack .bdue.over{border-color:var(--red)}
+.blane.point{border-radius:999px;min-width:10px}
+.mmenu{max-height:calc(100vh - 70px);overflow-y:auto}
+.mmenu .mm-h{font:var(--t-cap);color:var(--label3);padding:6px 12px 2px}
+.mmenu button[role="menuitemradio"][aria-checked="true"]::before{content:"✓"}
+.mmenu button>span{flex:1;text-align:left}
+
+/* ---------- AI results additions ---------- */
+.ib-warn{margin:4px 14px;font:var(--t-cap);color:var(--warn)}
+.ir-files{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.ir-files code{font:11px/16px var(--mono);background:var(--fill);border-radius:5px;padding:1px 6px}
+.ir-raw{margin:8px 0;padding:10px;border-radius:9px;background:var(--fill);font:12px/18px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}
+.ib-foot{gap:14px}
+
+/* ---------- floating Today fills its window ---------- */
+#cw,.compact-win,.dense-compact{position:fixed;inset:0;left:0;top:0;right:0;width:auto;height:auto;border-radius:0}
+.cw-tools{display:flex;gap:2px;align-items:center}
+.cw-head .r1>span{flex:1}
+.icon-btn.wide{width:auto;padding:0 6px;gap:4px;display:flex;align-items:center}
+.qring.sm{width:17px;height:17px}
+.cw-list{overflow-y:auto;min-height:0}
+.dense-compact .drow .racts{display:none}
+
+/* ---------- modal sheets ---------- */
+dialog{border:0;padding:0;border-radius:14px;background:var(--bg-raised);color:var(--label);width:min(540px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow-y:auto;
+  box-shadow:0 24px 70px rgba(0,0,0,.28),0 0 0 .5px var(--sep);font:var(--t-body)}
+dialog::backdrop{background:rgba(0,0,0,.28)}
+#dialogBody{padding:14px 18px 18px}
+.dialog-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.dialog-head h2{flex:1;font:var(--t-head);text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dialog-back{padding-left:6px}
+dialog label{display:flex;flex-direction:column;gap:4px;font:var(--t-cap);color:var(--label2);margin-bottom:10px;min-width:0}
+dialog input:not([type=checkbox]),dialog select,dialog textarea{font:var(--t-body);color:var(--label);background:var(--fill);border:0;border-radius:8px;padding:7px 9px;min-height:32px;width:100%;box-shadow:inset 0 0 0 .5px var(--sep)}
+dialog textarea{resize:vertical;min-height:96px}
+dialog input:focus-visible,dialog select:focus-visible,dialog textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+dialog fieldset{border:0;border-top:.5px solid var(--sep);padding:10px 0 0;margin:4px 0 0}
+dialog legend{font:600 13px/18px var(--font);padding-right:8px}
+dialog h3{font:600 13px/18px var(--font);margin:12px 0 6px}
+dialog h3 small,dialog h3 span{font:var(--t-cap);color:var(--label2);margin-left:6px}
+dialog p{margin:0 0 8px}
+dialog ul{margin:0 0 8px 18px}
+dialog .hint{font:var(--t-cap);color:var(--label2)}
+dialog .feedback{font:var(--t-cap);color:var(--red);min-height:14px}
+dialog details{margin:6px 0 10px}
+dialog summary{font:var(--t-cap);color:var(--label2);cursor:default}
+dialog blockquote{margin:6px 0 0;padding:8px 10px;border-radius:8px;background:var(--fill);white-space:pre-wrap;overflow-wrap:anywhere;font:var(--t-cap);color:var(--label2);max-height:140px;overflow:auto}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.formgrid.three{grid-template-columns:1fr 1fr 1fr}
+.actions{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn.danger{color:var(--red)}
+.toggle-label{flex-direction:row!important;align-items:center;gap:8px!important;font:var(--t-body)!important;color:var(--label)!important;margin:6px 0!important}
+.candidate{border-radius:10px;background:var(--fill);padding:10px;margin-bottom:8px}
+.candidate .ctop{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.candidate .ctitle{flex:1}
+.connector-list section{padding:10px 0;border-top:.5px solid var(--sep)}
+.connector-list section:first-child{border-top:0;padding-top:0}
+.connector-list h3{margin-top:0}
+/* provider screens (providers.js) reuse the same sheet */
+dialog .provider-row{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:40px;padding:6px 10px;border-radius:9px;text-align:left}
+dialog .provider-row:hover{background:var(--fill)}
+dialog .provider-row small{display:block;font:var(--t-cap);color:var(--label2)}
+dialog .account-row{padding:8px 0;border-bottom:.5px solid var(--sep)}
+dialog button.primary,dialog button.secondary{height:30px;padding:0 14px;border-radius:15px;font:500 13px/30px var(--font)}
+dialog button.primary{background:var(--accent);color:#fff}
+dialog button.secondary{background:var(--fill2)}
+dialog button.mini-link{color:var(--accent);font:var(--t-cap);padding:2px 4px;border-radius:6px}
+
+/* ---------- accessibility ---------- */
+/* Reduce Transparency: glass becomes an opaque surface. */
+html.opaque .glass,html.opaque .ws .side,html.opaque .inbox,html.opaque .cpop,html.opaque .qpop,html.opaque .mmenu,html.opaque .keys,html.opaque .toast,html.opaque .cap{
+  background:var(--bg-raised)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html.opaque .glass::after{display:none}

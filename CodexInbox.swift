@@ -8,6 +8,16 @@ struct CodexNotice: Codable {
     var summary: String
     var time: Double
     var read: Bool = false
+    // Added in workspace format 2. Absent means false, so receipts saved by earlier versions still load.
+    var archived: Bool?
+    var accepted: Bool?
+}
+
+/// A change to a result's local state. A nil field is left as it is.
+struct NoticeFlags {
+    var read: Bool?
+    var archived: Bool?
+    var accepted: Bool?
 }
 
 private struct RolloutCursor: Codable, Equatable {
@@ -148,7 +158,18 @@ final class CodexInbox {
         if !state.notices[index].read {state.notices[index].read=true;try commit(state)}
         return state.notices
     }
+    func setFlags(_ key:String, _ flags:NoticeFlags) throws {
+        var state=try load()
+        guard let index=state.notices.firstIndex(where:{$0.id==key}) else {throw AppIssue("This message no longer exists.")}
+        var notice=state.notices[index]
+        if let read=flags.read {notice.read=read}
+        if let archived=flags.archived {notice.archived=archived ? true : nil}
+        if let accepted=flags.accepted {notice.accepted=accepted ? true : nil}
+        state.notices[index]=notice
+        try commit(state)
+    }
     static func wire(_ notices:[CodexNotice]) -> [[String:Any]] {
-        notices.map{["id":$0.id,"thread":$0.thread,"title":$0.title,"summary":$0.summary,"time":$0.time,"read":$0.read]}
+        notices.map{["id":$0.id,"thread":$0.thread,"title":$0.title,"summary":$0.summary,"time":$0.time,"read":$0.read,
+                     "archived":$0.archived ?? false,"accepted":$0.accepted ?? false]}
     }
 }

@@ -1,5 +1,7 @@
 'use strict';
 const ProviderUI = (() => {
+  // This file predates the redesign: it looks elements up by id and uses the shared modal sheet.
+  const $=id=>document.getElementById(id), dialog=(...args)=>Dialogs.open(...args), showConnectors=()=>Dialogs.connectors();
   const names={gmail:'Gmail',outlook:'Outlook',github:'GitHub Actions'};
   const request=(provider,action,fields={})=>native('externalProvider',{provider,action,...fields});
   let serial=0;

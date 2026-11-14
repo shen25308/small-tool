@@ -10,6 +10,8 @@ struct ConnectorNotice: Equatable {
     let time: Double
     let link: String
     var read: Bool
+    var archived = false
+    var accepted = false
 }
 
 private struct IncomingEvent: Codable {
@@ -108,14 +110,20 @@ final class ConnectorInbox {
         try prepare()
         let files = try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil,
                                                     options: [.skipsHiddenFiles])
-        let receipts = Set(files.filter { $0.pathExtension == "read" }.map { $0.deletingPathExtension().lastPathComponent })
+        // One empty receipt file per state: <digest>.read, <digest>.archived, <digest>.accepted.
+        func receipts(_ kind: String) -> Set<String> {
+            Set(files.filter { $0.pathExtension == kind }.map { $0.deletingPathExtension().lastPathComponent })
+        }
+        let read = receipts("read"), archived = receipts("archived"), accepted = receipts("accepted")
         var next: [String: ConnectorNotice] = [:]
         for file in files where file.pathExtension == "json" {
             let digest = file.deletingPathExtension().lastPathComponent
             guard digest.count == 64, digest.allSatisfy({ $0.isHexDigit }) else { continue }
             // Local senders publish via exclusive hard link; a cached event is immutable.
             guard var message = known[digest] ?? (try? readEvent(file, digest: digest)) else { continue }
-            message.read = receipts.contains(digest)
+            message.read = read.contains(digest)
+            message.archived = archived.contains(digest)
+            message.accepted = accepted.contains(digest)
             next[digest] = message
         }
         let changed = !initialized || next != known
@@ -134,6 +142,22 @@ final class ConnectorInbox {
             try Data().write(to: directory.appendingPathComponent(digest + ".read"), options: .atomic)
         }
         return try scan().notices
+    }
+
+    func setFlags(_ key: String, _ flags: NoticeFlags) throws {
+        guard key.hasPrefix("connector/") else { throw AppIssue("Unknown inbox event ID.") }
+        let digest = String(key.dropFirst("connector/".count))
+        _ = try scan()
+        // Only a digest that names a known delivery becomes part of a file name.
+        guard known[digest] != nil else { throw AppIssue("This message no longer exists.") }
+        let changes: [(String, Bool?)] = [("read", flags.read), ("archived", flags.archived), ("accepted", flags.accepted)]
+        for (kind, value) in changes {
+            guard let value else { continue }
+            let receipt = directory.appendingPathComponent(digest + "." + kind)
+            let exists = manager.fileExists(atPath: receipt.path)
+            if value, !exists { try Data().write(to: receipt, options: .atomic) }
+            if !value, exists { try manager.removeItem(at: receipt) }
+        }
     }
 
     @discardableResult
@@ -164,6 +188,7 @@ final class ConnectorInbox {
 
     static func wire(_ notices: [ConnectorNotice]) -> [[String: Any]] {
         notices.map { ["id": $0.id, "source": $0.source, "title": $0.title, "summary": $0.summary,
-                        "time": $0.time, "read": $0.read, "thread": "", "link": $0.link] }
+                        "time": $0.time, "read": $0.read, "thread": "", "link": $0.link,
+                        "archived": $0.archived, "accepted": $0.accepted] }
     }
 }
