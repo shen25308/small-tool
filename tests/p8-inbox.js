@@ -1,0 +1,143 @@
+/* Persona 8 — 林工, runs many agents at once. "10 results land together: how do I read them?" */
+const {open,suite,check,clean,deliver,sample}=require('./lib');
+module.exports=async b=>{
+  const {res,ok,eq}=suite('p8-inbox'),t={ok,eq};
+  const p=await open(b);
+  const E=(f,a)=>p.evaluate(f,a);const key=async(k,w=90)=>{await p.keyboard.press(k);await p.waitForTimeout(w)};
+  const keyOf=task=>E(task=>Inbox.threads(true).concat(Inbox.threads()).find(t=>t.task===task).key,task);
+  const row=(k,sel)=>E(([k,sel])=>{const r=[...document.querySelectorAll('#inbox .ir')].find(e=>e.dataset.k===k);return r?r.querySelector(sel).textContent:null},[k,sel]);
+  await check(p,t,'初始');
+  eq(await E(()=>Inbox.unreadCount()),3,'初始 3 组未读（示例数据）');
+  eq(await E(()=>Inbox.threads().map(t=>t.st)),['confirm','confirm','fail','fail','done','done','done'],'状态从结果本身推导：2 需确认 · 2 失败 · 3 已完成');
+  // threads: 3 updates from one Codex conversation collapse into one row
+  await p.click('#inboxBtn');await p.waitForTimeout(400);
+  ok(await E(()=>!document.querySelector('#inbox').hidden),'工具栏按钮打开结果抽屉');
+  const notes=await keyOf('生成发布说明');
+  eq(await E(k=>Inbox.threads().find(t=>t.key===k).items.length,notes),3,'同一会话的 3 次更新合成一组');
+  ok((await row(notes,'.it')).includes('412'),'组里显示最新一条（草稿已写好）');
+  ok((await row(notes,'.im')).includes('3 次更新'),'组上标出「3 次更新」');
+  const groups=await E(()=>[...document.querySelectorAll('#inbox .ib-g')].map(g=>g.textContent));
+  ok(groups[0].startsWith('需要你确认')&&groups[1].startsWith('失败')&&groups[2].startsWith('已完成'),'分组顺序：需要你确认 → 失败 → 已完成',groups);
+  ok(await E(()=>{const r=document.querySelector('#inbox').getBoundingClientRect(),b=document.querySelector('#bw').getBoundingClientRect();return r.top>=b.bottom-2}),'抽屉不挡住时间带');
+  await check(p,t,'打开抽屉');
+  // burst of 10 within one tick
+  await deliver(p,sample.burst(10));
+  eq(await E(()=>document.querySelectorAll('.toast').length),1,'10 条同时到达：只有 1 个提示，不叠加');
+  const tt=await E(()=>Toast.text);ok(/收到 10 条新结果/.test(tt)&&/2 条需要你确认/.test(tt)&&/1 条失败/.test(tt),'提示是合并后的摘要',tt);
+  ok(await p.isVisible('#inbox .ib-digest'),'抽屉顶部出现摘要卡');
+  ok((await p.textContent('#inbox .ib-digest')).includes('一次到达 10 条'),'摘要卡写明「一次到达 10 条」');
+  eq(await E(()=>[...document.querySelectorAll('#inbox .ib-digest li')].map(l=>l.className)),['s-confirm','s-confirm','s-fail'],'摘要先列需要确认和失败的');
+  const n1=await E(()=>Inbox.unreadCount());eq(n1,12,'未读 = 3 + 9 组（同一会话两条合并）');
+  ok((await p.textContent('#island')).includes('12'),'灵动岛只显示一个总数',await p.textContent('#island'));
+  await check(p,t,'突发 10 条后');
+  // toast action opens the drawer from closed state
+  await key('Escape');ok(await E(()=>document.querySelector('#inbox').hidden),'Esc 关闭抽屉');
+  await deliver(p,sample.burst(3));
+  await p.click('.toast [data-tact]');await p.waitForTimeout(300);ok(await E(()=>!document.querySelector('#inbox').hidden),'提示里的「查看」直接打开抽屉');
+  // keyboard triage
+  await E(()=>{st.inbox.cur=null;render()});
+  await key('j');const c1=await E(()=>st.inbox.cur);ok(!!c1,'J 选中第一组');
+  await key('j');const c2=await E(()=>st.inbox.cur);ok(c2&&c2!==c1,'J 下移');
+  await key('k');eq(await E(()=>st.inbox.cur),c1,'K 上移');
+  const u0=await E(()=>Inbox.unreadCount());
+  await key(' ');ok(await E(()=>st.inbox.exp.includes(st.inbox.cur)),'空格展开');
+  eq(await E(()=>Inbox.unreadCount()),u0-1,'展开即已读');
+  await p.waitForTimeout(100);
+  ok(await E(k=>{const all=[...__host.state.inbox.codex,...__host.state.inbox.external];return Inbox.threads().find(t=>t.key===k).items.every(i=>all.find(r=>r.id===i.id).read)},c1),'已读状态交给宿主保存');
+  await key('u');eq(await E(()=>Inbox.unreadCount()),u0,'U 切回未读');
+  const firstConfirm=await E(()=>st.inbox.cur);
+  ok((await E(()=>Inbox.threads().find(t=>t.key===st.inbox.cur).st))==='confirm','第一组是需要确认的');
+  const opened0=await E(()=>__host.state.opened.length);
+  await key('a',150);ok((await E(()=>Toast.text)).startsWith('已接受'),'A 接受建议',await E(()=>Toast.text));
+  eq(await E(k=>Inbox.threads().find(t=>t.key===k).st,firstConfirm),'done','接受后移到「已完成」');
+  ok(await E(()=>!__host.state.ops.some(o=>/send|message|reply/i.test(o))),'接受只在本地标记，从不自动给 agent 发消息');
+  await p.waitForTimeout(100);
+  ok(await E(k=>{const all=[...__host.state.inbox.codex,...__host.state.inbox.external];return Inbox.threads().find(t=>t.key===k).items.every(i=>all.find(r=>r.id===i.id).accepted)},firstConfirm),'「已接受」交给宿主保存');
+  await check(p,t,'接受建议后');
+  await p.keyboard.press('Meta+z');await p.waitForTimeout(150);
+  eq(await E(k=>Inbox.threads().find(t=>t.key===k).st,firstConfirm),'confirm','⌘Z 撤销接受');
+  ok(await E(k=>{const all=[...__host.state.inbox.codex,...__host.state.inbox.external];return Inbox.threads().find(t=>t.key===k).items.every(i=>!all.find(r=>r.id===i.id).accepted)},firstConfirm),'撤销也同步给宿主');
+  ok(await E(()=>__host.state.opened.length)>=opened0,'有来源链接时接受会打开来源');
+  const before=await E(()=>Inbox.threads().length);
+  await key('e',150);eq(await E(()=>Inbox.threads().length),before-1,'E 归档当前组');
+  ok(!!(await E(()=>st.inbox.cur)),'归档后光标移到下一组');
+  await p.keyboard.press('Meta+z');await p.waitForTimeout(150);eq(await E(()=>Inbox.threads().length),before,'⌘Z 撤销归档');
+  // filters
+  await p.click('#inbox [data-ia="filter"][data-v="fail"]');await p.waitForTimeout(120);
+  ok(await E(()=>Inbox.visible().every(t=>t.st==='fail')&&document.querySelectorAll('#inbox .ir').length===Inbox.visible().length),'状态筛选：只看失败');
+  await p.click('#inbox [data-ia="src"][data-v="GitHub Actions"]');await p.waitForTimeout(120);
+  ok(await E(()=>Inbox.visible().length>0&&Inbox.visible().every(t=>t.pv==='ci')),'来源筛选：只看 CI');
+  await p.click('#inbox [data-ia="src"][data-v="all"]');await p.click('#inbox [data-ia="filter"][data-v="all"]');await p.waitForTimeout(120);
+  const gu=await E(()=>[...document.querySelectorAll('#inbox .ib-g')].map(g=>{const m=g.querySelector('.gu');return m?+m.textContent.match(/\d+/)[0]:0}).reduce((a,b)=>a+b,0));
+  eq(gu,await E(()=>Inbox.unreadCount()),'各组「N 未读」加起来 = 总未读');
+  // multi-select + bulk + undo
+  await E(()=>{st.inbox.cur=Inbox.visible()[0].key;render()});
+  await key('x');await key('j');await key('x');await key('j');await key('x');
+  eq(await E(()=>st.inbox.sel.length),3,'X 选中 3 组');ok(await p.isVisible('#inbox .ib-bulk'),'出现批量操作条');
+  const u1=await E(()=>Inbox.unreadCount()),selUnread=await E(()=>st.inbox.sel.filter(k=>Inbox.threads().find(t=>t.key===k).unread).length);
+  await p.click('#inbox [data-ia="bRead"]');await p.waitForTimeout(150);eq(await E(()=>Inbox.unreadCount()),u1-selUnread,'批量标为已读');
+  await check(p,t,'批量已读后');
+  await p.keyboard.press('Meta+z');await p.waitForTimeout(150);eq(await E(()=>Inbox.unreadCount()),u1,'⌘Z 撤销批量');
+  await p.click('#inbox [data-ia="archDone"]');await p.waitForTimeout(150);
+  ok(await E(()=>Inbox.threads().every(t=>t.st!=='done')),'「归档已完成」一次清掉所有已完成');
+  ok((await E(()=>Toast.text)).includes('已归档'),'归档有提示和撤销');
+  await p.keyboard.press('Meta+z');await p.waitForTimeout(150);ok(await E(()=>Inbox.threads().some(t=>t.st==='done')),'⌘Z 恢复');
+  // catch-up mode
+  const nU=await E(()=>Inbox.unreadCount());
+  await key('c',250);ok((await p.textContent('#cuProg'))===`1/${nU}`,'C 进入逐条处理，显示 1/N',await p.textContent('#cuProg'));
+  await key('j',200);eq(await p.textContent('#cuProg'),`2/${nU}`,'J 下一条 → 2/N');
+  await key('k',200);eq(await p.textContent('#cuProg'),`1/${nU}`,'K 上一条');
+  await key('e',200);eq(await p.textContent('#cuProg'),`2/${nU}`,'E 处理完并前进');
+  for(let i=1;i<nU;i++)await key('j',60);
+  ok((await p.textContent('#inbox')).includes('全部处理完'),'走完显示「全部处理完」');
+  eq(await E(()=>Inbox.unreadCount()),0,'逐条看完后没有未读');
+  await check(p,t,'逐条处理完');
+  await key('Escape',150);ok(await p.isVisible('#inbox .ib-list'),'Esc 回到列表');
+  // empty state
+  await E(()=>{Inbox.M.archive(Inbox.threads().map(t=>t.key))});await p.waitForTimeout(150);
+  ok((await p.textContent('#inbox')).includes('全部处理完'),'全部归档后显示空状态');
+  ok(!(await p.isVisible('#island')),'没有未读时灵动岛收起');
+  await check(p,t,'全部归档');
+  await p.waitForTimeout(100);
+  ok(await E(()=>[...__host.state.inbox.codex,...__host.state.inbox.external].every(r=>r.archived)),'归档交给宿主保存（重启后仍然是归档）');
+  await E(()=>undo());await p.waitForTimeout(150);
+  // timeline link both ways
+  await key('Escape',200);
+  const weekly=await keyOf('整理周报表格');
+  await E(()=>{S.res.filter(r=>r.task==='整理周报表格').forEach(i=>{i.unread=true;i.archived=false});render()});await p.waitForTimeout(100);
+  const lane=k=>E(k=>{const e=[...document.querySelectorAll('.blane')].find(e=>e.dataset.run===k);return e?[...e.classList]:null},weekly);
+  ok((await lane()||[]).includes('hasres'),'时间带上的结果标记标出有未读结果',await lane());
+  await E(k=>[...document.querySelectorAll('.blane')].find(e=>e.dataset.run===k).click(),weekly);await p.waitForTimeout(400);
+  ok(await E(k=>!document.querySelector('#inbox').hidden&&st.inbox.cur===k,weekly),'点结果标记 → 打开对应结果');
+  ok(await E(()=>st.inbox.exp.includes(st.inbox.cur)),'并自动展开');
+  ok(!(await lane()).includes('hasres'),'打开后标记上的未读点消失');
+  await p.click('#inbox .ir.cur [data-ia="locate"]');await p.waitForTimeout(250);
+  ok((await lane()).includes('flash'),'「在时间带上看」高亮对应标记');
+  await check(p,t,'时间带联动');
+  // focus mode defers delivery, then one digest
+  await key('Escape',200);await key('f',200);
+  ok(await E(()=>st.quiet),'F 进入专注');
+  ok(await E(()=>__host.state.focus===true),'专注状态告诉宿主（结果面板也先攒着）');
+  const nb=await E(()=>Inbox.unreadCount());
+  await deliver(p,sample.burst(10));
+  eq(await E(()=>Inbox.unreadCount()),nb,'专注中：结果不打扰，未读数不变');
+  ok((await p.textContent('#island')).includes('10 条稍后'),'灵动岛显示「专注中 · 10 条稍后」',await p.textContent('#island'));
+  ok((await p.textContent('#fBar')).includes('10 条结果稍后送达'),'专注条显示攒着的数量');
+  await check(p,t,'专注中');
+  await key('f',300);
+  ok((await E(()=>Toast.text)).includes('专注期间收到 10 条新结果'),'结束专注：一次送达摘要',await E(()=>Toast.text));
+  eq(await E(()=>Inbox.unreadCount()),nb+9,'送达后未读 +9 组');
+  ok(await E(()=>__host.state.focus===false),'结束专注也告诉宿主');
+  await check(p,t,'专注结束');
+  // volume: 30 results stay readable
+  const p2=await open(b);
+  await deliver(p2,sample.volume(30));await p2.evaluate(()=>Inbox.open());await p2.waitForTimeout(300);
+  const v=await p2.evaluate(()=>({rows:document.querySelectorAll('#inbox .ir').length,threads:Inbox.threads().length,lh:document.querySelector('#inbox .ib-list').scrollHeight,ch:document.querySelector('#inbox .ib-list').clientHeight,vh:innerHeight,body:document.querySelector('#inbox').getBoundingClientRect().bottom}));
+  eq(v.rows,v.threads,'30 条 → 每组一行（同一会话合并）');ok(v.threads<30,'30 条被合并成更少的组',v.threads);
+  ok(v.lh>v.ch,'列表在抽屉里滚动，不撑破窗口');ok(v.body<=v.vh,'抽屉不超出窗口');
+  const lines=await p2.evaluate(()=>[...document.querySelectorAll('#inbox .ir .it')].every(e=>e.getBoundingClientRect().height<=20));ok(lines,'每条结果只占一行');
+  await p2.keyboard.press('Alt+u');await p2.waitForTimeout(150);eq(await p2.evaluate(()=>Inbox.unreadCount()),0,'⌥U 全部标为已读');
+  await check(p2,t,'30 条');
+  await clean(p,t,'结束时');await clean(p2,t,'30 条');
+  await p.context().close();await p2.context().close();return res;
+};

@@ -1,0 +1,14 @@
+{
+  "name": "shishi-ui-tests",
+  "private": true,
+  "description": "Scripted usability tests for UI/ (see README.md)",
+  "scripts": {
+    "test": "node run.js",
+    "test:webkit": "SHISHI_BROWSER=webkit node run.js",
+    "audit": "node audit.js",
+    "shots": "node shoot.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.65.1"
+  }
+}
