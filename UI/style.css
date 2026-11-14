@@ -1,59 +1,29 @@
 :root {
-  color-scheme: light dark;
-  --sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --paper: #fff;
-  --panel: #f2f3f6;
-  --ink: #202126;
-  --muted: #60636c;
-  --secondary: #434750;
-  --line: #dedfe5;
-  --hairline: #e9e9ee;
-  --control: #f3f4f7;
-  --hover: rgba(100,105,121,.09);
-  --selection: #e0e9fb;
-  --blue: #075fd5;
-  --green: var(--blue);
-  --tint: #eaf2ff;
-  --action: #0768de;
-  --field: #fff;
-  --selected-ink: #104fa5;
-  --success: #287453;
-  --warning: #86540a;
-  --danger: #ab3646;
-  --violet: #825cc7;
-  --teal: #2b807b;
-  --rose: #b05772;
-  --orange: #b56326;
-  --overlay: rgba(23,29,39,.19);
-  --shadow: 0 16px 48px rgba(23,30,46,.19), 0 2px 7px rgba(23,30,46,.08);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #202124;
-    --panel: #292a2e;
-    --ink: #f1f1f4;
-    --muted: #aaaeb7;
-    --secondary: #d1d2d9;
-    --line: #43454c;
-    --hairline: #383a40;
-    --control: #33353a;
-    --hover: rgba(212,218,239,.09);
-    --selection: #34455f;
-    --blue: #81b6ff;
-    --tint: #273a52;
-    --action: #1a64ce;
-    --field: #292a2e;
-    --selected-ink: #c3dbff;
-    --success: #84cfaa;
-    --warning: #f0bf73;
-    --danger: #ff98a2;
-    --violet: #b698f0;
-    --teal: #6bc4bd;
-    --rose: #e792ad;
-    --orange: #eeaf80;
-    --overlay: rgba(0,0,0,.39);
-    --shadow: 0 18px 56px rgba(0,0,0,.48), 0 1px 6px rgba(0,0,0,.34);
-  }
+  /* The old names now point at the shared design tokens in tokens.css. */
+  --sans: var(--font);
+  --paper: var(--bg);
+  --panel: var(--fill);
+  --ink: var(--label);
+  --muted: var(--label2);
+  --secondary: var(--label2);
+  --line: var(--sep);
+  --hairline: var(--sep);
+  --control: var(--fill);
+  --hover: var(--fill);
+  --selection: var(--accent-soft);
+  --blue: var(--accent);
+  --tint: var(--accent-soft);
+  --action: var(--accent);
+  --field: var(--bg-raised);
+  --selected-ink: var(--accent);
+  --success: var(--green);
+  --warning: var(--warn);
+  --danger: var(--red);
+  --violet: var(--indigo);
+  --teal: var(--green);
+  --rose: var(--warn);
+  --overlay: rgba(0,0,0,.28);
+  --shadow: var(--glass-shadow);
 }
 * { box-sizing: border-box }
 [hidden] { display: none !important }

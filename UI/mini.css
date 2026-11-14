@@ -1,0 +1,56 @@
+/* Mini band, provider glyph tiles, toast. */
+svg.pv{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
+.pvtile{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:var(--fill2);color:var(--label);flex:none}
+.pvtile svg.pv{width:14px;height:14px}
+.pvtile.sm{width:18px;height:18px;border-radius:6px}.pvtile.sm svg.pv{width:12px;height:12px}
+.pvtile.lg{width:28px;height:28px;border-radius:9px}.pvtile.lg svg.pv{width:17px;height:17px}
+
+/* mini sky band */
+.miniband{position:relative;margin:10px 0 4px}
+.miniband .mb-arc{position:absolute;left:0;top:0;height:18px;overflow:visible}
+.miniband .mb-arc path{fill:none;stroke:var(--label3);stroke-width:1;stroke-dasharray:2 3;opacity:.45}
+.miniband .mb-arc path.on{opacity:.9}
+.miniband .mb-sun{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 40% 38%,#fff,var(--sun,#ffe7a0) 70%);box-shadow:0 0 0 3px color-mix(in srgb,var(--sky-accent) 16%,transparent),0 0 10px 2px color-mix(in srgb,var(--sky-accent) 40%,transparent);z-index:3;animation:sunBreath 4.8s ease-in-out infinite;--glow:var(--sky-accent)}
+.miniband .mb-moon{position:absolute;transform:translate(-50%,-50%);color:var(--label2);z-index:3}
+.miniband .mb-moon svg{width:11px;height:11px;display:block}
+.miniband .mb-track{position:absolute;left:0;right:0;border-radius:9px;overflow:hidden;box-shadow:inset 0 0 0 .5px var(--sep)}
+.miniband .mb-past{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.0) 0 3px,rgba(0,0,0,.07) 3px 4px)}
+html.dark .miniband .mb-past{background:repeating-linear-gradient(135deg,transparent 0 3px,rgba(0,0,0,.22) 3px 4px)}
+.miniband .mb-run{position:absolute;bottom:2px;height:3px;border-radius:2px;background:color-mix(in srgb,var(--sky-accent) 55%,transparent);overflow:hidden}
+.miniband .mb-run.live::after{content:"";position:absolute;inset:0;width:60%;background:linear-gradient(90deg,transparent,#fff);animation:comet 2.4s cubic-bezier(.45,0,.2,1) infinite}
+.miniband .mb-dot{position:absolute;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);background:var(--bg);box-shadow:inset 0 0 0 1.75px var(--label2);z-index:2}
+.miniband .mb-dot.over{box-shadow:inset 0 0 0 1.75px var(--red)}
+.miniband .mb-cl{position:absolute;transform:translate(-50%,-50%);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bg);color:var(--label);font:600 11px/17px var(--font);text-align:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 .5px var(--sep),0 1px 2px rgba(0,0,0,.12);z-index:2}
+.miniband .mb-cl.over{background:var(--red);color:#fff}
+.miniband .mb-star{position:absolute;width:10px;height:10px;transform:translate(-50%,-50%);color:var(--sky-accent);filter:drop-shadow(0 0 2px color-mix(in srgb,var(--sky-accent) 60%,transparent));z-index:1}
+html.dark .miniband .mb-star{color:color-mix(in srgb,var(--sky-accent) 70%,#fff)}
+.miniband .mb-now{position:absolute;width:2px;border-radius:1px;background:var(--sky-accent);transform:translateX(-1px);z-index:2}
+.miniband .mb-hours span{position:absolute;transform:translateX(-50%);font:var(--t-cap);color:var(--label3);font-variant-numeric:tabular-nums}
+.miniband .mb-hours span.near{opacity:0}
+.miniband .mb-hours{position:absolute;left:0;right:0}
+
+/* compact window: sky wash behind the header */
+.compact-win .cw-head{position:relative}
+.compact-win .cw-head::before{content:"";position:absolute;left:0;right:0;top:0;height:150px;background:linear-gradient(180deg,color-mix(in srgb,var(--sky-top) 60%,transparent),transparent);pointer-events:none}
+.compact-win .cw-head>*{position:relative}
+.hz-seg{display:flex;align-items:center;gap:4px}.hz-seg svg.pv{width:12px;height:12px;stroke-width:1.9}.hz-seg span{overflow:hidden;text-overflow:ellipsis}
+.hz-seg:not(:has(span)){padding:0;display:grid;place-items:center}
+
+/* ---------- toast (undo) ---------- */
+.toast{position:fixed;left:50%;bottom:72px;transform:translate(-50%,16px);opacity:0;pointer-events:none;z-index:200;display:flex;align-items:center;gap:10px;
+  padding:7px 8px 7px 14px;border-radius:14px;font:var(--t-body);color:var(--label);background:rgba(250,250,252,.94);box-shadow:0 10px 30px rgba(0,0,0,.14),0 0 0 .5px rgba(0,0,0,.08);
+  transition:opacity .2s,transform .35s var(--spring,cubic-bezier(.2,.9,.3,1.2));max-width:520px}
+html.dark .toast{background:rgba(44,44,48,.94);box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.1)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast .tm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast .tu{border:0;background:var(--fill);color:var(--label);font:600 13px/26px var(--font);padding:0 10px;border-radius:8px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.toast .tu kbd{font:var(--t-cap);color:var(--label3)}
+.toast .tx{border:0;background:none;color:var(--label3);font:15px/1 var(--font);width:24px;height:24px;border-radius:6px;cursor:pointer}
+.toast .tu:hover,.toast .tx:hover{background:var(--fill2)}
+html.rm .toast{transition:opacity .15s}
+
+/* ---------- global focus ring (keyboard only) ---------- */
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent,#0a84ff);outline-offset:2px;border-radius:6px}
+.bwrap:focus-visible{outline-offset:3px;border-radius:12px}
+.check:focus-visible{border-radius:50%}

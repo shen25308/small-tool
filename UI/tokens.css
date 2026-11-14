@@ -1,0 +1,52 @@
+/* Design tokens: 5-level type scale, semantic colours, glass. Dark mode swaps the whole set (html.dark, set by theme.js). */
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "SF Pro Text", "SF Pro", "Hiragino Sans GB", "Helvetica Neue", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, "Cascadia Code", monospace;
+  /* Type scale: 5 levels mirroring macOS text styles */
+  --t-display: 600 34px/40px var(--font);   /* widgets only */
+  --t-large: 700 26px/32px var(--font);     /* Large Title */
+  --t-head: 600 15px/20px var(--font);      /* Title 3 / Headline */
+  --t-body: 400 13px/18px var(--font);      /* Body */
+  --t-cap: 400 11px/14px var(--font);       /* Caption / Footnote — minimum */
+
+  --label: rgba(0,0,0,.88);
+  --label2: rgba(0,0,0,.56);
+  --label3: rgba(0,0,0,.36);
+  --sep: rgba(0,0,0,.09);
+  --fill: rgba(0,0,0,.05);
+  --fill2: rgba(0,0,0,.08);
+  --bg: #fcfcfd;
+  --bg-raised: #ffffff;
+  --accent: #0a7aff;
+  --accent-soft: rgba(10,122,255,.12);
+  --red: #e5372c; --orange: #e57a00; --warn: #c74a7d; --yellow: #f2b100; --green: #27a845; --indigo: #5856d6;
+  --glass: rgba(255,255,255,.58);
+  --glass-strong: rgba(255,255,255,.74);
+  --glass-edge: rgba(255,255,255,.75);
+  --glass-shadow: 0 8px 32px rgba(15,30,60,.14), 0 1px 3px rgba(15,30,60,.08);
+  --sidebar: rgba(242,244,248,.62);
+  --win-shadow: 0 30px 80px rgba(20,30,60,.28), 0 0 0 .5px rgba(0,0,0,.14);
+  --spring: cubic-bezier(.34,1.36,.64,1);
+  --ease: cubic-bezier(.25,.1,.25,1);
+  color-scheme: light;
+}
+html.dark{
+  --label: rgba(255,255,255,.92);
+  --label2: rgba(235,235,245,.6);
+  --label3: rgba(235,235,245,.34);
+  --sep: rgba(255,255,255,.1);
+  --fill: rgba(255,255,255,.06);
+  --fill2: rgba(255,255,255,.1);
+  --bg: #1d1d1f;
+  --bg-raised: #2a2a2d;
+  --accent: #3b9bff;
+  --accent-soft: rgba(59,155,255,.2);
+  --red: #ff5a4f; --orange: #ff9f2e; --warn: #ff7fae; --yellow: #ffcc33; --green: #3bd16f; --indigo: #8a88ff;
+  --glass: rgba(44,44,50,.5);
+  --glass-strong: rgba(40,40,46,.72);
+  --glass-edge: rgba(255,255,255,.14);
+  --glass-shadow: 0 10px 36px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.3);
+  --sidebar: rgba(36,36,42,.55);
+  --win-shadow: 0 30px 90px rgba(0,0,0,.6), 0 0 0 .5px rgba(255,255,255,.12);
+  color-scheme: dark;
+}

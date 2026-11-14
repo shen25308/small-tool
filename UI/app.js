@@ -396,3 +396,4 @@ window.openMessage=text=>{capture(text||'')};
 document.addEventListener('keydown',e=>{if(e.metaKey&&e.key==='n'){e.preventDefault();taskForm()}});
 setInterval(()=>{if(lastDay!==day()){lastDay=day();render()}},30000);
 document.addEventListener('DOMContentLoaded',async()=>{try{const s=await native('load');if(s)data=s;render();await native('ready')}catch(e){locked=true;render();$('tasks').textContent='Shishi could not load your lists. Saving is paused to protect your data. '+e.message}});
+Sky.follow();

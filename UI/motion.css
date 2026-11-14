@@ -1,0 +1,101 @@
+/* Motion: springs, press states, completion, popover morph, view zoom. */
+:root{
+  --ease-out: cubic-bezier(.22,1,.36,1);        /* Apple "smooth" ease-out */
+  --spring-snappy: cubic-bezier(.34,1.56,.64,1); /* small overshoot, for controls */
+  --spring-soft: cubic-bezier(.34,1.2,.64,1);    /* barely any overshoot, for big surfaces */
+}
+
+/* ---------- 1. Control press: two kinds ---------- */
+/* plain controls squish down */
+:is(.btn,.fchip,.edge-zone,.collapsed-row,.dgrp .act{transition:scale .5s var(--spring-snappy),background-color .2s,color .2s}
+:is(.btn,.fchip,.edge-zone{scale:.95;transition-duration:.09s}
+/* Liquid Glass controls swell + light up from the touch point (glassEffect .interactive) */
+:is(.glass .icon-btn,.tb-group button,.seg button,.cw-tools .icon-btn){position:relative;transition:scale .55s var(--spring-snappy),background-color .2s}
+:is(.glass .icon-btn,.tb-group button,.seg button,.cw-tools .icon-btn):active{scale:1.1;transition-duration:.12s}
+/* specular highlight that follows the pointer */
+:is(.btn,.fchip,.icon-btn,.seg button,.edge-zone,.tb-group button):hover{background-image:radial-gradient(70px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.55),transparent 70%)}
+html.dark :is(.btn,.fchip,.icon-btn,.seg button,.edge-zone,.tb-group button):hover{background-image:radial-gradient(70px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.14),transparent 70%)}
+:is(.glass .icon-btn,.tb-group button,.seg button):active{background-image:radial-gradient(46px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.9),transparent 75%)}
+html.dark :is(.glass .icon-btn,.tb-group button,.seg button):active{background-image:radial-gradient(46px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.28),transparent 75%)}
+
+/* ---------- 2. Sliding selection pills ---------- */
+#filters{position:relative}
+.fpill,.spill{position:absolute;left:0;top:0;pointer-events:none;z-index:0}
+.fpill{height:26px;border-radius:13px;background:var(--label)}
+#filters.pilled .fchip{position:relative;z-index:1;transition:color .25s var(--ease-out),scale .5s var(--spring-snappy)}
+#filters.pilled .fchip.on{background:transparent}
+.seg.scale{position:relative}
+.seg.scale.pilled button{position:relative;z-index:1}
+.seg.scale.pilled button.on{background:transparent;box-shadow:none}
+.spill{height:24px;border-radius:7px;background:var(--bg-raised,#fff);box-shadow:0 1px 3px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04)}
+html.dark .spill{background:#3a3a3e}
+.navpill{position:fixed;border-radius:8px;background:var(--fill2);pointer-events:none;z-index:0}
+
+/* ---------- 3. Completing a task ---------- */
+.drow .ttl{position:relative}
+.drow .ttl::after{content:"";position:absolute;left:0;right:0;top:52%;height:1.5px;border-radius:1px;background:var(--label3);transform:scaleX(0);transform-origin:left;transition:transform .32s var(--ease-out) .12s}
+.drow.done .ttl{color:var(--label3);transition:color .3s .1s}
+.drow.done .ttl::after{transform:scaleX(1)}
+.drow.done .tcol,.drow.done .meta,.drow.done .prio{opacity:.45;transition:opacity .3s}
+:is(.drow,.pr,.rv).done .check i{background:var(--accent);box-shadow:none}
+:is(.drow,.pr,.rv).done .check i svg{opacity:1;transform:none;stroke-dasharray:30;stroke-dashoffset:0}
+.completing .check i{animation:ckPop .5s var(--spring-snappy)}
+.completing .check i svg{animation:ckDraw .34s var(--ease-out) .06s both}
+@keyframes ckPop{0%{transform:scale(.78)}55%{transform:scale(1.14)}100%{transform:scale(1)}}
+@keyframes ckDraw{from{stroke-dashoffset:30}to{stroke-dashoffset:0}}
+.burst{position:fixed;width:0;height:0;pointer-events:none;z-index:200}
+.burst .ring{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;box-shadow:0 0 0 2px var(--accent);animation:ring .55s var(--ease-out) forwards}
+.burst .p{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:var(--accent);animation:spark .6s var(--ease-out) forwards}
+.burst .p:nth-child(odd){width:3px;height:3px;background:color-mix(in srgb,var(--accent) 55%,#fff)}
+@keyframes ring{from{transform:scale(.6);opacity:1}to{transform:scale(2.1);opacity:0}}
+@keyframes spark{0%{transform:rotate(var(--a)) translateX(6px) scale(1);opacity:1}100%{transform:rotate(var(--a)) translateX(22px) scale(.2);opacity:0}}
+.star{position:fixed;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none;z-index:210;color:var(--accent);filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 8px color-mix(in srgb,var(--accent) 80%,transparent))}
+.star svg{width:22px;height:22px;display:block}
+.star.ghost{filter:blur(1px)}
+.land{position:fixed;width:0;height:0;pointer-events:none;z-index:205}
+.land::before{content:"";position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 70%,#fff),transparent 70%);animation:land .6s var(--ease-out) forwards}
+@keyframes land{from{transform:scale(.3);opacity:1}to{transform:scale(2.4);opacity:0}}
+.bdone.pop{animation:dotPop .7s var(--spring-snappy)}
+@keyframes dotPop{0%{transform:translateX(-50%) scale(0);background:var(--accent)}60%{transform:translateX(-50%) scale(2.2);background:var(--accent)}100%{transform:translateX(-50%) scale(1)}}
+.bump{animation:bump .5s var(--spring-snappy)}
+@keyframes bump{40%{transform:translateY(-2px);color:var(--accent)}}
+
+/* ---------- 4. Living band ---------- */
+.hz-sun{animation:sunBreath 4.8s ease-in-out infinite}
+@keyframes sunBreath{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--glow) 14%,transparent),0 0 26px 8px color-mix(in srgb,var(--glow) 40%,transparent)}}
+.bnow b{animation:nowPulse 4.8s ease-in-out infinite}
+@keyframes nowPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--sky-accent) 0%,transparent)}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--sky-accent) 22%,transparent)}}
+/* AI run comet trail */
+.blane.live{position:absolute;overflow:hidden}
+.blane.live::after{content:"";position:absolute;top:0;bottom:0;left:0;width:45%;border-radius:inherit;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 45%,transparent) 75%,rgba(255,255,255,.95));mix-blend-mode:normal;animation:comet 2.4s cubic-bezier(.45,0,.2,1) infinite}
+@keyframes comet{from{transform:translateX(-100%)}to{transform:translateX(225%)}}
+.bm{transition:transform .35s var(--spring-snappy),translate .35s var(--spring-snappy),box-shadow .2s}
+.bempty{animation:emptyBreath 3.6s ease-in-out infinite}
+@keyframes emptyBreath{50%{opacity:.6}}
+
+/* ---------- 5. Zoom (View Transitions) ---------- */
+#bandWrap{view-transition-name:band}
+#dList{view-transition-name:dlist}
+#dTitle{view-transition-name:dtitle}
+#dDate{view-transition-name:ddate}
+::view-transition-group(*){animation-duration:calc(.52s*var(--ts,1));animation-timing-function:cubic-bezier(.32,.9,.3,1)}
+::view-transition-old(band),::view-transition-new(band){height:100%;object-fit:cover;overflow:clip}
+::view-transition-old(band){animation:vtOut calc(.26s*var(--ts,1)) var(--ease-out) both}
+::view-transition-new(band){animation:vtIn calc(.4s*var(--ts,1)) var(--ease-out) calc(.06s*var(--ts,1)) both}
+html[data-zoom=out]::view-transition-old(dlist){animation:dlOutDown calc(.3s*var(--ts,1)) var(--ease-out) both}
+html[data-zoom=out]::view-transition-new(dlist){animation:dlInUp calc(.42s*var(--ts,1)) var(--ease-out) calc(.08s*var(--ts,1)) both}
+html[data-zoom=in]::view-transition-old(dlist){animation:dlOutUp calc(.3s*var(--ts,1)) var(--ease-out) both}
+html[data-zoom=in]::view-transition-new(dlist){animation:dlInDown calc(.42s*var(--ts,1)) var(--ease-out) calc(.08s*var(--ts,1)) both}
+@keyframes vtOut{to{opacity:0;filter:blur(4px)}}
+@keyframes vtIn{from{opacity:0;filter:blur(4px)}}
+@keyframes dlOutDown{to{opacity:0;transform:scale(.97) translateY(8px)}}
+@keyframes dlInUp{from{opacity:0;transform:translateY(14px)}}
+@keyframes dlOutUp{to{opacity:0;transform:translateY(-8px)}}
+@keyframes dlInDown{from{opacity:0;transform:scale(.98) translateY(-10px)}}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition-duration:.01ms!important}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}
+}
+html.rm *,html.rm *::before,html.rm *::after{animation:none!important;transition-duration:.01ms!important}
