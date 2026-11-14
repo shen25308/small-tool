@@ -194,7 +194,7 @@ function pulseIsland(){const i=$('#island');if(!i||Theme.reduceMotion)return;i.a
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(t.closest('#inboxBtn,#cwInbox,[data-inbox],#island')){st.inbox.open&&!t.closest('#island')?close():open();return}
+  if(t.closest('#inboxBtn,#cwInbox,[data-inbox],#island')){st.inbox.open?close():open();return}
   const ln=t.closest('.blane[data-run]');if(ln&&ln.dataset.run){const f=forRun(ln.dataset.run);if(f){open(f.key);return}}
   const a=t.closest('#inbox [data-ia]');if(!a)return;const k=a.dataset.k,I=st.inbox;
   switch(a.dataset.ia){

@@ -18,19 +18,23 @@ The design reference for the Today board is [Youniverse’s work task list demo]
 
 ## Plan your day
 
-Use the window title bar to switch between the floating Today list and the full workspace, or pin the small list. Both views show Today followed by collapsible project groups. The square checkbox completes or reopens a task. Click a priority or tag to change it in place. Click the deadline control on a task to set a local date and optional time. A due, unfinished task creates one quiet inbox reminder when Shishi is running or reopens. Scheduling a task for Today and setting its deadline are independent.
+The workspace opens on **Today**. A time band across the top runs from early morning to midnight, and its sky follows the real time of day: sunrise and sunset are worked out on this Mac from the time zone, with no location permission. Timed tasks sit on the band; crowded ones merge into a number you can open. Drag across the band to show only that stretch of the day. Finished tasks leave a small star at the moment they were done, and a task's deadline shows as its own mark, separate from when you plan to do it.
 
-Choose a project or tag in the sidebar to filter tasks. Use the magnifying glass to search task titles, project names, or tags. **Wrap up** shows what you finished and what is still open today.
+The list below follows the band: overdue, now, up next, tonight, untimed, and done. Click a circle to complete a task; every change can be undone with ⌘Z. Hover or tab to a row to defer it, schedule it in the next free slot, or open its details. Unfinished tasks from earlier days are not piled into Today. They wait under **Carried over** on the left of the band, and a tidy-up card offers to move, schedule or defer them once a day. **Plan** shows 3 days or a week; **All tasks** lists everything still open.
+
+Press **N** to add a task in one line, for example “tomorrow 3pm send weekly report #team P1” or “明天下午3点 发周报 #团队 !”. The preview shows the date and time Shishi understood before you press Return. **Suggest slots** previews free half-hour slots for overdue tasks and moves nothing until you accept. Press **?** for every shortcut. The interface follows the Mac's language (English or Simplified Chinese), appearance, Reduce Motion and Reduce Transparency settings.
 
 ## Read a result beside your editor
 
-Choose **More (…) → Show result panel** in the mountain cover and drag it beside your document. The result panel and inbox start with collapsed previews. **More → Latest result** opens the latest receipt inside the workspace. Click the preview or focus it and press Space to expand it. Shishi selects sentences from the saved reply, including changes, checks, unresolved work, and file names. Use the original-reply control to read the stored text.
+**AI results** gathers Codex turns and connector deliveries in one drawer that leaves the time band visible. Results are grouped as needing you, failed, or done, based only on what each result says; several updates from the same Codex conversation share one row. Use J and K to move, Space to expand, A to accept and open the source, E to mark done, U for unread and X to select. Results that arrive together become one notice and one summary card. **Focus** (F) holds new results and delivers them together when you finish.
 
-If a new result arrives while you are reading, a control offers to show the latest result. You can finish reading first. Use the back control to return to the summary, the workspace, or your editor. Escape goes up one level in settings. Some replies saved by earlier versions of Shishi contain only the first 4,000 characters. The interface follows the Mac's light or dark appearance. Personal tasks, project names, emails, and AI replies keep their original language.
+Choose **More (…) → Show result panel** to keep a small results panel beside your document. It shows one line until you open it, then a single-sentence summary, the points that need you, changed files, and the raw reply on request. When several results arrive at once, the panel shows one merged line instead of flashing through them.
+
+The **AI quota** entry at the bottom of the sidebar shows only figures this Mac can read without a network request. In this version no provider's usage format is confirmed, so each one says **Not provided** and why.
 
 ## Connect a source
 
-Open **Inbox** and choose **Manage connectors**.
+Open **AI results** and choose **Manage connectors**, or choose **More (…) → Connectors**.
 
 - **Codex.** Enable the local Codex connection to read completion events and the final reply from saved sessions on this Mac. If Shishi is closed when a turn ends, it can catch up after reopening while Codex retains the corresponding records. Disconnect to stop future reads. Existing receipts remain available.
 - **Gmail and Outlook.** Authorize a desktop OAuth client with the provider and choose one sender or all new mail. Cards show the subject, sender, and arrival time and can open the original message. Mail goes quietly into the inbox by default. Enable the floating-window option to see new mail beside your editor. Sync starts at first connection. Tokens are stored in macOS Keychain. Disconnecting offers to remove that account's local mail cards. This preview needs a registered Google desktop OAuth client or Microsoft Entra client ID. You can revoke access in your provider account.
@@ -40,7 +44,7 @@ Open **Inbox** and choose **Manage connectors**.
 
 ## Turn messages into tasks
 
-Choose **More (…) → Capture tasks from a message**, then paste a chat or meeting note. The bundled Qwen model extracts candidate tasks locally. Compare each suggestion with its source, edit its title, tag, or project, and choose which tasks to add. Drag a task into **Today** or use its Today action. The floating Today list can stay above other windows.
+Choose **More (…) → Capture tasks from a message** (⌘K), then paste a chat or meeting note. The bundled Qwen model extracts candidate tasks locally. Compare each suggestion with its source, edit its title, tag, or project, and choose which tasks to add. Choose whether the tasks go into Today. The floating Today list (⌘P) can stay above other windows.
 
 ## Build from source
 
@@ -53,3 +57,5 @@ python3 build.py --assets /path/to/Shishi.app --output build/Shishi.app
 If you keep the extracted app next to the source folder, `python3 build.py` uses it by default. To inspect a build, run `python3 Release/verify-release.py build/Shishi.app`. The report distinguishes bundle integrity from Developer ID distribution readiness. A publisher can provide mail OAuth client registrations in `Contents/Resources/Mail/provider-config.json` before signing.
 
 [Distribution and notarization guide](Release/distribution.md) · [Historical 1.3.1 release check](Release/checks-1.3.1.json)
+
+The interface tests in `tests/` run the pages in a browser against a fake host, without building the app. See [tests/README.md](tests/README.md).

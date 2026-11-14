@@ -238,11 +238,11 @@ final class Host: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNav
         var local:[String:Any]=["id":"qwen","windows":[Any](),"status":"local",
                                 "available":FileManager.default.fileExists(atPath:resources.appendingPathComponent("assistant.gguf").path)]
         if let run=lastExtraction {local["lastRun"]=run}
-        func unread(_ id:String, _ status:String) -> [String:Any] {
+        func notReadable(_ id:String, _ status:String) -> [String:Any] {
             let row:[String:Any]=["id":id,"windows":[Any](),"status":status]
             return row
         }
-        let providers:[[String:Any]]=[unread("codex","unconfirmed"),unread("claude","needsStatusLine"),unread("grok","usageOnly"),local]
+        let providers:[[String:Any]]=[notReadable("codex","unconfirmed"),notReadable("claude","needsStatusLine"),notReadable("grok","usageOnly"),local]
         let report:[String:Any]=["providers":providers]
         return report
     }

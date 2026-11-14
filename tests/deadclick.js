@@ -33,6 +33,10 @@ module.exports=async b=>{
         return {dis,cur,label:(e.getAttribute('aria-label')||e.textContent||e.className).trim().replace(/\s+/g,' ').slice(0,30)}}).toString()})([${JSON.stringify(SEL)},${i},${LIST}])`);
       if(!info)continue;
       if(info.dis||info.cur){tested++;continue}
+      // a control below the fold counts only if it is still reachable once scrolled into view (not under the open drawer)
+      const covered=await p.evaluate(()=>{const e=document.querySelector('[data-dc]');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();
+        const h=document.elementFromPoint(Math.min(innerWidth-1,Math.max(0,r.left+r.width/2)),Math.min(innerHeight-1,Math.max(0,r.top+r.height/2)));return !(h&&(h===e||e.contains(h)||h.contains(e)))});
+      if(covered){tested++;continue}
       // what the user can perceive, plus what the host was told (opening a session or a link changes nothing in the page)
       const sig=()=>p.evaluate(()=>document.body.innerHTML.length+':'+[...document.body.innerHTML].reduce((h,c)=>(h*31+c.charCodeAt(0))|0,0)+':'+document.documentElement.className+':'+(window.Toast?Toast.text:'')+':'+
         __host.state.ops.length+':'+__host.state.edgeOps.length+':'+(document.activeElement&&document.activeElement.id)+':'+[...document.querySelectorAll('dialog')].map(d=>d.open).join());
